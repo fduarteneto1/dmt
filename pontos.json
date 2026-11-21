@@ -96,6 +96,14 @@
       "lat": -10.83265,
       "lng": -55.11894,
       "obs": "MT-320, km 7, zona rural de Nova Santa Helena/MT · (66) 99662-5269"
+    },
+    {
+      "id": "transterra",
+      "nome": "Pedreira Transterra – Terra Nova do Norte",
+      "tipo": "pedreira",
+      "lat": -10.73058,
+      "lng": -55.13591,
+      "obs": "BR-163, km 970, Fazenda Universo, Terra Nova do Norte/MT (os escritórios e lojas ficam em Sinop) · (66) 3211-1520"
     }
   ]
 }
