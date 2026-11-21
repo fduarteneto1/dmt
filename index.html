@@ -186,7 +186,7 @@ function desenharPontos(){
       <button class="sec mini" data-a="ir">ver</button><button class="sec mini" data-a="ed">editar</button><button class="sec mini" data-a="rm">×</button>`;
     li.querySelector('[data-a=ir]').onclick = () => map.setView([p.lat, p.lng], 12);
     li.querySelector('[data-a=ed]').onclick = () => editarPonto(i);
-    li.querySelector('[data-a=rm]').onclick = () => { if(confirm('Remover "'+p.nome+'"?')){ st.pontos.splice(i,1); salvarPontos(); } };
+    li.querySelector('[data-a=rm]').onclick = () => { if(confirm('Remover "'+p.nome+'"?')){ const rm = ls.get('removidos', []); rm.push(p.id); ls.set('removidos', rm); st.pontos.splice(i,1); salvarPontos(); } };
     ul.appendChild(li);
   });
   if(!st.pontos.length) ul.innerHTML = '<li class="hint">Nenhum ponto cadastrado.</li>';
@@ -426,12 +426,18 @@ $('imp').onchange = async e => {
   }catch(err){ alert('Arquivo inválido.'); }
   e.target.value = '';
 };
-$('btn-reset').onclick = () => { if(confirm('Descartar as mudanças locais e voltar à lista do GitHub?')){ st.pontos = JSON.parse(JSON.stringify(st.oficiais)); try{ localStorage.removeItem(LS('pontos')); }catch(e){} st.rotas = {}; desenharPontos(); limparResultado(); atualizarBotao(); } };
+$('btn-reset').onclick = () => { if(confirm('Descartar as mudanças locais e voltar à lista do GitHub?')){ st.pontos = JSON.parse(JSON.stringify(st.oficiais)); try{ localStorage.removeItem(LS('pontos')); localStorage.removeItem(LS('removidos')); }catch(e){} st.rotas = {}; desenharPontos(); limparResultado(); atualizarBotao(); } };
 
 (async function init(){
   try{ const j = await (await fetch('pontos.json', {cache:'no-cache'})).json(); st.oficiais = j.pontos || []; }
   catch(e){ st.oficiais = []; }
-  st.pontos = ls.get('pontos', null) || JSON.parse(JSON.stringify(st.oficiais));
+  const locais = ls.get('pontos', null), removidos = ls.get('removidos', []);
+  if(locais){
+    // incorpora pontos oficiais novos que ainda não estão na lista deste navegador
+    const ids = new Set(locais.map(p => p.id));
+    st.oficiais.forEach(o => { if(!ids.has(o.id) && !removidos.includes(o.id)) locais.push(JSON.parse(JSON.stringify(o))); });
+    st.pontos = locais; ls.set('pontos', locais);
+  } else st.pontos = JSON.parse(JSON.stringify(st.oficiais));
   carregarPrecos(); desenharPontos(); atualizarBotao();
 })();
 </script>
