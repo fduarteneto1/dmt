@@ -1,0 +1,13 @@
+{
+  "_leia-me": "Lista de origens (pedreiras e distribuidoras de emulsão). Edite pelo mapa e use 'Exportar pontos' para gerar um novo arquivo, depois substitua este no GitHub. tipo: 'pedreira' ou 'emulsao'.",
+  "pontos": [
+    {
+      "id": "arapetro-sinop",
+      "nome": "Arapetro – Sinop",
+      "tipo": "emulsao",
+      "lat": -11.8605,
+      "lng": -55.4930,
+      "obs": "BR-163, km 844,2 – Setor Industrial, Sinop/MT. Conferir a coordenada exata."
+    }
+  ]
+}
