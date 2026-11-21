@@ -192,6 +192,14 @@
       "lat": -11.24733,
       "lng": -57.56537,
       "obs": "Zona rural a oeste de Juara/MT · (66) 98460-1980. A CONFIRMAR se produz brita."
+    },
+    {
+      "id": "disbral-barra-garcas",
+      "nome": "Disbral – Barra do Garças",
+      "tipo": "emulsao",
+      "lat": -15.8774,
+      "lng": -52.34858,
+      "obs": "Grupo Disbral MT, Rua 4, Quadra Ind. 1/8, Lotes 17 a 20, Distrito Industrial, Barra do Garças/MT · (66) 3405-5261"
     }
   ]
 }
