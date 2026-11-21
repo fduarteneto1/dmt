@@ -96,6 +96,22 @@
       "lat": -10.83265,
       "lng": -55.11894,
       "obs": "MT-320, km 7, zona rural de Nova Santa Helena/MT · (66) 99662-5269"
+    },
+    {
+      "id": "transterra-terra-nova",
+      "nome": "Transterra – Terra Nova do Norte",
+      "tipo": "pedreira",
+      "lat": -10.517,
+      "lng": -55.231,
+      "obs": "Pedreira de granito na Fazenda Universo, nº 1134, Gleba Teles Pires, zona rural de Terra Nova do Norte/MT (o escritório fica em Sinop) · (66) 3211-1520. Posição aproximada: conferir a coordenada exata."
+    },
+    {
+      "id": "transpedra-matupa",
+      "nome": "Transpedra – Matupá",
+      "tipo": "pedreira",
+      "lat": -10.22094,
+      "lng": -54.91691,
+      "obs": "Transpedra Mineração, zona rural de Matupá/MT. Coordenada do poço de captação da empresa (Diário Oficial de MT): conferir se coincide com o ponto de retirada da brita."
     }
   ]
 }
