@@ -2,12 +2,36 @@
   "_leia-me": "Lista de origens (pedreiras e distribuidoras de emulsão). Edite pelo mapa e use 'Exportar pontos' para gerar um novo arquivo, depois substitua este no GitHub. tipo: 'pedreira' ou 'emulsao'.",
   "pontos": [
     {
+      "id": "greca-cuiaba",
+      "nome": "Greca Asfaltos – Cuiabá",
+      "tipo": "emulsao",
+      "lat": -15.66702,
+      "lng": -55.95877,
+      "obs": "Av. Ayrton Senna da Silva, km 16,3 (BR-364), Distrito Industrial, Cuiabá/MT · (65) 3667-0700"
+    },
+    {
+      "id": "betunel-cuiaba",
+      "nome": "Betunel – Cuiabá",
+      "tipo": "emulsao",
+      "lat": -15.67295,
+      "lng": -55.97579,
+      "obs": "Rua N, 1544, Distrito Industrial, Cuiabá/MT · (65) 3667-1505"
+    },
+    {
+      "id": "emam-varzea-grande",
+      "nome": "Emam – Várzea Grande",
+      "tipo": "emulsao",
+      "lat": -15.70568,
+      "lng": -56.14281,
+      "obs": "Rod. dos Imigrantes, km 8,6, Capela do Pissarrão, Várzea Grande/MT · (65) 3692-2374"
+    },
+    {
       "id": "arapetro-sinop",
       "nome": "Arapetro – Sinop",
       "tipo": "emulsao",
       "lat": -11.8605,
       "lng": -55.4930,
-      "obs": "BR-163, km 844,2 – Setor Industrial, Sinop/MT. Conferir a coordenada exata."
+      "obs": "BR-163, km 844,2, Setor Industrial, Sinop/MT. Conferir a coordenada exata."
     }
   ]
 }
