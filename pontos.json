@@ -104,6 +104,14 @@
       "lat": -10.73058,
       "lng": -55.13591,
       "obs": "BR-163, km 970, Fazenda Universo, Terra Nova do Norte/MT (os escritórios e lojas ficam em Sinop) · (66) 3211-1520"
+    },
+    {
+      "id": "transpedra-matupa",
+      "nome": "Pedreira Transpedra – Matupá",
+      "tipo": "pedreira",
+      "lat": -10.21646,
+      "lng": -54.91464,
+      "obs": "Transpedra Mineração, Rua CH-10, zona de chácaras de Matupá/MT · (66) 3211-1530"
     }
   ]
 }
