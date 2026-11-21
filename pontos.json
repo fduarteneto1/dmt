@@ -112,6 +112,86 @@
       "lat": -10.21646,
       "lng": -54.91464,
       "obs": "Transpedra Mineração, Rua CH-10, zona de chácaras de Matupá/MT · (66) 3211-1530"
+    },
+    {
+      "id": "sb-rondonopolis",
+      "nome": "SB Pedreira – Rondonópolis",
+      "tipo": "pedreira",
+      "lat": -16.73913,
+      "lng": -54.64662,
+      "obs": "BR-163, região de Anhumas, zona rural de Rondonópolis/MT · (66) 3302-6715"
+    },
+    {
+      "id": "serrana-pontes-lacerda",
+      "nome": "Pedreira Serrana – Pontes e Lacerda",
+      "tipo": "pedreira",
+      "lat": -15.47759,
+      "lng": -59.08837,
+      "obs": "BR-174, km 252, zona rural de Pontes e Lacerda/MT · (65) 99924-5242"
+    },
+    {
+      "id": "brita-cuiaba-nobres",
+      "nome": "Brita Cuiabá – Nobres",
+      "tipo": "pedreira",
+      "lat": -14.60037,
+      "lng": -56.23907,
+      "obs": "Zona rural de Nobres/MT · (65) 99683-5300"
+    },
+    {
+      "id": "britamix-nobres",
+      "nome": "Britamix – Nobres",
+      "tipo": "pedreira",
+      "lat": -14.67452,
+      "lng": -56.29667,
+      "obs": "BR-163, km 477, zona rural de Nobres/MT · (65) 3376-2531"
+    },
+    {
+      "id": "basa-diamantino",
+      "nome": "Pedreira Basa – Diamantino",
+      "tipo": "pedreira",
+      "lat": -14.35184,
+      "lng": -56.46715,
+      "obs": "Estrada rural, Diamantino/MT · (65) 99994-1944"
+    },
+    {
+      "id": "britasa-confresa",
+      "nome": "Britasa Mineração – Confresa",
+      "tipo": "pedreira",
+      "lat": -10.54983,
+      "lng": -51.47704,
+      "obs": "Zona rural a nordeste de Confresa/MT (Vale do Araguaia)"
+    },
+    {
+      "id": "vale-da-serra-guaranta",
+      "nome": "Pedreira Vale da Serra – Guarantã do Norte",
+      "tipo": "pedreira",
+      "lat": -9.87306,
+      "lng": -54.88963,
+      "obs": "BR-163, km 1074, Guarantã do Norte/MT · (66) 98423-7797"
+    },
+    {
+      "id": "lidercal-mirassol",
+      "nome": "Mineradora Lidercal – Mirassol d'Oeste",
+      "tipo": "pedreira",
+      "lat": -15.8427,
+      "lng": -58.14089,
+      "obs": "BR-174, km 25, Sonho Azul, Mirassol d'Oeste/MT. Produz brita e calcário · (65) 99625-4182"
+    },
+    {
+      "id": "pedrical-nobres",
+      "nome": "Pedrical Mineração – Nobres (a confirmar)",
+      "tipo": "pedreira",
+      "lat": -14.69229,
+      "lng": -56.33769,
+      "obs": "Zona rural de Nobres/MT. A CONFIRMAR: pode produzir só calcário."
+    },
+    {
+      "id": "pedra-da-serra-juara",
+      "nome": "Pedra da Serra Mineração – Juara (a confirmar)",
+      "tipo": "pedreira",
+      "lat": -11.24733,
+      "lng": -57.56537,
+      "obs": "Zona rural a oeste de Juara/MT · (66) 98460-1980. A CONFIRMAR se produz brita."
     }
   ]
 }
