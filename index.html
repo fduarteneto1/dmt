@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  :root{--bg:#f5f6f4;--card:#fff;--ink:#1f2a24;--mut:#66706a;--line:#dde1dc;--acc:#1f6b45;--acc2:#e8f2ec;--warn:#9a5b00;--brita:#5a5f66;--emul:#b4471b;--obra:#1f6b45}
+  :root{--bg:#f5f6f4;--card:#fff;--ink:#1f2a24;--mut:#66706a;--line:#dde1dc;--acc:#1f6b45;--acc2:#e8f2ec;--warn:#9a5b00;--brita:#1d4ed8;--emul:#ea580c;--obra:#1f6b45}
   *{box-sizing:border-box}
   body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg);height:100vh;display:flex;flex-direction:column}
   header{padding:10px 16px;background:var(--acc);color:#fff;display:flex;align-items:baseline;gap:12px}
@@ -135,7 +135,7 @@
 
 <script>
 "use strict";
-const COR = {pedreira:'#5a5f66', emulsao:'#b4471b'};
+const COR = {pedreira:'#1d4ed8', emulsao:'#ea580c'};
 const NOME_TIPO = {pedreira:'Pedreira', emulsao:'Distribuidora de emulsão'};
 const LS = k => 'dmtbkp_' + k;
 const ls = {
@@ -156,6 +156,14 @@ const st = {
 const map = L.map('map').setView([-12.9, -56.0], 6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(map);
 const camadaPts = L.layerGroup().addTo(map);
+const legenda = L.control({position:'bottomleft'});
+legenda.onAdd = () => { const d = L.DomUtil.create('div');
+  d.style.cssText = 'background:#fff;padding:6px 10px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.3);font-size:12.5px;line-height:1.7';
+  d.innerHTML = '<div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#1d4ed8;vertical-align:-1px"></span> Pedreira</div>'
+    + '<div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ea580c;vertical-align:-1px"></span> Distribuidora de emulsão</div>'
+    + '<div><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#1f6b45;vertical-align:-1px"></span> Obra</div>';
+  return d; };
+legenda.addTo(map);
 let mkObra = null, linhaRota = null;
 
 function icone(cor, r=7){
@@ -167,7 +175,7 @@ function desenharPontos(){
   camadaPts.clearLayers();
   st.pontos.forEach(p => {
     const ativo = p.tipo === st.tipo;
-    L.marker([p.lat, p.lng], {icon: icone(COR[p.tipo], ativo ? 7 : 5), opacity: ativo ? 1 : .45})
+    L.marker([p.lat, p.lng], {icon: icone(COR[p.tipo], ativo ? 8 : 6), opacity: ativo ? 1 : .6})
       .bindPopup(`<b>${esc(p.nome)}</b><br>${NOME_TIPO[p.tipo]}${p.obs ? '<br><small>'+esc(p.obs)+'</small>' : ''}`)
       .addTo(camadaPts);
   });

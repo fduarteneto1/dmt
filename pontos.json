@@ -30,8 +30,72 @@
       "nome": "Arapetro – Sinop",
       "tipo": "emulsao",
       "lat": -11.8605,
-      "lng": -55.4930,
+      "lng": -55.493,
       "obs": "BR-163, km 844,2, Setor Industrial, Sinop/MT. Conferir a coordenada exata."
+    },
+    {
+      "id": "lopes-juina",
+      "nome": "Pedreira Lopes – Juína",
+      "tipo": "pedreira",
+      "lat": -11.39304,
+      "lng": -58.75501,
+      "obs": "Britadeira Lopes, área rural de Juína/MT · (66) 3566-3270"
+    },
+    {
+      "id": "pedramat-tangara",
+      "nome": "Pedramat – Tangará da Serra",
+      "tipo": "pedreira",
+      "lat": -14.71742,
+      "lng": -57.43718,
+      "obs": "Estrada do Alto da Boa Vista, área rural de Tangará da Serra/MT · (65) 99987-4046"
+    },
+    {
+      "id": "pedreira-tangara",
+      "nome": "Pedreira Tangará (Grupo Fogliatto)",
+      "tipo": "pedreira",
+      "lat": -14.65755,
+      "lng": -57.52739,
+      "obs": "Estrada rural, Av. das Palmeiras km 3,6, Gleba Aurora, Tangará da Serra/MT · (65) 3339-1473"
+    },
+    {
+      "id": "shalom-agua-boa",
+      "nome": "Pedreira Shalom – Água Boa",
+      "tipo": "pedreira",
+      "lat": -14.10918,
+      "lng": -52.13529,
+      "obs": "BR-158, km 572, zona rural de Água Boa/MT (o escritório fica no centro) · (66) 99281-0169"
+    },
+    {
+      "id": "brita-guia",
+      "nome": "Brita Guia – Distrito da Guia",
+      "tipo": "pedreira",
+      "lat": -15.3431,
+      "lng": -56.1819,
+      "obs": "MT-401, km 6, Distrito de Nossa Sra. da Guia, Cuiabá/MT (o escritório fica no Bandeirantes) · (65) 3623-5000"
+    },
+    {
+      "id": "minerpav-sao-vicente",
+      "nome": "Minerpav (Quibrita) – Serra de São Vicente",
+      "tipo": "pedreira",
+      "lat": -15.79282,
+      "lng": -55.58629,
+      "obs": "BR-364, km 352, São Vicente, Santo Antônio de Leverger/MT · 0800 000 2545"
+    },
+    {
+      "id": "pallus-alta-floresta",
+      "nome": "Pedreira Pallus – Alta Floresta",
+      "tipo": "pedreira",
+      "lat": -9.8784,
+      "lng": -56.1609,
+      "obs": "Área rural a oeste de Alta Floresta/MT"
+    },
+    {
+      "id": "santa-helena",
+      "nome": "Pedreira Santa Helena – região de Sinop",
+      "tipo": "pedreira",
+      "lat": -10.83265,
+      "lng": -55.11894,
+      "obs": "MT-320, km 7, zona rural de Nova Santa Helena/MT · (66) 99662-5269"
     }
   ]
 }
