@@ -302,51 +302,78 @@ function distReta(a, b){
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-async function rota(p){
-  const url = `https://router.project-osrm.org/route/v1/driving/${p.lng},${p.lat};${st.obra.lng},${st.obra.lat}?overview=full&geometries=geojson&annotations=nodes,distance`;
-  const r = await (await fetch(url)).json();
-  if(r.code !== 'Ok' || !r.routes.length) throw new Error(r.message || 'sem rota');
-  const rt = r.routes[0], an = rt.legs[0].annotation;
-  let sup = null;
-  try{ sup = await classificar(an.nodes, an.distance); }catch(e){ sup = null; }
-  return {km: rt.distance / 1000, geo: rt.geometry, sup};
+async function buscar(url, opt={}, ms=20000){
+  const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
+  try{ const r = await fetch(url, {...opt, signal: c.signal}); if(!r.ok) throw new Error('HTTP ' + r.status); return await r.json(); }
+  finally{ clearTimeout(t); }
+}
+function decodificar(str, prec=6){
+  let i = 0, lat = 0, lng = 0; const f = Math.pow(10, prec), out = [];
+  while(i < str.length){
+    let b, sh = 0, r = 0; do{ b = str.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; }while(b >= 32);
+    lat += (r & 1) ? ~(r >> 1) : (r >> 1);
+    sh = 0; r = 0; do{ b = str.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; }while(b >= 32);
+    lng += (r & 1) ? ~(r >> 1) : (r >> 1);
+    out.push([lng / f, lat / f]);
+  }
+  return out;
 }
 
 // ---------- Pavimento pelo OpenStreetMap ----------
 const SUP_PAV = new Set(['paved','asphalt','concrete','concrete:plates','concrete:lanes','paving_stones','sett','chipseal','metal','cobblestone','unhewn_cobblestone']);
 const SUP_CHAO = new Set(['unpaved','dirt','earth','ground','gravel','fine_gravel','compacted','sand','grass','mud','pebblestone','rock','clay','laterite','soil']);
 const VIA_PAV = new Set(['motorway','motorway_link','trunk','trunk_link','primary','primary_link']);
-function classe(t){
-  if(!t) return 'inc';
-  const sf = (t.surface || '').toLowerCase();
-  if(SUP_PAV.has(sf)) return 'pav';
-  if(SUP_CHAO.has(sf)) return 'chao';
-  if(t.highway === 'track' || /^grade[2-5]$/.test(t.tracktype || '')) return 'chao';
-  if(VIA_PAV.has(t.highway)) return 'pav';
-  return 'inc';
+function classe(t, e){
+  if(t){
+    const sf = (t.surface || '').toLowerCase();
+    if(SUP_PAV.has(sf)) return 'pav';
+    if(SUP_CHAO.has(sf)) return 'chao';
+    if(t.highway === 'track' || /^grade[2-5]$/.test(t.tracktype || '')) return 'chao';
+    if(VIA_PAV.has(t.highway)) return 'pav';
+    return 'inc';
+  }
+  // sem as etiquetas do OSM: usa a estimativa do próprio roteador
+  return /^paved/.test(e.surface || '') ? 'pav' : (e.surface ? 'chao' : 'inc');
 }
-async function overpass(q){
-  const srv = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-  for(const u of srv){
-    try{ const r = await fetch(u, {method:'POST', body:'data=' + encodeURIComponent(q)}); if(r.ok) return await r.json(); }catch(e){}
-  }
-  throw new Error('overpass indisponível');
+
+async function rota(p){
+  const V = 'https://valhalla1.openstreetmap.de';
+  const locs = [{lat:p.lat, lon:p.lng}, {lat:st.obra.lat, lon:st.obra.lng}];
+  let rr;
+  try{ rr = await buscar(V + '/route', {method:'POST', body: JSON.stringify({locations: locs, costing:'auto'})}); }
+  catch(e){ return rotaOSRM(p); }
+  const shape = rr.trip.legs[0].shape, coords = decodificar(shape);
+  await new Promise(res => setTimeout(res, 1100)); // limite do servidor público: 1 consulta por segundo
+  const km = rr.trip.summary.length;
+  let sup = null;
+  try{
+    const ta = await buscar(V + '/trace_attributes', {method:'POST', body: JSON.stringify({encoded_polyline: shape, costing:'auto', shape_match:'edge_walk',
+      filters:{attributes:['edge.surface','edge.length','edge.way_id','edge.begin_shape_index','edge.end_shape_index'], action:'include'}})});
+    let tags = new Map();
+    try{
+      const ids = [...new Set(ta.edges.map(e => e.way_id))];
+      for(let i = 0; i < ids.length; i += 1500){
+        const j = await buscar('https://overpass-api.de/api/interpreter', {method:'POST',
+          body: 'data=' + encodeURIComponent(`[out:json][timeout:25];way(id:${ids.slice(i, i+1500).join(',')});out tags;`)}, 25000);
+        j.elements.forEach(w => tags.set(w.id, w.tags));
+      }
+    }catch(e){ tags = null; }
+    const tot = {pav:0, chao:0, inc:0}, trechos = [];
+    ta.edges.forEach(e => {
+      const c = classe(tags ? (tags.get(e.way_id) || {}) : null, e);
+      tot[c] += e.length;
+      trechos.push({c, i0: e.begin_shape_index, i1: e.end_shape_index});
+    });
+    sup = {pav: tot.pav, chao: tot.chao, inc: tot.inc, trechos, fonte: tags ? 'osm' : 'roteador'};
+  }catch(e){ sup = null; }
+  return {km, geo: {type:'LineString', coordinates: coords}, sup};
 }
-async function classificar(nodes, dist){
-  const ids = [...new Set(nodes)];
-  const par = new Map();
-  for(let i = 0; i < ids.length; i += 3000){
-    const q = `[out:json][timeout:90];node(id:${ids.slice(i, i+3000).join(',')});way(bn)[highway];out body;`;
-    const j = await overpass(q);
-    j.elements.forEach(w => { for(let k = 0; k < w.nodes.length - 1; k++){
-      const a = w.nodes[k], b = w.nodes[k+1]; par.set(a < b ? a+'_'+b : b+'_'+a, w.tags); } });
-  }
-  const cats = [], tot = {pav:0, chao:0, inc:0};
-  for(let i = 0; i < dist.length; i++){
-    const a = nodes[i], b = nodes[i+1], c = classe(par.get(a < b ? a+'_'+b : b+'_'+a));
-    cats.push(c); tot[c] += dist[i] / 1000;
-  }
-  return {cats, pav: tot.pav, chao: tot.chao, inc: tot.inc};
+
+async function rotaOSRM(p){
+  const url = `https://router.project-osrm.org/route/v1/driving/${p.lng},${p.lat};${st.obra.lng},${st.obra.lat}?overview=full&geometries=geojson`;
+  const r = await buscar(url);
+  if(r.code !== 'Ok' || !r.routes.length) throw new Error(r.message || 'sem rota');
+  return {km: r.routes[0].distance / 1000, geo: r.routes[0].geometry, sup: null};
 }
 
 $('btn-calc').onclick = async () => {
@@ -364,7 +391,7 @@ $('btn-calc').onclick = async () => {
       st.rotas[p.id] = {km: reta * 1.3, geo: null, chao: ant ? ant.chao : 0, manual: false,
         erro: 'Rota não encontrada; usada distância em linha reta × 1,3. Confira o total.'};
     }
-    await new Promise(res => setTimeout(res, 350));
+    await new Promise(res => setTimeout(res, 1100));
   }
   $('calc-status').textContent = orig.length < st.pontos.filter(p => p.tipo === st.tipo).length
     ? 'Mostrando as 8 origens mais próximas em linha reta.' : 'Rotas calculadas.';
@@ -418,17 +445,17 @@ function renderResultado(){
   if(linhaRota){ linhaRota.remove(); linhaRota = null; }
   const p = st.pontos.find(x => x.id === st.sel), r = p && st.rotas[p.id];
   if(!p || !r){ $('res').style.display = 'none'; return; }
-  if(r.geo && r.sup && r.geo.coordinates.length === r.sup.cats.length + 1){
-    const cor = {pav:'#1f6b45', chao:'#a0522d', inc:'#8a8f98'}, grupos = [];
-    const c = r.geo.coordinates, cats = r.sup.cats;
-    let ini = 0;
-    for(let i = 1; i <= cats.length; i++){
-      if(i === cats.length || cats[i] !== cats[ini]){
-        grupos.push(L.polyline(c.slice(ini, i+1).map(x => [x[1], x[0]]), {color: cor[cats[ini]], weight: 6, opacity: .9, dashArray: cats[ini] === 'inc' ? '6 6' : null}));
-        ini = i;
-      }
-    }
-    linhaRota = L.featureGroup(grupos).addTo(map); map.fitBounds(linhaRota.getBounds(), {padding:[30,30]});
+  if(r.geo && r.sup && r.sup.trechos){
+    const cor = {pav:'#1f6b45', chao:'#a0522d', inc:'#8a8f98'}, c = r.geo.coordinates, grupos = [];
+    let atual = null;
+    r.sup.trechos.forEach(t => {
+      if(atual && atual.c === t.c && atual.i1 === t.i0) atual.i1 = t.i1;
+      else { if(atual) grupos.push(atual); atual = {...t}; }
+    });
+    if(atual) grupos.push(atual);
+    linhaRota = L.featureGroup(grupos.map(g => L.polyline(c.slice(g.i0, g.i1 + 1).map(x => [x[1], x[0]]),
+      {color: cor[g.c], weight: 6, opacity: .9, dashArray: g.c === 'inc' ? '6 6' : null}))).addTo(map);
+    map.fitBounds(linhaRota.getBounds(), {padding:[30,30]});
   }
   else if(r.geo){ linhaRota = L.geoJSON(r.geo, {style:{color:'#1f6b45', weight:5, opacity:.8}}).addTo(map); map.fitBounds(linhaRota.getBounds(), {padding:[30,30]}); }
   else { linhaRota = L.polyline([[p.lat,p.lng],[st.obra.lat,st.obra.lng]], {color:'#9a5b00', dashArray:'6 6'}).addTo(map); }
@@ -444,7 +471,7 @@ function renderResultado(){
     ${c.ok ? `<div><span>Custo unitário</span><span class="num">R$ ${fmt(c.kmA*c.pa + c.kmC*c.pc)} / ${uq}</span></div>
     <div style="margin-top:6px"><span>Custo de transporte (${$('sistema').value})</span><span class="total num">R$ ${fmt(c.custo)}</span></div>`
     : `<div class="warn">Preencha os preços de transporte (item 3) para calcular o custo.</div>`}
-    ${r.sup ? `<div class="hint" style="margin-top:6px">Pelo OpenStreetMap: <b style="color:#1f6b45">asfalto ${fmt(r.sup.pav,1)} km</b> · <b style="color:#a0522d">chão ${fmt(r.sup.chao,1)} km</b> · <b style="color:#6b7078">sem informação ${fmt(r.sup.inc,1)} km</b> (tracejado no mapa, contado como asfalto).${r.chaoManual ? ' Km de chão ajustado manualmente.' : ''}</div>` : ''}
+    ${r.sup ? `<div class="hint" style="margin-top:6px">Pelo OpenStreetMap: <b style="color:#1f6b45">asfalto ${fmt(r.sup.pav,1)} km</b> · <b style="color:#a0522d">chão ${fmt(r.sup.chao,1)} km</b> · <b style="color:#6b7078">sem informação ${fmt(r.sup.inc,1)} km</b> (tracejado no mapa, contado como asfalto).${r.sup.fonte === 'roteador' ? ' Etiquetas do OSM indisponíveis agora: usada a estimativa do roteador.' : ''}${r.chaoManual ? ' Km de chão ajustado manualmente.' : ''}</div>` : ''}
     ${r.erro ? `<div class="warn">${esc(r.erro)}</div>` : ''}
     ${r.manual ? `<div class="hint">Distância total corrigida manualmente.</div>` : ''}`;
 }
