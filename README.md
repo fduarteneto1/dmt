@@ -30,6 +30,12 @@ A pasta `src/` está no `.gitignore` e nunca vai para o GitHub.
 ## Colaboradores
 Cada colaborador fica alocado em `ADM` (sede) ou no **código** de uma obra (ex.: `RBR01`). O código se define ao cadastrar ou editar a obra na aba Obras. Ao passar o mouse sobre a obra ou a sede no mapa, aparece quantos colaboradores ativos estão lá.
 
+## Taxa de emulsão (aba Emulsão)
+Calcula a taxa de emulsão do microrrevestimento por usinada e grava na planilha Google "Taxa de Emulsão – Microrrevestimento (MRAF)", a mesma usada pelo artefato do Claude (abas Registros, Obras e Usinas).
+- A ponte com a planilha é um Apps Script dentro dela ("Ponte Gestão 360º BKP"), publicado como App da Web. O código está em `tools/planilha-emulsao.gs`, sem o token; o token real fica só no Apps Script e, criptografado, no `app.enc`.
+- Se publicar uma nova versão do script, use **Implantar → Gerenciar implantações → editar → Nova versão**, para manter o mesmo endereço.
+- Sem internet, a usinada fica guardada no aparelho e é reenviada depois. O script recusa lançamento duplicado.
+
 ## Limitações
 - As rotas vêm do OpenStreetMap (serviço público OSRM). A separação entre trecho pavimentado e não pavimentado não é automática.
 - Se a rota não for encontrada, a ferramenta usa a distância em linha reta × 1,3 e mostra um aviso.
