@@ -203,11 +203,11 @@
     },
     {
       "id": "camil-caceres",
-      "nome": "Camil Mineração – Cáceres",
+      "nome": "Camil Mineração – Nova Lacerda",
       "tipo": "pedreira",
-      "lat": -15.975,
-      "lng": -57.535,
-      "obs": "Camil Cáceres Mineração Ltda · Rodovia BR-070, km 708, Zona Rural, Cáceres/MT · brita e calcário. POSIÇÃO APROXIMADA no mapa (estimada pelo km da BR-070) – ajustar no local da retirada."
+      "lat": -14.443,
+      "lng": -59.562,
+      "obs": "Camil Cáceres Mineração Ltda · MT-477, km 8, Nova Lacerda/MT, CEP 78243-000 · brita e calcário. Posição pelo km 8 da MT-477 (contado a partir do entroncamento sul de Nova Lacerda) – conferir no local."
     }
   ]
 }
