@@ -7,7 +7,7 @@
 
   const KEY = 'dmtbkp_equip', PEND = 'dmtbkp_equipPend';
   const SITS = ['Operando', 'Parado', 'Manutenção', 'Disponível'];
-  const COR_SIT = {'Operando':'#1f7a3d', 'Parado':'#b26a00', 'Manutenção':'#b42318', 'Disponível':'#475467'};
+  const COR_SIT = {'Operando':'#1f7a3d', 'Parado':'#b26a00', 'Manutenção':'#b42318', 'Disponível':'#1d4ed8'};
   const $ = id => document.getElementById(id);
   const h = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
   const cod = v => typeof codObra === 'function' ? codObra(v) : String(v || '').trim().toUpperCase();
