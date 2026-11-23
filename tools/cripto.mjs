@@ -1,9 +1,9 @@
 // Abre e fecha (criptografa) os arquivos da Gestão 360º BKP.
 //
 //   DMT_USUARIO=francisco DMT_SENHA='...' node tools/cripto.mjs abrir
-//       decifra app.enc, pontos.enc e obras.enc para a pasta src/ (fora do Git)
+//       decifra app.enc, pontos.enc, obras.enc e colaboradores.enc para a pasta src/ (fora do Git)
 //   DMT_USUARIO=francisco DMT_SENHA='...' node tools/cripto.mjs fechar
-//       criptografa src/app.html, src/pontos.json e src/obras.json de volta para *.enc
+//       criptografa src/app.html, src/pontos.json, src/obras.json e src/colaboradores.json de volta para *.enc
 //   DMT_USUARIO=... DMT_SENHA=... NOVO_USUARIO=joao NOVA_SENHA='...' node tools/cripto.mjs usuario
 //       cria o usuário (ou troca a senha dele) em usuarios.json
 //   DMT_USUARIO=... DMT_SENHA=... NOVO_USUARIO=joao node tools/cripto.mjs remover
@@ -19,7 +19,7 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 await import(path.join(raiz, 'cripto.js'));
 const D = globalThis.DMTC;
 const arq = n => path.join(raiz, n);
-const ARQS = [['app.html', 'app.enc'], ['pontos.json', 'pontos.enc'], ['obras.json', 'obras.enc']];
+const ARQS = [['app.html', 'app.enc'], ['pontos.json', 'pontos.enc'], ['obras.json', 'obras.enc'], ['colaboradores.json', 'colaboradores.enc']];
 const env = k => { const v = process.env[k]; if(!v) { console.error('Faltou a variável ' + k); process.exit(1); } return v; };
 const lerUsuarios = () => JSON.parse(fs.readFileSync(arq('usuarios.json'), 'utf8'));
 const gravarUsuarios = u => fs.writeFileSync(arq('usuarios.json'), JSON.stringify(u, null, 1) + '\n');

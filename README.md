@@ -3,7 +3,7 @@
 Ferramenta interna de acesso restrito. Para entrar, você precisa de um usuário e uma senha.
 
 ## Como funciona o acesso
-- O app (`app.enc`) e os dados (`pontos.enc`, `obras.enc`) ficam no repositório **criptografados** (AES-256-GCM). Sem uma senha válida, não dá para ler o conteúdo.
+- O app (`app.enc`) e os dados (`pontos.enc`, `obras.enc`, `colaboradores.enc`) ficam no repositório **criptografados** (AES-256-GCM). Sem uma senha válida, não dá para ler o conteúdo.
 - `usuarios.json` guarda, para cada usuário, a chave do sistema protegida pela senha dele (PBKDF2-SHA256, 310 mil iterações). Os nomes de usuário também ficam cifrados.
 - "Manter conectado" guarda a sessão no navegador até a pessoa clicar em **Sair**.
 
@@ -14,18 +14,21 @@ Use senhas com pelo menos 10 caracteres. Como `usuarios.json` é público, uma s
 
 Remover um usuário impede que ele entre de novo. Quem já usou "Manter conectado" continua com a chave salva naquele navegador. Se for preciso cortar o acesso de vez, gere uma chave nova (`node tools/cripto.mjs iniciar`) e recadastre os usuários.
 
-## Atualizar pedreiras, distribuidoras e obras
-1. Edite pelo mapa.
-2. Clique em **Exportar pontos** ou **Exportar obras**. O arquivo baixado (`pontos.enc` / `obras.enc`) já vem criptografado.
+## Atualizar pedreiras, distribuidoras, obras e colaboradores
+1. Edite pelo mapa ou pela aba **Colaboradores**.
+2. Clique em **Exportar pontos**, **Exportar obras** ou **Exportar colaboradores**. O arquivo baixado (`pontos.enc` / `obras.enc` / `colaboradores.enc`) já vem criptografado.
 3. Substitua o arquivo no GitHub.
 
 ## Editar o código
 ```
 DMT_USUARIO=seu.usuario DMT_SENHA='...' node tools/cripto.mjs abrir    # decifra para src/ (fora do Git)
-# edite src/app.html, src/pontos.json, src/obras.json
+# edite src/app.html, src/pontos.json, src/obras.json, src/colaboradores.json
 DMT_USUARIO=seu.usuario DMT_SENHA='...' node tools/cripto.mjs fechar   # criptografa de volta
 ```
 A pasta `src/` está no `.gitignore` e nunca vai para o GitHub.
+
+## Colaboradores
+Cada colaborador fica alocado em `ADM` (sede) ou no **código** de uma obra (ex.: `RBR01`). O código se define ao cadastrar ou editar a obra na aba Obras. Ao passar o mouse sobre a obra ou a sede no mapa, aparece quantos colaboradores ativos estão lá.
 
 ## Limitações
 - As rotas vêm do OpenStreetMap (serviço público OSRM). A separação entre trecho pavimentado e não pavimentado não é automática.
