@@ -40,11 +40,12 @@
   const css = document.createElement('style');
   css.textContent = `
   #aba-equip .eqp-li{display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid var(--line,#e4e7ec)}
-  #aba-equip .eqp-li .nm{flex:1;min-width:0}
+  #aba-equip .eqp-li input[type=checkbox]{width:auto;flex:0 0 auto;margin:0}
+  #aba-equip .eqp-li .nm{flex:1 1 auto;min-width:0;display:block}
   #aba-equip .eqp-li .nm b{display:block;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #aba-equip .eqp-li .nm small{display:block;color:var(--ink3,#66706a);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #aba-equip .eqp-li select{width:auto;max-width:118px;font-size:11.5px;padding:3px 4px;margin:0}
-  #aba-equip .eqp-li .sit{max-width:92px;font-weight:600}
+  #aba-equip .eqp-li select{width:auto;flex:0 0 auto;max-width:112px;font-size:11.5px;padding:3px 4px;margin:0}
+  #aba-equip .eqp-li .sit{max-width:96px;font-weight:600}
   #aba-equip .eqp-li .mais{background:none;border:0;color:var(--ink2,#475467);padding:2px 4px;cursor:pointer;font-size:15px}
   #aba-equip ul{list-style:none;margin:6px 0 0;padding:0;max-height:62vh;overflow:auto}
   #aba-equip .eqp-hist li{font-size:11.5px;padding:4px 0;border-bottom:1px dashed var(--line,#e4e7ec)}
