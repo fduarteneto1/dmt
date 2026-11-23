@@ -6,26 +6,23 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Gestão 360º BKP</title>
 <script src="cripto.js"></script>
+<link rel="stylesheet" href="tema.css">
 <style>
-  :root{--bg:#f5f6f4;--card:#fff;--ink:#1f2a24;--mut:#66706a;--line:#dde1dc;--acc:#1f6b45;--erro:#b42318}
+  :root{--erro:#b42318}
   *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;display:flex;flex-direction:column;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--bg)}
-  header{padding:10px 16px;background:var(--acc);color:#fff;display:flex;align-items:baseline;gap:12px}
-  header h1{font-size:17px;margin:0} header span{opacity:.8;font-size:12.5px}
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column}
   main{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}
-  form{width:340px;max-width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px}
-  h2{font-size:16px;margin:0 0 4px} p{margin:0 0 14px;color:var(--mut);font-size:13px}
-  label{display:block;font-size:12.5px;color:var(--mut);margin:10px 0 3px}
-  input[type=text],input[type=password]{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font:inherit}
-  .chk{display:flex;align-items:center;gap:6px;margin-top:12px;color:var(--ink)}
-  button{width:100%;margin-top:16px;padding:9px;border:1px solid var(--acc);background:var(--acc);color:#fff;border-radius:6px;font:inherit;cursor:pointer}
-  button:disabled{opacity:.6;cursor:default}
-  #msg{min-height:20px;margin-top:10px;font-size:13px;color:var(--erro)}
-  #msg.ok{color:var(--mut)}
+  form{width:360px;max-width:100%;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:22px}
+  h2{font-size:19px;font-weight:700;margin:0 0 4px;letter-spacing:.01em} p{margin:0 0 14px;color:var(--ink2);font-size:12.5px}
+  input[type=text],input[type=password]{width:100%}
+  .chk{display:flex;align-items:center;gap:6px;margin-top:14px}
+  form>button{width:100%;margin-top:16px;padding:10px 16px}
+  #msg{min-height:20px;margin-top:10px;font-size:12.5px;color:var(--erro)}
+  #msg.ok{color:var(--ink3)}
 </style>
 </head>
 <body>
-<header><h1>Gestão 360º BKP</h1><span>BKP Construtora · Mato Grosso</span></header>
+<header><img class="logo-bkp" src="logo-bkp.png" alt="BKP Construtora"><div class="tit"><h1>Gestão 360º BKP</h1><span>BKP Construtora · Mato Grosso</span></div></header>
 <main>
   <form id="f" autocomplete="on" hidden>
     <h2>Acesso restrito</h2>
@@ -48,9 +45,13 @@
   const buscar = async n => { const r = await fetch(n, {cache:'no-cache'}); if(!r.ok) throw new Error(n + ': HTTP ' + r.status); return r.text(); };
 
   async function abrir(s){
-    const html = await DMTC.decifrar(s.k, await buscar('app.enc'));
+    let html = await DMTC.decifrar(s.k, await buscar('app.enc'));
     const boot = '<script src="cripto.js"><\/script><script>window.DMT_SESSAO=' + JSON.stringify({k: s.k, u: s.u}).replace(/</g, '\\u003c') + ';<\/script>';
-    document.open(); document.write(html.replace(/<head>/i, '<head>' + boot)); document.close();
+    const tema = '<link rel="stylesheet" href="tema.css">';
+    const cab = '<header><img class="logo-bkp" src="logo-bkp.png" alt="BKP Construtora"><div class="tit"><h1>Gestão 360º BKP</h1><span>BKP Construtora · Mato Grosso</span></div>';
+    html = html.replace(/<head>/i, '<head>' + boot).replace(/<\/head>/i, tema + '</head>')
+               .replace('<header><h1>Gestão 360º BKP</h1><span>BKP Construtora · Mato Grosso</span>', cab);
+    document.open(); document.write(html); document.close();
   }
 
   const s = ler();

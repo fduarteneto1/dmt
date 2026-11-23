@@ -1,0 +1,90 @@
+/* Tema visual da Gestão 360º BKP — segue o "Guia de Design — Painel Financeiro BKP".
+   Carregado por index.html depois do CSS do app (app.enc), então sobrescreve o visual
+   sem mexer no código criptografado. Cores de dados do mapa (pedreira, distribuidora,
+   situação das obras, rotas) ficam como estão: têm significado fixo. */
+:root{
+  --bg:#FBFBFC; --card:#fff; --ink:#232323; --ink2:#5C5C5C; --ink3:#8E8E8E; --mut:#5C5C5C;
+  --line:#E8E8EA; --line2:#F2F2F3; --head:#F6F6F7;
+  --terra:#C05621; --slate:#6B6F77;
+  --acc:#C05621; --acc2:#F6F6F7; --prim:#1F1F1F;
+}
+
+body{font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--ink)}
+
+/* ---- cabeçalho: logo + título + subtítulo, linha fina embaixo ---- */
+header{background:#fff;color:var(--ink);align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid var(--line2)}
+header .logo-bkp{height:35px;width:auto;display:block}
+header .tit{display:flex;flex-direction:column}
+header h1{font-weight:700;font-size:23px;line-height:1.05;letter-spacing:.01em;margin:0}
+header .tit>span{opacity:1;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);font-weight:700;margin-top:3px}
+header .sessao{font-size:12px;color:var(--ink2);gap:8px}
+header .sessao-b{background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-weight:600}
+header .sessao-b:hover{background:var(--head)}
+
+/* ---- painel lateral ---- */
+aside{background:var(--bg);border-right:1px solid var(--line);padding:14px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:16px;margin-bottom:14px}
+.card h2{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:0 0 12px}
+
+/* rótulos: caixa-alta, 700, ink3 */
+label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:10px 0 4px}
+.chk,.filtros label{font-size:12.5px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink)}
+.hint{color:var(--ink3);font-size:11.5px}
+
+/* campos */
+input,select{font-family:inherit;font-weight:500;font-size:12.5px;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 11px}
+input:focus,select:focus{outline:none;border-color:var(--terra);box-shadow:0 0 0 2px rgba(192,86,33,.18)}
+input[type=checkbox],input[type=radio]{accent-color:var(--terra)}
+#sug,.sug{border-color:var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+#sug div:hover,.sug div:hover{background:var(--head)}
+
+/* botões: primário escuro, secundário ghost */
+button{font-family:inherit;font-weight:600;font-size:12.5px;border-radius:8px;padding:8px 14px;background:var(--prim);border:1px solid var(--prim);color:#fff;transition:.15s}
+button:hover:not(:disabled){filter:brightness(1.15)}
+button.sec{background:#fff;color:var(--ink);border:1px solid var(--line)}
+button.sec:hover:not(:disabled){background:var(--head);filter:none}
+button.mini{padding:3px 9px;font-size:11.5px;border-radius:6px}
+button:disabled{opacity:.45}
+
+/* seletor de modo (segmented) */
+.seg{display:flex;gap:4px;background:#E8E8E8;padding:4px;border:0;border-radius:9px;overflow:visible}
+.seg button{flex:1;border:0;border-radius:6px;background:transparent;color:var(--ink2);padding:6px 10px}
+.seg button:hover:not(:disabled){filter:none;color:var(--ink)}
+.seg button.on{background:#fff;color:var(--terra);box-shadow:0 1px 2px rgba(80,60,30,.12)}
+
+/* abas no mesmo padrão do segmented */
+.abas{gap:4px;background:#E8E8E8;padding:4px;border:0;border-radius:9px;margin-bottom:14px}
+.abas button{border:0;margin:0;border-radius:6px;background:transparent;color:var(--ink2);font-weight:600;padding:7px 6px;line-height:1.25}
+.abas button:hover:not(:disabled){filter:none;color:var(--ink)}
+.abas button.on{background:#fff;color:var(--terra);border:0;box-shadow:0 1px 2px rgba(80,60,30,.12)}
+
+/* tabelas */
+table{font-size:12.5px}
+th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--ink3);background:var(--head);border-bottom:1px solid var(--line)}
+td{border-bottom:1px solid var(--line2)}
+td,.num,.km,.fin,.resumo{font-variant-numeric:tabular-nums}
+
+/* listas e blocos */
+.pts li,.obras li,.eq li{border-bottom-color:var(--line2)}
+.ed,.eq-cab{background:var(--head);border:1px solid var(--line);border-radius:9px}
+.eq-cab .fn span{border-color:var(--line);border-radius:5px;font-weight:700;color:var(--ink)}
+.eq-res button{background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:8px}
+.eq-res button:hover:not(:disabled){background:var(--head);filter:none}
+.eq-res button.on{border-color:var(--terra);background:#fff;box-shadow:0 0 0 2px rgba(192,86,33,.18)}
+.eq-res b{color:var(--ink);font-size:19px}
+.rr .km{color:var(--ink);font-size:19px}
+.sim-l{border-color:var(--line);border-radius:8px}
+
+/* código da obra (PXT01, REC01…) como badge */
+.obras small>b[style*="--acc"],aside b[style*="color:var(--acc)"]{color:var(--ink)!important;background:var(--head);border:1px solid var(--line);border-radius:5px;padding:0 6px;font-size:11px;font-weight:700}
+
+/* janela de usuários */
+#modal-us{background:rgba(0,0,0,.30)}
+#modal-us .card{box-shadow:0 8px 24px rgba(0,0,0,.12)}
+
+/* mapa: controles e legenda */
+.leaflet-container{font-family:Arial,Helvetica,sans-serif}
+.leaflet-bar{border:1px solid var(--line)!important;border-radius:9px!important;box-shadow:0 1px 2px rgba(0,0,0,.04)!important;overflow:hidden}
+.leaflet-bar a{color:var(--ink2)!important}
+.leaflet-control:not(.leaflet-bar):not(.leaflet-control-attribution){border:1px solid var(--line)!important;border-radius:10px!important;box-shadow:0 1px 2px rgba(0,0,0,.06)!important;font-size:11px!important;color:var(--ink2);padding:8px 12px!important}
+.leaflet-popup-content-wrapper,.leaflet-tooltip{border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);font-family:Arial,Helvetica,sans-serif}
