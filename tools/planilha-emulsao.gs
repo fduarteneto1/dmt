@@ -19,10 +19,12 @@ function tratar(p) {
   var lock = LockService.getScriptLock();
   try {
     if (p.acao === 'dados') return dados(ss);
+    if (p.acao === 'lerObras') return lerObras(ss);
     lock.waitLock(20000);
     if (p.acao === 'registro') return registro(ss, p.r || {});
     if (p.acao === 'usina') return usina(ss, p.u || {});
     if (p.acao === 'obra') return obra(ss, String(p.nome || '').trim());
+    if (p.acao === 'gravarObras') return gravarObras(ss, p.obras);
     return { ok: false, erro: 'Ação desconhecida.' };
   } catch (err) {
     return { ok: false, erro: String(err && err.message || err) };
@@ -104,5 +106,28 @@ function obra(ss, nome) {
   if (ult > 1 && sh.getRange(2, 1, ult - 1, 1).getValues().some(function (r) { return String(r[0]).trim().toLowerCase() === nome.toLowerCase(); }))
     return { ok: true, existia: true };
   sh.getRange(ult + 1, 1).setValue(nome);
+  return { ok: true };
+}
+
+// ---------- Obras do Gestão 360º (valores, situação etc.) ----------
+// Guardadas como texto JSON na aba oculta "Gestao360", para todos os computadores
+// verem a mesma lista. A1 = 'obras', B1 = lista, C1 = quando foi gravada.
+function abaG360(ss) {
+  var sh = ss.getSheetByName('Gestao360');
+  if (!sh) { sh = ss.insertSheet('Gestao360'); sh.getRange(1, 1).setValue('obras'); sh.hideSheet(); }
+  return sh;
+}
+function lerObras(ss) {
+  var sh = abaG360(ss), txt = String(sh.getRange(1, 2).getValue() || '');
+  var obras = null;
+  try { obras = txt ? JSON.parse(txt) : null; } catch (x) {}
+  return { ok: true, obras: Array.isArray(obras) ? obras : null, quando: iso(sh.getRange(1, 3).getValue()) };
+}
+function gravarObras(ss, obras) {
+  if (!Array.isArray(obras)) return { ok: false, erro: 'Lista de obras inválida.' };
+  var txt = JSON.stringify(obras);
+  if (txt.length > 45000) return { ok: false, erro: 'Lista de obras grande demais para a planilha.' };
+  var sh = abaG360(ss);
+  sh.getRange(1, 1, 1, 3).setValues([['obras', txt, new Date()]]);
   return { ok: true };
 }
