@@ -42,3 +42,11 @@ Calcula a taxa de emulsão do microrrevestimento por usinada e grava na planilha
 ## Limitações
 - As rotas vêm do OpenStreetMap (serviço público OSRM). A separação entre trecho pavimentado e não pavimentado não é automática.
 - Se a rota não for encontrada, a ferramenta usa a distância em linha reta × 1,3 e mostra um aviso.
+
+## Equipamentos (aba Equipamentos)
+Cadastro de máquinas e veículos (veio do quadro "Cadastro de Máquinas e Veículos" do Trello) e alocação de cada um numa obra (pelo **código** da obra), na sede (`ADM`) ou sem alocação, com a situação: Operando, Parado, Manutenção ou Disponível.
+- Os dados ficam na aba oculta **Gestao360** da planilha, linha 2 (`A2 = equipamentos`). O código da aba está em `equipamentos.js`, carregado pelo `index.html` como o `obras-sync.js`, sem nada secreto.
+- Cada mudança de local ou situação grava a data ("no local desde") e entra no histórico (últimas 300 movimentações, com o usuário).
+- Ao passar o mouse sobre a obra ou a sede no mapa, aparece quantos equipamentos estão lá e quantos estão operando.
+- **Baixar planilha (CSV)** exporta a lista filtrada.
+- O Apps Script da planilha precisa ter as ações `lerEquipamentos` e `gravarEquipamentos` (já estão em `tools/planilha-emulsao.gs`). Depois de colar, publique em **Implantar → Gerenciar implantações → editar → Nova versão**.
