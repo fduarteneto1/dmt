@@ -27,6 +27,9 @@ DMT_USUARIO=seu.usuario DMT_SENHA='...' node tools/cripto.mjs fechar   # criptog
 ```
 A pasta `src/` está no `.gitignore` e nunca vai para o GitHub.
 
+## Obras sincronizadas pela planilha
+As obras (valor total, valor medido, situação, código) ficam na aba oculta **Gestao360** da planilha "Taxa de Emulsão – Microrrevestimento (MRAF)". Toda alteração na aba Obras é enviada para lá, e cada computador busca essa versão ao abrir a ferramenta e ao voltar para a aba. Quem cuida disso é o `obras-sync.js`, usando a mesma ligação da aba Emulsão. `Exportar obras` continua servindo como cópia de segurança. Se dois computadores editarem as obras ao mesmo tempo, vale a última gravação.
+
 ## Colaboradores
 Cada colaborador fica alocado em `ADM` (sede) ou no **código** de uma obra (ex.: `RBR01`). O código se define ao cadastrar ou editar a obra na aba Obras. Ao passar o mouse sobre a obra ou a sede no mapa, aparece quantos colaboradores ativos estão lá.
 
