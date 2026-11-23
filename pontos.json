@@ -200,6 +200,14 @@
       "lat": -15.8774,
       "lng": -52.34858,
       "obs": "Grupo Disbral MT, Rua 4, Quadra Ind. 1/8, Lotes 17 a 20, Distrito Industrial, Barra do Garças/MT · (66) 3405-5261"
+    },
+    {
+      "id": "camil-caceres",
+      "nome": "Camil Mineração – Cáceres",
+      "tipo": "pedreira",
+      "lat": -15.975,
+      "lng": -57.535,
+      "obs": "Camil Cáceres Mineração Ltda · Rodovia BR-070, km 708, Zona Rural, Cáceres/MT · brita e calcário. POSIÇÃO APROXIMADA no mapa (estimada pelo km da BR-070) – ajustar no local da retirada."
     }
   ]
 }
