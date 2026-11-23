@@ -23,6 +23,7 @@ header .sessao-b:hover{background:var(--head)}
 
 /* ---- painel lateral ---- */
 aside{background:var(--bg);border-right:1px solid var(--line);padding:14px}
+@media (min-width:801px){aside{width:min(520px,45vw);flex:none}}
 .card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.04);padding:16px;margin-bottom:14px}
 .card h2{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:0 0 12px}
 
