@@ -20,11 +20,13 @@ function tratar(p) {
   try {
     if (p.acao === 'dados') return dados(ss);
     if (p.acao === 'lerObras') return lerObras(ss);
+    if (p.acao === 'lerEquipamentos') return lerEquipamentos(ss);
     lock.waitLock(20000);
     if (p.acao === 'registro') return registro(ss, p.r || {});
     if (p.acao === 'usina') return usina(ss, p.u || {});
     if (p.acao === 'obra') return obra(ss, String(p.nome || '').trim());
     if (p.acao === 'gravarObras') return gravarObras(ss, p.obras);
+    if (p.acao === 'gravarEquipamentos') return gravarEquipamentos(ss, p.dados);
     return { ok: false, erro: 'Ação desconhecida.' };
   } catch (err) {
     return { ok: false, erro: String(err && err.message || err) };
@@ -129,5 +131,22 @@ function gravarObras(ss, obras) {
   if (txt.length > 45000) return { ok: false, erro: 'Lista de obras grande demais para a planilha.' };
   var sh = abaG360(ss);
   sh.getRange(1, 1, 1, 3).setValues([['obras', txt, new Date()]]);
+  return { ok: true };
+}
+
+// ---------- Equipamentos do Gestão 360º (cadastro e alocação nas obras) ----------
+// Mesma aba oculta "Gestao360": A2 = 'equipamentos', B2 = {equip:[...], hist:[...]}, C2 = quando foi gravada.
+function lerEquipamentos(ss) {
+  var sh = abaG360(ss), txt = String(sh.getRange(2, 2).getValue() || '');
+  var d = null;
+  try { d = txt ? JSON.parse(txt) : null; } catch (x) {}
+  return { ok: true, dados: d && Array.isArray(d.equip) ? d : null, quando: iso(sh.getRange(2, 3).getValue()) };
+}
+function gravarEquipamentos(ss, d) {
+  if (!d || !Array.isArray(d.equip)) return { ok: false, erro: 'Lista de equipamentos inválida.' };
+  var txt = JSON.stringify(d);
+  if (txt.length > 49000) return { ok: false, erro: 'Dados de equipamentos grandes demais para a planilha.' };
+  var sh = abaG360(ss);
+  sh.getRange(2, 1, 1, 3).setValues([['equipamentos', txt, new Date()]]);
   return { ok: true };
 }
