@@ -45,8 +45,24 @@
   .pts{list-style:none;margin:0;padding:0;max-height:220px;overflow:auto}
   .dot{width:10px;height:10px;border-radius:50%;flex:none}
   .pts .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #sug{border:1px solid var(--line);border-radius:6px;margin-top:4px;display:none;max-height:180px;overflow:auto;background:#fff}
-  #sug div{padding:6px 8px;cursor:pointer}#sug div:hover{background:var(--acc2)}
+  #sug,.sug{border:1px solid var(--line);border-radius:6px;margin-top:4px;display:none;max-height:180px;overflow:auto;background:#fff}
+  #sug div,.sug div{padding:6px 8px;cursor:pointer}#sug div:hover,.sug div:hover{background:var(--acc2)}
+  .abas{display:flex;gap:4px;margin-bottom:12px;border-bottom:2px solid var(--line)}
+  .abas button{flex:1;background:none;border:0;border-bottom:3px solid transparent;margin-bottom:-2px;border-radius:0;color:var(--mut);font-weight:600;padding:8px 6px}
+  .abas button.on{color:var(--acc);border-bottom-color:var(--acc)}
+  .obras li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:7px 0;border-bottom:1px solid var(--line)}
+  .obras .ctl{display:flex;gap:6px;margin-left:20px;width:100%}
+  .obras{list-style:none;margin:0;padding:0}
+  .obras .info{flex:1;min-width:0}
+  .obras .info b{display:block;font-weight:600}
+  .obras .info small{color:var(--mut)}
+  .obras select{width:auto;padding:3px 4px;font-size:12px}
+  .sq{width:12px;height:12px;border-radius:3px;flex:none;display:inline-block}
+  .chk{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:13.5px;margin:0}
+  .chk input{width:auto}
+  .filtros{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+  .filtros label{display:flex;align-items:center;gap:4px;margin:0;font-size:12.5px;color:var(--ink)}
+  .filtros input{width:auto}
   .modo{position:absolute;z-index:1000;top:10px;left:50%;transform:translateX(-50%);background:var(--warn);color:#fff;padding:6px 12px;border-radius:6px;display:none}
   @media (max-width:800px){main{flex-direction:column-reverse}aside{width:100%;border:0}#map{height:45vh;flex:none}}
   @media print{header,#map,.noprint{display:none}aside{width:100%}}
@@ -56,6 +72,13 @@
 <header><h1>Calculadora de DMT</h1><span>BKP Construtora · Mato Grosso</span></header>
 <main>
 <aside>
+
+  <div class="abas noprint" id="abas">
+    <button data-aba="dmt" class="on">Transporte (DMT)</button>
+    <button data-aba="obras">Obras</button>
+  </div>
+
+  <div id="aba-dmt">
 
   <div class="card">
     <h2>1 · Local da obra</h2>
@@ -131,6 +154,48 @@
     <div class="hint">Mudanças ficam só neste navegador. Para valer para toda a equipe, exporte e substitua o <code>pontos.json</code> no GitHub.</div>
   </div>
 
+  </div><!-- /aba-dmt -->
+
+  <div id="aba-obras" style="display:none">
+
+    <div class="card">
+      <h2>Obras da BKP</h2>
+      <label class="chk"><input type="checkbox" id="mostrar-obras" checked> Mostrar obras no mapa</label>
+      <div class="filtros" id="filtros-obras"></div>
+      <ul class="obras" id="lista-obras"></ul>
+      <div class="btns"><button class="sec mini" id="btn-ver-obras">Ver todas no mapa</button></div>
+    </div>
+
+    <div class="card noprint">
+      <h2>Cadastrar obra</h2>
+      <label for="ob-nome">Nome da obra</label>
+      <input id="ob-nome" placeholder="Ex.: Pavimentação urbana – Juara">
+      <label for="ob-busca">Cidade ou endereço</label>
+      <input id="ob-busca" placeholder="Ex.: Juara, MT" autocomplete="off">
+      <div id="ob-sug" class="sug"></div>
+      <div class="btns"><button class="sec mini" id="ob-clicar">Marcar no mapa</button></div>
+      <div class="hint" id="ob-local">Local não definido.</div>
+      <div class="row">
+        <div><label for="ob-status">Situação</label><select id="ob-status"></select></div>
+      </div>
+      <label for="ob-obs">Observação (contrato, órgão, prazo…)</label>
+      <input id="ob-obs">
+      <div class="btns"><button id="ob-add">Adicionar obra</button></div>
+    </div>
+
+    <div class="card noprint">
+      <h2>Lista de obras</h2>
+      <div class="btns" style="margin-top:0">
+        <button class="sec mini" id="ob-exp">Exportar obras</button>
+        <button class="sec mini" type="button" onclick="document.getElementById('ob-imp').click()">Importar</button>
+        <input type="file" id="ob-imp" accept=".json" hidden>
+        <button class="sec mini" id="ob-reset">Restaurar lista oficial</button>
+      </div>
+      <div class="hint">Mudanças (novas obras, situação) ficam só neste navegador. Para valer para toda a equipe, exporte e substitua o <code>obras.json</code> no GitHub.</div>
+    </div>
+
+  </div><!-- /aba-obras -->
+
 </aside>
 <div style="position:relative;flex:1;display:flex">
   <div id="map"></div>
@@ -165,14 +230,15 @@ const map = L.map('map').setView([-12.9, -56.0], 6);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(map);
 const camadaPts = L.layerGroup().addTo(map);
 const legenda = L.control({position:'bottomleft'});
-legenda.onAdd = () => { const d = L.DomUtil.create('div');
+legenda.onAdd = () => { const d = L.DomUtil.create('div'); d.id = 'legenda';
   d.style.cssText = 'background:#fff;padding:6px 10px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.3);font-size:12.5px;line-height:1.7';
   d.innerHTML = '<div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#1d4ed8;vertical-align:-1px"></span> Pedreira</div>'
     + '<div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#ea580c;vertical-align:-1px"></span> Distribuidora de emulsão</div>'
-    + '<div><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#1f6b45;vertical-align:-1px"></span> Obra</div>'
+    + '<div><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#1f6b45;vertical-align:-1px"></span> Obra (cálculo DMT)</div>'
     + '<div style="margin-top:4px"><span style="display:inline-block;width:18px;height:4px;background:#1f6b45;vertical-align:3px"></span> Rota em asfalto</div>'
     + '<div><span style="display:inline-block;width:18px;height:4px;background:#a0522d;vertical-align:3px"></span> Rota em chão</div>'
-    + '<div><span style="display:inline-block;width:18px;height:0;border-top:4px dashed #8a8f98;vertical-align:3px"></span> Sem informação</div>';
+    + '<div><span style="display:inline-block;width:18px;height:0;border-top:4px dashed #8a8f98;vertical-align:3px"></span> Sem informação</div>'
+    + '<div id="leg-obras" style="margin-top:4px;border-top:1px solid #dde1dc;padding-top:4px"></div>';
   return d; };
 legenda.addTo(map);
 let mkObra = null, linhaRota = null;
@@ -219,13 +285,15 @@ function editarPonto(i){
 function setModo(m){
   st.modo = m;
   $('modo').style.display = m ? 'block' : 'none';
-  $('modo').textContent = m === 'obra' ? 'Clique no mapa para marcar a obra (Esc cancela)' : m === 'ponto' ? 'Clique no mapa para adicionar a pedreira/distribuidora (Esc cancela)' : '';
+  $('modo').textContent = m === 'obra' ? 'Clique no mapa para marcar a obra (Esc cancela)' : m === 'obranova' ? 'Clique no mapa no local da nova obra (Esc cancela)' : m === 'ponto' ? 'Clique no mapa para adicionar a pedreira/distribuidora (Esc cancela)' : '';
   map.getContainer().style.cursor = m ? 'crosshair' : '';
 }
 document.addEventListener('keydown', e => { if(e.key === 'Escape') setModo(null); });
 
 map.on('click', e => {
   if(st.modo === 'obra'){ definirObra(e.latlng.lat, e.latlng.lng, 'Ponto marcado no mapa'); setModo(null); }
+  else if(st.modo === 'obranova'){ setModo(null); obNovo.lat = +e.latlng.lat.toFixed(5); obNovo.lng = +e.latlng.lng.toFixed(5);
+    $('ob-local').textContent = `Ponto marcado no mapa (${obNovo.lat}, ${obNovo.lng})`; marcarNovo(); }
   else if(st.modo === 'ponto'){
     setModo(null);
     const nome = prompt('Nome da pedreira/distribuidora:'); if(!nome) return;
@@ -553,6 +621,164 @@ $('imp').onchange = async e => {
 };
 $('btn-reset').onclick = () => { if(confirm('Descartar as mudanças locais e voltar à lista do GitHub?')){ st.pontos = JSON.parse(JSON.stringify(st.oficiais)); try{ localStorage.removeItem(LS('pontos')); localStorage.removeItem(LS('removidos')); }catch(e){} st.rotas = {}; desenharPontos(); limparResultado(); atualizarBotao(); } };
 
+// ---------- Aba Obras ----------
+const STATUS = {
+  andamento: {nome:'Em andamento', cor:'#16a34a'},
+  paralisada: {nome:'Paralisada', cor:'#d97706'},
+  concluida: {nome:'Concluída', cor:'#6b7280'}
+};
+const camadaObras = L.layerGroup();
+st.obras = []; st.obrasOficiais = [];
+st.filtroObras = ls.get('filtroObras', {andamento:true, paralisada:true, concluida:true});
+const obNovo = {lat:null, lng:null, local:''};
+let mkNovo = null, obrasVistas = false;
+
+function iconeObra(cor){
+  return L.divIcon({className:'', iconSize:[26,34], iconAnchor:[13,33], popupAnchor:[0,-30],
+    html:`<svg width="26" height="34" viewBox="0 0 26 34"><path d="M13 1C6.4 1 1 6.3 1 12.8 1 21.5 13 33 13 33s12-11.5 12-20.2C25 6.3 19.6 1 13 1z" fill="${cor}" stroke="#fff" stroke-width="2"/><rect x="7.5" y="8" width="11" height="9" rx="1" fill="#fff"/><rect x="10" y="10.5" width="6" height="4" fill="${cor}"/></svg>`});
+}
+function salvarObras(){ ls.set('obras', st.obras); desenharObras(); }
+function obrasVisiveis(){ return st.obras.filter(o => st.filtroObras[o.status] !== false); }
+
+function desenharObras(){
+  camadaObras.clearLayers();
+  const mostrar = $('mostrar-obras').checked;
+  if(mostrar){ camadaObras.addTo(map); } else camadaObras.remove();
+  obrasVisiveis().forEach(o => {
+    const s = STATUS[o.status] || STATUS.andamento;
+    const pop = document.createElement('div');
+    pop.innerHTML = `<b>${esc(o.nome)}</b><br>${esc(o.local||'')}<br><span style="color:${s.cor};font-weight:600">● ${s.nome}</span>${o.obs ? '<br><small>'+esc(o.obs)+'</small>' : ''}
+      <br><button class="sec mini" style="margin-top:6px">Usar no cálculo de DMT</button>`;
+    pop.querySelector('button').onclick = () => { map.closePopup(); trocarAba('dmt'); definirObra(o.lat, o.lng, o.nome + (o.local ? ' – ' + o.local : '')); };
+    L.marker([o.lat, o.lng], {icon: iconeObra(s.cor), zIndexOffset: 500}).bindPopup(pop).addTo(camadaObras);
+  });
+  // legenda
+  $('leg-obras').innerHTML = mostrar ? Object.values(STATUS).map(s => `<div><span class="sq" style="background:${s.cor};vertical-align:-1px"></span> Obra BKP – ${s.nome.toLowerCase()}</div>`).join('') : '';
+  // filtros com contagem
+  $('filtros-obras').innerHTML = Object.entries(STATUS).map(([k, s]) =>
+    `<label><input type="checkbox" data-st="${k}" ${st.filtroObras[k] !== false ? 'checked' : ''}><span class="sq" style="background:${s.cor}"></span>${s.nome} (${st.obras.filter(o => o.status === k).length})</label>`).join('');
+  $('filtros-obras').querySelectorAll('input').forEach(c => c.onchange = () => { st.filtroObras[c.dataset.st] = c.checked; ls.set('filtroObras', st.filtroObras); desenharObras(); });
+  // lista
+  const ul = $('lista-obras'); ul.innerHTML = '';
+  const ordem = {andamento:0, paralisada:1, concluida:2};
+  st.obras.map((o, i) => ({o, i})).sort((a, b) => (ordem[a.o.status] ?? 3) - (ordem[b.o.status] ?? 3) || a.o.nome.localeCompare(b.o.nome))
+    .forEach(({o, i}) => {
+      const s = STATUS[o.status] || STATUS.andamento, li = document.createElement('li');
+      li.innerHTML = `<span class="sq" style="background:${s.cor}"></span>
+        <span class="info"><b title="${esc(o.nome)}">${esc(o.nome)}</b><small>${esc(o.local||'')}${o.obs ? ' · ' + esc(o.obs) : ''}</small></span>
+        <span class="ctl"><select>${Object.entries(STATUS).map(([k, x]) => `<option value="${k}" ${k === o.status ? 'selected' : ''}>${x.nome}</option>`).join('')}</select>
+        <button class="sec mini" data-a="ir">ver</button><button class="sec mini" data-a="ed">editar</button><button class="sec mini" data-a="rm">×</button></span>`;
+      li.querySelector('select').onchange = e => { o.status = e.target.value; salvarObras(); };
+      li.querySelector('[data-a=ir]').onclick = () => { if(!$('mostrar-obras').checked){ $('mostrar-obras').checked = true; ls.set('mostrarObras', true); desenharObras(); } map.setView([o.lat, o.lng], 11); };
+      li.querySelector('[data-a=ed]').onclick = () => editarObra(i);
+      li.querySelector('[data-a=rm]').onclick = () => { if(confirm('Remover a obra "' + o.nome + '"?\n(Para só tirar do mapa, prefira marcar como Concluída.)')){ const rm = ls.get('obrasRemovidas', []); rm.push(o.id); ls.set('obrasRemovidas', rm); st.obras.splice(i, 1); salvarObras(); } };
+      ul.appendChild(li);
+    });
+  if(!st.obras.length) ul.innerHTML = '<li class="hint">Nenhuma obra cadastrada.</li>';
+}
+
+function editarObra(i){
+  const o = st.obras[i];
+  const nome = prompt('Nome da obra:', o.nome); if(nome === null) return;
+  const local = prompt('Cidade/UF:', o.local || ''); if(local === null) return;
+  const obs = prompt('Observação (contrato, órgão, prazo…):', o.obs || ''); if(obs === null) return;
+  o.nome = nome.trim() || o.nome; o.local = local.trim(); o.obs = obs.trim();
+  salvarObras();
+}
+
+function verTodasObras(){
+  const v = obrasVisiveis(); if(!v.length) return;
+  if(!$('mostrar-obras').checked){ $('mostrar-obras').checked = true; ls.set('mostrarObras', true); desenharObras(); }
+  map.fitBounds(L.latLngBounds(v.map(o => [o.lat, o.lng])), {padding:[40,40], maxZoom:9});
+}
+
+function marcarNovo(){
+  if(mkNovo) mkNovo.remove();
+  if(obNovo.lat == null) return;
+  mkNovo = L.marker([obNovo.lat, obNovo.lng], {icon: iconeObra(STATUS[$('ob-status').value].cor), opacity:.75}).addTo(map);
+  map.setView([obNovo.lat, obNovo.lng], Math.max(map.getZoom(), 9));
+}
+
+function trocarAba(a){
+  $('abas').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.aba === a));
+  $('aba-dmt').style.display = a === 'dmt' ? '' : 'none';
+  $('aba-obras').style.display = a === 'obras' ? '' : 'none';
+  ls.set('aba', a); setModo(null);
+  if(a === 'obras' && !obrasVistas){ obrasVistas = true; verTodasObras(); }
+}
+$('abas').querySelectorAll('button').forEach(b => b.onclick = () => trocarAba(b.dataset.aba));
+
+$('ob-status').innerHTML = Object.entries(STATUS).map(([k, s]) => `<option value="${k}">${s.nome}</option>`).join('');
+$('ob-status').onchange = marcarNovo;
+$('mostrar-obras').checked = ls.get('mostrarObras', true);
+$('mostrar-obras').onchange = () => { ls.set('mostrarObras', $('mostrar-obras').checked); desenharObras(); };
+$('btn-ver-obras').onclick = verTodasObras;
+$('ob-clicar').onclick = () => setModo('obranova');
+
+let tObBusca;
+$('ob-busca').addEventListener('input', e => {
+  clearTimeout(tObBusca);
+  const q = e.target.value.trim();
+  if(q.length < 3){ $('ob-sug').style.display = 'none'; return; }
+  tObBusca = setTimeout(async () => {
+    const box = $('ob-sug');
+    try{
+      const r = await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&countrycodes=br&accept-language=pt-BR&addressdetails=1&q=' + encodeURIComponent(q))).json();
+      box.innerHTML = r.length ? '' : '<div class="hint">Nada encontrado. Use "Marcar no mapa".</div>';
+      r.forEach(it => {
+        const d = document.createElement('div'); d.textContent = it.display_name;
+        d.onclick = () => {
+          box.style.display = 'none';
+          const a = it.address || {}, cid = a.city || a.town || a.village || a.municipality || it.display_name.split(',')[0];
+          const uf = (a['ISO3166-2-lvl4'] || '').replace('BR-', '');
+          obNovo.lat = +(+it.lat).toFixed(5); obNovo.lng = +(+it.lon).toFixed(5); obNovo.local = uf ? cid + '/' + uf : cid;
+          $('ob-busca').value = obNovo.local; $('ob-local').textContent = `${obNovo.local} (${obNovo.lat}, ${obNovo.lng})`; marcarNovo();
+        };
+        box.appendChild(d);
+      });
+    }catch(err){ box.innerHTML = '<div class="warn">Falha na busca. Use "Marcar no mapa".</div>'; }
+    box.style.display = 'block';
+  }, 450);
+});
+
+$('ob-add').onclick = () => {
+  const nome = $('ob-nome').value.trim();
+  if(!nome){ alert('Informe o nome da obra.'); return; }
+  if(obNovo.lat == null){ alert('Defina o local: busque a cidade ou use "Marcar no mapa".'); return; }
+  st.obras.push({id:'o' + Date.now(), nome, local: obNovo.local || $('ob-busca').value.trim(), status: $('ob-status').value,
+    lat: obNovo.lat, lng: obNovo.lng, obs: $('ob-obs').value.trim()});
+  salvarObras();
+  if(mkNovo){ mkNovo.remove(); mkNovo = null; }
+  Object.assign(obNovo, {lat:null, lng:null, local:''});
+  ['ob-nome','ob-busca','ob-obs'].forEach(id => $(id).value = ''); $('ob-status').value = 'andamento';
+  $('ob-local').textContent = 'Obra adicionada.';
+};
+
+$('ob-exp').onclick = () => {
+  const blob = new Blob([JSON.stringify({"_leia-me":"Obras da BKP mostradas na aba Obras. status: 'andamento', 'paralisada' ou 'concluida'.", obras: st.obras}, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'obras.json'; a.click();
+};
+$('ob-imp').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{ const j = JSON.parse(await f.text()); const arr = Array.isArray(j) ? j : j.obras;
+    if(!Array.isArray(arr)) throw 0; st.obras = arr.filter(o => isFinite(o.lat) && isFinite(o.lng)); salvarObras();
+  }catch(err){ alert('Arquivo inválido.'); }
+  e.target.value = '';
+};
+$('ob-reset').onclick = () => { if(confirm('Descartar as mudanças locais nas obras e voltar à lista do GitHub?')){ st.obras = JSON.parse(JSON.stringify(st.obrasOficiais)); try{ localStorage.removeItem(LS('obras')); localStorage.removeItem(LS('obrasRemovidas')); }catch(e){} desenharObras(); } };
+
+async function carregarObras(){
+  try{ const j = await (await fetch('obras.json', {cache:'no-cache'})).json(); st.obrasOficiais = j.obras || []; }
+  catch(e){ st.obrasOficiais = []; }
+  const locais = ls.get('obras', null), removidas = ls.get('obrasRemovidas', []);
+  if(locais){
+    const ids = new Set(locais.map(o => o.id));
+    st.obrasOficiais.forEach(o => { if(!ids.has(o.id) && !removidas.includes(o.id)) locais.push(JSON.parse(JSON.stringify(o))); });
+    st.obras = locais; ls.set('obras', locais);
+  } else st.obras = JSON.parse(JSON.stringify(st.obrasOficiais));
+  desenharObras();
+}
+
 (async function init(){
   try{ const j = await (await fetch('pontos.json', {cache:'no-cache'})).json(); st.oficiais = j.pontos || []; }
   catch(e){ st.oficiais = []; }
@@ -564,6 +790,8 @@ $('btn-reset').onclick = () => { if(confirm('Descartar as mudanças locais e vol
     st.pontos = locais; ls.set('pontos', locais);
   } else st.pontos = JSON.parse(JSON.stringify(st.oficiais));
   carregarPrecos(); carregarDens(); desenharPontos(); atualizarBotao();
+  await carregarObras();
+  if(ls.get('aba', 'dmt') === 'obras') trocarAba('obras');
 })();
 </script>
 </body>
