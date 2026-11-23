@@ -58,6 +58,14 @@
       "obs": "Estrada rural, Av. das Palmeiras km 3,6, Gleba Aurora, Tangará da Serra/MT · (65) 3339-1473"
     },
     {
+      "id": "brandao-tangara",
+      "nome": "Pedreira Brandão – Tangará da Serra",
+      "tipo": "pedreira",
+      "lat": -14.6866,
+      "lng": -57.7032,
+      "obs": "Área de extração junto ao escritório (Plus Code 878X+26), Sítio Palmares, PA Antônio Conselheiro, zona rural de Tangará da Serra/MT · (65) 99937-1707"
+    },
+    {
       "id": "shalom-agua-boa",
       "nome": "Pedreira Shalom – Água Boa",
       "tipo": "pedreira",
