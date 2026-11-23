@@ -57,6 +57,15 @@
   .obras .info b{display:block;font-weight:600}
   .obras .info small{color:var(--mut)}
   .obras select{width:auto;padding:3px 4px;font-size:12px}
+  .barra{position:relative;height:14px;background:#e5e7eb;border-radius:7px;overflow:hidden;margin-top:4px}
+  .barra i{position:absolute;left:0;top:0;bottom:0;border-radius:7px}
+  .barra span{position:relative;display:block;text-align:center;font:600 10.5px/14px system-ui,sans-serif;color:#111}
+  .fin{font-size:12px;color:var(--mut);margin-top:3px;display:flex;flex-wrap:wrap;gap:2px 10px}
+  .fin b{color:var(--ink);font-weight:600}
+  .ed{width:100%;margin-left:20px;background:var(--acc2);border-radius:6px;padding:6px 8px}
+  .ed label{margin:4px 0 1px}
+  .resumo div{display:flex;justify-content:space-between;padding:2px 0}
+  .lbl-obra{white-space:nowrap}
   .sq{width:12px;height:12px;border-radius:3px;flex:none;display:inline-block}
   .chk{display:flex;align-items:center;gap:6px;color:var(--ink);font-size:13.5px;margin:0}
   .chk input{width:auto}
@@ -160,7 +169,9 @@
 
     <div class="card">
       <h2>Obras da BKP</h2>
-      <label class="chk"><input type="checkbox" id="mostrar-obras" checked> Mostrar obras no mapa</label>
+      <div class="resumo" id="resumo-obras"></div>
+      <label class="chk" style="margin-top:8px"><input type="checkbox" id="mostrar-obras" checked> Mostrar obras no mapa</label>
+      <label class="chk"><input type="checkbox" id="mostrar-barras" checked> Mostrar % medido sobre as obras</label>
       <div class="filtros" id="filtros-obras"></div>
       <ul class="obras" id="lista-obras"></ul>
       <div class="btns"><button class="sec mini" id="btn-ver-obras">Ver todas no mapa</button></div>
@@ -177,6 +188,10 @@
       <div class="hint" id="ob-local">Local não definido.</div>
       <div class="row">
         <div><label for="ob-status">Situação</label><select id="ob-status"></select></div>
+      </div>
+      <div class="row">
+        <div><label for="ob-vt">Valor total (R$)</label><input id="ob-vt" inputmode="decimal" placeholder="0,00"></div>
+        <div><label for="ob-vm">Valor medido (R$)</label><input id="ob-vm" inputmode="decimal" placeholder="0,00"></div>
       </div>
       <label for="ob-obs">Observação (contrato, órgão, prazo…)</label>
       <input id="ob-obs">
@@ -629,11 +644,41 @@ const STATUS = {
   concluida: {nome:'Concluída', cor:'#6b7280'}
 };
 const camadaObras = L.layerGroup();
+// valores: aceita "1.234.567,89", "1234567.89" ou "1234567"
+function numBR(v){
+  if(typeof v === 'number') return v;
+  v = String(v ?? '').replace(/[R$\s]/g, '');
+  if(!v) return 0;
+  if(v.includes(',')) v = v.replace(/\./g, '').replace(',', '.');
+  else if((v.match(/\./g) || []).length > 1 || /^\d{1,3}\.\d{3}$/.test(v)) v = v.replace(/\./g, '');
+  const n = parseFloat(v); return isFinite(n) ? n : 0;
+}
+const brl = n => 'R$ ' + fmt(n);
+function fin(o){
+  const vt = +o.valorTotal || 0, vm = +o.valorMedido || 0;
+  return {vt, vm, saldo: vt - vm, pct: vt > 0 ? vm / vt * 100 : null};
+}
+function barraHTML(pct, cor){
+  const p = Math.max(0, Math.min(100, pct || 0));
+  return `<div class="barra"><i style="width:${p}%;background:${cor}"></i><span>${pct == null ? 'sem valores' : fmt(pct,1) + '% medido'}</span></div>`;
+}
 st.obras = []; st.obrasOficiais = [];
 st.filtroObras = ls.get('filtroObras', {andamento:true, paralisada:true, concluida:true});
 const obNovo = {lat:null, lng:null, local:''};
 let mkNovo = null, obrasVistas = false;
 
+function iconeObraBarra(cor, pct){
+  const p = Math.max(0, Math.min(100, pct)), W = 74;
+  return L.divIcon({className:'', iconSize:[W,56], iconAnchor:[W/2,55], popupAnchor:[0,-50],
+    html:`<div style="width:${W}px;height:18px;background:#fff;border-radius:9px;box-shadow:0 1px 3px rgba(0,0,0,.45);padding:2px;margin-bottom:4px">
+      <div style="position:relative;height:14px;background:#e5e7eb;border-radius:7px;overflow:hidden">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:${p}%;background:${cor}"></div>
+        <div style="position:relative;text-align:center;font:700 10.5px/14px system-ui,sans-serif;color:#111">${fmt(pct,1)}%</div></div></div>
+      <div style="width:26px;height:34px;margin:0 auto">${pinSVG(cor)}</div>`});
+}
+function pinSVG(cor){
+  return `<svg width="26" height="34" viewBox="0 0 26 34"><path d="M13 1C6.4 1 1 6.3 1 12.8 1 21.5 13 33 13 33s12-11.5 12-20.2C25 6.3 19.6 1 13 1z" fill="${cor}" stroke="#fff" stroke-width="2"/><rect x="7.5" y="8" width="11" height="9" rx="1" fill="#fff"/><rect x="10" y="10.5" width="6" height="4" fill="${cor}"/></svg>`;
+}
 function iconeObra(cor){
   return L.divIcon({className:'', iconSize:[26,34], iconAnchor:[13,33], popupAnchor:[0,-30],
     html:`<svg width="26" height="34" viewBox="0 0 26 34"><path d="M13 1C6.4 1 1 6.3 1 12.8 1 21.5 13 33 13 33s12-11.5 12-20.2C25 6.3 19.6 1 13 1z" fill="${cor}" stroke="#fff" stroke-width="2"/><rect x="7.5" y="8" width="11" height="9" rx="1" fill="#fff"/><rect x="10" y="10.5" width="6" height="4" fill="${cor}"/></svg>`});
@@ -648,13 +693,24 @@ function desenharObras(){
   obrasVisiveis().forEach(o => {
     const s = STATUS[o.status] || STATUS.andamento;
     const pop = document.createElement('div');
-    pop.innerHTML = `<b>${esc(o.nome)}</b><br>${esc(o.local||'')}<br><span style="color:${s.cor};font-weight:600">● ${s.nome}</span>${o.obs ? '<br><small>'+esc(o.obs)+'</small>' : ''}
-      <br><button class="sec mini" style="margin-top:6px">Usar no cálculo de DMT</button>`;
+    const f = fin(o);
+    pop.innerHTML = `<div style="min-width:220px"><b>${esc(o.nome)}</b><br>${esc(o.local||'')}<br><span style="color:${s.cor};font-weight:600">● ${s.nome}</span>${o.obs ? '<br><small>'+esc(o.obs)+'</small>' : ''}
+      ${f.vt > 0 ? `${barraHTML(f.pct, s.cor)}<div style="font-size:12px;margin-top:4px;line-height:1.5">Valor total: <b>${brl(f.vt)}</b><br>Medido: <b>${brl(f.vm)}</b><br>Saldo a medir: <b>${brl(f.saldo)}</b></div>` : '<div class="hint">Valores não informados.</div>'}
+      <button class="sec mini" style="margin-top:6px">Usar no cálculo de DMT</button></div>`;
     pop.querySelector('button').onclick = () => { map.closePopup(); trocarAba('dmt'); definirObra(o.lat, o.lng, o.nome + (o.local ? ' – ' + o.local : '')); };
-    L.marker([o.lat, o.lng], {icon: iconeObra(s.cor), zIndexOffset: 500}).bindPopup(pop).addTo(camadaObras);
+    const comBarra = $('mostrar-barras').checked && f.pct != null;
+    L.marker([o.lat, o.lng], {icon: comBarra ? iconeObraBarra(s.cor, f.pct) : iconeObra(s.cor), zIndexOffset: 500}).bindPopup(pop).addTo(camadaObras);
   });
   // legenda
   $('leg-obras').innerHTML = mostrar ? Object.values(STATUS).map(s => `<div><span class="sq" style="background:${s.cor};vertical-align:-1px"></span> Obra BKP – ${s.nome.toLowerCase()}</div>`).join('') : '';
+  // resumo da carteira (obras não concluídas)
+  const ativas = st.obras.filter(o => o.status !== 'concluida'), tot = ativas.reduce((a, o) => { const f = fin(o); a.vt += f.vt; a.vm += f.vm; return a; }, {vt:0, vm:0});
+  $('resumo-obras').innerHTML = tot.vt > 0
+    ? `<div><span>Carteira (exceto concluídas)</span><b class="num">${brl(tot.vt)}</b></div>
+       <div><span>Medido</span><span class="num">${brl(tot.vm)}</span></div>
+       <div><span>Saldo a medir</span><b class="num">${brl(tot.vt - tot.vm)}</b></div>
+       ${barraHTML(tot.vm / tot.vt * 100, 'var(--acc)')}`
+    : '<div class="hint">Informe valor total e medido das obras (botão "editar") para ver o andamento financeiro.</div>';
   // filtros com contagem
   $('filtros-obras').innerHTML = Object.entries(STATUS).map(([k, s]) =>
     `<label><input type="checkbox" data-st="${k}" ${st.filtroObras[k] !== false ? 'checked' : ''}><span class="sq" style="background:${s.cor}"></span>${s.nome} (${st.obras.filter(o => o.status === k).length})</label>`).join('');
@@ -666,25 +722,42 @@ function desenharObras(){
     .forEach(({o, i}) => {
       const s = STATUS[o.status] || STATUS.andamento, li = document.createElement('li');
       li.innerHTML = `<span class="sq" style="background:${s.cor}"></span>
-        <span class="info"><b title="${esc(o.nome)}">${esc(o.nome)}</b><small>${esc(o.local||'')}${o.obs ? ' · ' + esc(o.obs) : ''}</small></span>
+        <span class="info"><b title="${esc(o.nome)}">${esc(o.nome)}</b><small>${esc(o.local||'')}${o.obs ? ' · ' + esc(o.obs) : ''}</small>
+          ${fin(o).vt > 0 ? `${barraHTML(fin(o).pct, s.cor)}<div class="fin"><span>Total <b>${brl(fin(o).vt)}</b></span><span>Medido <b>${brl(fin(o).vm)}</b></span><span>Saldo <b>${brl(fin(o).saldo)}</b></span></div>` : ''}</span>
         <span class="ctl"><select>${Object.entries(STATUS).map(([k, x]) => `<option value="${k}" ${k === o.status ? 'selected' : ''}>${x.nome}</option>`).join('')}</select>
         <button class="sec mini" data-a="ir">ver</button><button class="sec mini" data-a="ed">editar</button><button class="sec mini" data-a="rm">×</button></span>`;
       li.querySelector('select').onchange = e => { o.status = e.target.value; salvarObras(); };
       li.querySelector('[data-a=ir]').onclick = () => { if(!$('mostrar-obras').checked){ $('mostrar-obras').checked = true; ls.set('mostrarObras', true); desenharObras(); } map.setView([o.lat, o.lng], 11); };
-      li.querySelector('[data-a=ed]').onclick = () => editarObra(i);
+      li.querySelector('[data-a=ed]').onclick = () => editarObra(i, li);
       li.querySelector('[data-a=rm]').onclick = () => { if(confirm('Remover a obra "' + o.nome + '"?\n(Para só tirar do mapa, prefira marcar como Concluída.)')){ const rm = ls.get('obrasRemovidas', []); rm.push(o.id); ls.set('obrasRemovidas', rm); st.obras.splice(i, 1); salvarObras(); } };
       ul.appendChild(li);
     });
   if(!st.obras.length) ul.innerHTML = '<li class="hint">Nenhuma obra cadastrada.</li>';
 }
 
-function editarObra(i){
+function editarObra(i, li){
   const o = st.obras[i];
-  const nome = prompt('Nome da obra:', o.nome); if(nome === null) return;
-  const local = prompt('Cidade/UF:', o.local || ''); if(local === null) return;
-  const obs = prompt('Observação (contrato, órgão, prazo…):', o.obs || ''); if(obs === null) return;
-  o.nome = nome.trim() || o.nome; o.local = local.trim(); o.obs = obs.trim();
-  salvarObras();
+  if(li.querySelector('.ed')){ li.querySelector('.ed').remove(); return; }
+  const d = document.createElement('div'); d.className = 'ed';
+  const v = n => n ? fmt(n) : '';
+  d.innerHTML = `<label>Nome da obra</label><input data-k="nome" value="${esc(o.nome)}">
+    <label>Cidade/UF</label><input data-k="local" value="${esc(o.local||'')}">
+    <div class="row"><div><label>Valor total (R$)</label><input data-k="vt" inputmode="decimal" value="${v(o.valorTotal)}"></div>
+      <div><label>Valor medido (R$)</label><input data-k="vm" inputmode="decimal" value="${v(o.valorMedido)}"></div></div>
+    <div class="hint" data-k="calc"></div>
+    <label>Observação</label><input data-k="obs" value="${esc(o.obs||'')}">
+    <div class="btns"><button class="mini" data-k="ok">Salvar</button><button class="sec mini" data-k="no">Cancelar</button></div>`;
+  const q = k => d.querySelector(`[data-k=${k}]`);
+  const calc = () => { const vt = numBR(q('vt').value), vm = numBR(q('vm').value);
+    q('calc').innerHTML = vt > 0 ? `Saldo a medir: <b>${brl(vt - vm)}</b> · ${fmt(vm / vt * 100, 1)}% medido${vm > vt ? ' <span style="color:var(--warn)">(medido maior que o total)</span>' : ''}` : ''; };
+  q('vt').oninput = calc; q('vm').oninput = calc; calc();
+  q('no').onclick = () => d.remove();
+  q('ok').onclick = () => {
+    o.nome = q('nome').value.trim() || o.nome; o.local = q('local').value.trim(); o.obs = q('obs').value.trim();
+    o.valorTotal = numBR(q('vt').value); o.valorMedido = numBR(q('vm').value);
+    salvarObras();
+  };
+  li.appendChild(d); q('vm').focus();
 }
 
 function verTodasObras(){
@@ -713,6 +786,8 @@ $('ob-status').innerHTML = Object.entries(STATUS).map(([k, s]) => `<option value
 $('ob-status').onchange = marcarNovo;
 $('mostrar-obras').checked = ls.get('mostrarObras', true);
 $('mostrar-obras').onchange = () => { ls.set('mostrarObras', $('mostrar-obras').checked); desenharObras(); };
+$('mostrar-barras').checked = ls.get('mostrarBarras', true);
+$('mostrar-barras').onchange = () => { ls.set('mostrarBarras', $('mostrar-barras').checked); desenharObras(); };
 $('btn-ver-obras').onclick = verTodasObras;
 $('ob-clicar').onclick = () => setModo('obranova');
 
@@ -747,11 +822,11 @@ $('ob-add').onclick = () => {
   if(!nome){ alert('Informe o nome da obra.'); return; }
   if(obNovo.lat == null){ alert('Defina o local: busque a cidade ou use "Marcar no mapa".'); return; }
   st.obras.push({id:'o' + Date.now(), nome, local: obNovo.local || $('ob-busca').value.trim(), status: $('ob-status').value,
-    lat: obNovo.lat, lng: obNovo.lng, obs: $('ob-obs').value.trim()});
+    lat: obNovo.lat, lng: obNovo.lng, obs: $('ob-obs').value.trim(), valorTotal: numBR($('ob-vt').value), valorMedido: numBR($('ob-vm').value)});
   salvarObras();
   if(mkNovo){ mkNovo.remove(); mkNovo = null; }
   Object.assign(obNovo, {lat:null, lng:null, local:''});
-  ['ob-nome','ob-busca','ob-obs'].forEach(id => $(id).value = ''); $('ob-status').value = 'andamento';
+  ['ob-nome','ob-busca','ob-obs','ob-vt','ob-vm'].forEach(id => $(id).value = ''); $('ob-status').value = 'andamento';
   $('ob-local').textContent = 'Obra adicionada.';
 };
 
