@@ -624,6 +624,7 @@ $('btn-reset').onclick = () => { if(confirm('Descartar as mudanças locais e vol
 // ---------- Aba Obras ----------
 const STATUS = {
   andamento: {nome:'Em andamento', cor:'#16a34a'},
+  iniciar: {nome:'A iniciar', cor:'#7c3aed'},
   paralisada: {nome:'Paralisada', cor:'#d97706'},
   concluida: {nome:'Concluída', cor:'#6b7280'}
 };
@@ -660,7 +661,7 @@ function desenharObras(){
   $('filtros-obras').querySelectorAll('input').forEach(c => c.onchange = () => { st.filtroObras[c.dataset.st] = c.checked; ls.set('filtroObras', st.filtroObras); desenharObras(); });
   // lista
   const ul = $('lista-obras'); ul.innerHTML = '';
-  const ordem = {andamento:0, paralisada:1, concluida:2};
+  const ordem = {andamento:0, iniciar:1, paralisada:2, concluida:3};
   st.obras.map((o, i) => ({o, i})).sort((a, b) => (ordem[a.o.status] ?? 3) - (ordem[b.o.status] ?? 3) || a.o.nome.localeCompare(b.o.nome))
     .forEach(({o, i}) => {
       const s = STATUS[o.status] || STATUS.andamento, li = document.createElement('li');
@@ -755,7 +756,7 @@ $('ob-add').onclick = () => {
 };
 
 $('ob-exp').onclick = () => {
-  const blob = new Blob([JSON.stringify({"_leia-me":"Obras da BKP mostradas na aba Obras. status: 'andamento', 'paralisada' ou 'concluida'.", obras: st.obras}, null, 2)], {type:'application/json'});
+  const blob = new Blob([JSON.stringify({"_leia-me":"Obras da BKP mostradas na aba Obras. status: 'andamento', 'iniciar', 'paralisada' ou 'concluida'.", obras: st.obras}, null, 2)], {type:'application/json'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'obras.json'; a.click();
 };
 $('ob-imp').onchange = async e => {
