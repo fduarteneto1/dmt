@@ -73,6 +73,12 @@
   .filtros label{display:flex;align-items:center;gap:4px;margin:0;font-size:12.5px;color:var(--ink)}
   .filtros input{width:auto}
   .modo{position:absolute;z-index:1000;top:10px;left:50%;transform:translateX(-50%);background:var(--warn);color:#fff;padding:6px 12px;border-radius:6px;display:none}
+  .rr{position:absolute;z-index:1000;top:10px;right:10px;width:300px;max-width:calc(100% - 20px);background:#fff;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.3);padding:10px 12px;font-size:13px;display:none}
+  .rr h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);display:flex;justify-content:space-between;align-items:center}
+  .rr .x{background:none;border:0;color:var(--mut);font-size:18px;line-height:1;padding:0 2px;cursor:pointer}
+  .rr .km{font-size:22px;font-weight:700;color:var(--acc);font-variant-numeric:tabular-nums}
+  .rr .ln{display:flex;justify-content:space-between;gap:8px;padding:1px 0}
+  .rr select{margin-top:4px;font-size:12.5px;padding:4px 6px}
   @media (max-width:800px){main{flex-direction:column-reverse}aside{width:100%;border:0}#map{height:45vh;flex:none}}
   @media print{header,#map,.noprint{display:none}aside{width:100%}}
 </style>
@@ -215,6 +221,7 @@
 <div style="position:relative;flex:1;display:flex">
   <div id="map"></div>
   <div class="modo" id="modo"></div>
+  <div class="rr" id="rr"></div>
 </div>
 </main>
 
@@ -268,7 +275,8 @@ function desenharPontos(){
   st.pontos.forEach(p => {
     const ativo = p.tipo === st.tipo;
     L.marker([p.lat, p.lng], {icon: icone(COR[p.tipo], ativo ? 8 : 6), opacity: ativo ? 1 : .6})
-      .bindPopup(`<b>${esc(p.nome)}</b><br>${NOME_TIPO[p.tipo]}${p.obs ? '<br><small>'+esc(p.obs)+'</small>' : ''}`)
+      .bindPopup(`<b>${esc(p.nome)}</b><br>${NOME_TIPO[p.tipo]}${p.obs ? '<br><small>'+esc(p.obs)+'</small>' : ''}<br><small style="color:#66706a">Para ver a rota: clique numa obra e depois aqui.</small>`)
+      .on('click', () => { if(rrSelecionarPonto(p)) map.closePopup(); })
       .addTo(camadaPts);
   });
   const ul = $('lista-pts'); ul.innerHTML = '';
@@ -303,7 +311,7 @@ function setModo(m){
   $('modo').textContent = m === 'obra' ? 'Clique no mapa para marcar a obra (Esc cancela)' : m === 'obranova' ? 'Clique no mapa no local da nova obra (Esc cancela)' : m === 'ponto' ? 'Clique no mapa para adicionar a pedreira/distribuidora (Esc cancela)' : '';
   map.getContainer().style.cursor = m ? 'crosshair' : '';
 }
-document.addEventListener('keydown', e => { if(e.key === 'Escape') setModo(null); });
+document.addEventListener('keydown', e => { if(e.key !== 'Escape') return; if(st.modo) setModo(null); else rrLimpar(); });
 
 map.on('click', e => {
   if(st.modo === 'obra'){ definirObra(e.latlng.lat, e.latlng.lng, 'Ponto marcado no mapa'); setModo(null); }
@@ -325,7 +333,8 @@ function definirObra(lat, lng, nome){
   if(mkObra) mkObra.remove();
   mkObra = L.marker([lat, lng], {icon: L.divIcon({className:'', iconSize:[22,22], iconAnchor:[11,11],
     html:'<div style="width:22px;height:22px;border-radius:4px;background:#1f6b45;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.4);color:#fff;font:bold 12px/18px sans-serif;text-align:center">O</div>'})})
-    .bindPopup('<b>Obra</b><br>' + esc(nome)).addTo(map);
+    .bindPopup('<b>Obra</b><br>' + esc(nome)).addTo(map)
+    .on('click', () => rrSelecionarObra({id:'dmt', nome, lat, lng}));
   map.setView([lat, lng], 8);
   $('obra-info').textContent = `${nome} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
   st.rotas = {}; limparResultado(); atualizarBotao();
@@ -452,15 +461,15 @@ function classe(t, e){
   return /^paved/.test(e.surface || '') ? 'pav' : (e.surface ? 'chao' : 'inc');
 }
 
-async function rota(p){
+async function rota(p, dest = st.obra){
   const V = 'https://valhalla1.openstreetmap.de';
-  const locs = [{lat:p.lat, lon:p.lng}, {lat:st.obra.lat, lon:st.obra.lng}];
+  const locs = [{lat:p.lat, lon:p.lng}, {lat:dest.lat, lon:dest.lng}];
   let rr;
   try{ rr = await buscar(V + '/route', {method:'POST', body: JSON.stringify({locations: locs, costing:'auto'})}); }
-  catch(e){ return rotaOSRM(p); }
+  catch(e){ return rotaOSRM(p, dest); }
   const shape = rr.trip.legs[0].shape, coords = decodificar(shape);
   await new Promise(res => setTimeout(res, 1100)); // limite do servidor público: 1 consulta por segundo
-  const km = rr.trip.summary.length;
+  const km = rr.trip.summary.length, tempo = rr.trip.summary.time;
   let sup = null;
   try{
     const ta = await buscar(V + '/trace_attributes', {method:'POST', body: JSON.stringify({encoded_polyline: shape, costing:'auto', shape_match:'edge_walk',
@@ -482,14 +491,14 @@ async function rota(p){
     });
     sup = {pav: tot.pav, chao: tot.chao, inc: tot.inc, trechos, fonte: tags ? 'osm' : 'roteador'};
   }catch(e){ sup = null; }
-  return {km, geo: {type:'LineString', coordinates: coords}, sup};
+  return {km, tempo, geo: {type:'LineString', coordinates: coords}, sup};
 }
 
-async function rotaOSRM(p){
-  const url = `https://router.project-osrm.org/route/v1/driving/${p.lng},${p.lat};${st.obra.lng},${st.obra.lat}?overview=full&geometries=geojson`;
+async function rotaOSRM(p, dest = st.obra){
+  const url = `https://router.project-osrm.org/route/v1/driving/${p.lng},${p.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson`;
   const r = await buscar(url);
   if(r.code !== 'Ok' || !r.routes.length) throw new Error(r.message || 'sem rota');
-  return {km: r.routes[0].distance / 1000, geo: r.routes[0].geometry, sup: null};
+  return {km: r.routes[0].distance / 1000, tempo: r.routes[0].duration, geo: r.routes[0].geometry, sup: null};
 }
 
 $('btn-calc').onclick = async () => {
@@ -559,10 +568,8 @@ function limparResultado(){
   $('res').style.display = 'none'; $('tab').style.display = 'none';
 }
 
-function renderResultado(){
-  if(linhaRota){ linhaRota.remove(); linhaRota = null; }
-  const p = st.pontos.find(x => x.id === st.sel), r = p && st.rotas[p.id];
-  if(!p || !r){ $('res').style.display = 'none'; return; }
+// desenha a rota (por trechos de pavimento, quando houver) — usada no cálculo e na rota rápida
+function camadaRota(r, p, dest){
   if(r.geo && r.sup && r.sup.trechos){
     const cor = {pav:'#1f6b45', chao:'#a0522d', inc:'#8a8f98'}, c = r.geo.coordinates, grupos = [];
     let atual = null;
@@ -571,12 +578,21 @@ function renderResultado(){
       else { if(atual) grupos.push(atual); atual = {...t}; }
     });
     if(atual) grupos.push(atual);
-    linhaRota = L.featureGroup(grupos.map(g => L.polyline(c.slice(g.i0, g.i1 + 1).map(x => [x[1], x[0]]),
-      {color: cor[g.c], weight: 6, opacity: .9, dashArray: g.c === 'inc' ? '6 6' : null}))).addTo(map);
-    map.fitBounds(linhaRota.getBounds(), {padding:[30,30]});
+    return L.featureGroup(grupos.map(g => L.polyline(c.slice(g.i0, g.i1 + 1).map(x => [x[1], x[0]]),
+      {color: cor[g.c], weight: 6, opacity: .9, dashArray: g.c === 'inc' ? '6 6' : null})));
   }
-  else if(r.geo){ linhaRota = L.geoJSON(r.geo, {style:{color:'#1f6b45', weight:5, opacity:.8}}).addTo(map); map.fitBounds(linhaRota.getBounds(), {padding:[30,30]}); }
-  else { linhaRota = L.polyline([[p.lat,p.lng],[st.obra.lat,st.obra.lng]], {color:'#9a5b00', dashArray:'6 6'}).addTo(map); }
+  if(r.geo) return L.geoJSON(r.geo, {style:{color:'#1f6b45', weight:5, opacity:.8}});
+  return L.polyline([[p.lat,p.lng],[dest.lat,dest.lng]], {color:'#9a5b00', dashArray:'6 6'});
+}
+
+function renderResultado(){
+  if(linhaRota){ linhaRota.remove(); linhaRota = null; }
+  const p = st.pontos.find(x => x.id === st.sel), r = p && st.rotas[p.id];
+  if(!p || !r){ $('res').style.display = 'none'; return; }
+  if(!rr.obra){ // com a rota rápida aberta, o mapa fica com ela
+    linhaRota = camadaRota(r, p, st.obra).addTo(map);
+    if(r.geo) map.fitBounds(linhaRota.getBounds(), {padding:[30,30]});
+  }
   const c = custoDe(r), s = st.precos[$('sistema').value], u = s.unid, uq = u.split('·')[0];
   $('res').style.display = '';
   $('res-resumo').innerHTML = `
@@ -696,10 +712,13 @@ function desenharObras(){
     const f = fin(o);
     pop.innerHTML = `<div style="min-width:220px"><b>${esc(o.nome)}</b><br>${esc(o.local||'')}<br><span style="color:${s.cor};font-weight:600">● ${s.nome}</span>${o.obs ? '<br><small>'+esc(o.obs)+'</small>' : ''}
       ${f.vt > 0 ? `${barraHTML(f.pct, s.cor)}<div style="font-size:12px;margin-top:4px;line-height:1.5">Valor total: <b>${brl(f.vt)}</b><br>Medido: <b>${brl(f.vm)}</b><br>Saldo a medir: <b>${brl(f.saldo)}</b></div>` : '<div class="hint">Valores não informados.</div>'}
-      <button class="sec mini" style="margin-top:6px">Usar no cálculo de DMT</button></div>`;
+      <button class="sec mini" style="margin-top:6px">Usar no cálculo de DMT</button>
+      <div style="font-size:11.5px;color:#66706a;margin-top:4px">Clique agora numa pedreira ou distribuidora para ver a rota.</div></div>`;
     pop.querySelector('button').onclick = () => { map.closePopup(); trocarAba('dmt'); definirObra(o.lat, o.lng, o.nome + (o.local ? ' – ' + o.local : '')); };
     const comBarra = $('mostrar-barras').checked && f.pct != null;
-    L.marker([o.lat, o.lng], {icon: comBarra ? iconeObraBarra(s.cor, f.pct) : iconeObra(s.cor), zIndexOffset: 500}).bindPopup(pop).addTo(camadaObras);
+    L.marker([o.lat, o.lng], {icon: comBarra ? iconeObraBarra(s.cor, f.pct) : iconeObra(s.cor), zIndexOffset: 500}).bindPopup(pop)
+      .on('click', () => rrSelecionarObra({id: o.id, nome: o.nome + (o.local ? ' – ' + o.local : ''), lat: o.lat, lng: o.lng}))
+      .addTo(camadaObras);
   });
   // legenda
   $('leg-obras').innerHTML = mostrar ? Object.values(STATUS).map(s => `<div><span class="sq" style="background:${s.cor};vertical-align:-1px"></span> Obra BKP – ${s.nome.toLowerCase()}</div>`).join('') : '';
@@ -853,6 +872,84 @@ async function carregarObras(){
     st.obras = locais; ls.set('obras', locais);
   } else st.obras = JSON.parse(JSON.stringify(st.obrasOficiais));
   desenharObras();
+}
+
+// ---------- Rota rápida: obra → pedreira/distribuidora ----------
+const rr = {obra:null, ponto:null, rota:null, status:null, cache:{}, token:0, linha:null, halo:null};
+function rrLimparLinha(){ if(rr.linha){ rr.linha.remove(); rr.linha = null; } }
+function rrLimpar(){ rr.token++; rrLimparLinha(); if(rr.halo){ rr.halo.remove(); rr.halo = null; } Object.assign(rr, {obra:null, ponto:null, rota:null, status:null}); rrRender(); if(st.sel && st.obra) renderResultado(); }
+const horas = sg => { const m = Math.round(sg / 60), h = Math.floor(m / 60); return h ? `${h} h ${String(m % 60).padStart(2,'0')} min` : `${m} min`; };
+
+function rrSelecionarObra(o){
+  if(st.modo) return;
+  rr.obra = o;
+  if(rr.halo) rr.halo.remove();
+  rr.halo = L.circleMarker([o.lat, o.lng], {radius: 22, color:'#facc15', weight: 4, fill: false, interactive: false}).addTo(map);
+  if(rr.ponto) rrCalcular(); else { rr.rota = null; rr.status = null; rrLimparLinha(); rrRender(); }
+}
+function rrSelecionarPonto(p){
+  if(!rr.obra || st.modo) return false;
+  rr.ponto = p; rrCalcular(); return true;
+}
+async function rrCalcular(){
+  const o = rr.obra, p = rr.ponto, tk = ++rr.token;
+  const key = `${p.lat},${p.lng}|${o.lat},${o.lng}`;
+  rr.rota = null; rr.status = 'calc'; rrLimparLinha(); rrRender();
+  let r = rr.cache[key];
+  if(!r){
+    try{ r = await rota(p, o); rr.cache[key] = r; }
+    catch(e){ r = {km: distReta(p, o) * 1.3, geo: null, sup: null, reta: true}; }
+  }
+  if(tk !== rr.token) return; // o usuário já clicou em outra coisa
+  rr.rota = r; rr.status = 'ok';
+  if(linhaRota){ linhaRota.remove(); linhaRota = null; }
+  rr.linha = camadaRota(r, p, o).addTo(map);
+  map.fitBounds(rr.linha.getBounds ? rr.linha.getBounds() : L.latLngBounds([[p.lat,p.lng],[o.lat,o.lng]]), {padding:[40,40]});
+  rrRender();
+}
+
+function rrRender(){
+  const box = $('rr');
+  if(!rr.obra){ box.style.display = 'none'; return; }
+  const o = rr.obra, p = rr.ponto, r = rr.rota;
+  const proximos = st.pontos.map(x => ({x, d: distReta(x, o)})).sort((a, b) => a.d - b.d);
+  const opcoes = `<select id="rr-sel"><option value="">${p ? 'Trocar origem…' : 'Ou escolha na lista…'}</option>
+    ${['pedreira','emulsao'].map(t => `<optgroup label="${t === 'pedreira' ? 'Pedreiras' : 'Distribuidoras de emulsão'}">${proximos.filter(a => a.x.tipo === t)
+      .map(a => `<option value="${esc(a.x.id)}" ${p && p.id === a.x.id ? 'selected' : ''}>${esc(a.x.nome)} (~${fmt(a.d,0)} km reta)</option>`).join('')}</optgroup>`).join('')}</select>`;
+  let corpo = '';
+  if(!p) corpo = `<div class="hint" style="margin-top:2px">Clique numa <b style="color:${COR.pedreira}">pedreira</b> ou <b style="color:${COR.emulsao}">distribuidora</b> no mapa.</div>`;
+  else if(rr.status === 'calc') corpo = `<div style="margin-top:6px"><span class="dot" style="display:inline-block;background:${COR[p.tipo]}"></span> <b>${esc(p.nome)}</b></div><div class="hint">Calculando rota e tipo de pavimento…</div>`;
+  else if(r){
+    corpo = `<div style="margin-top:6px"><span class="dot" style="display:inline-block;background:${COR[p.tipo]}"></span> <b>${esc(p.nome)}</b> <small style="color:var(--mut)">${NOME_TIPO[p.tipo]}</small></div>
+      <div class="ln" style="align-items:baseline;margin-top:4px"><span>Distância</span><span class="km">${fmt(r.km,1)} km</span></div>
+      ${r.sup ? `<div class="ln"><span style="color:#1f6b45">· asfalto</span><span class="num">${fmt(r.sup.pav,1)} km</span></div>
+        <div class="ln"><span style="color:#a0522d">· chão</span><span class="num">${fmt(r.sup.chao,1)} km</span></div>
+        ${r.sup.inc > 0.05 ? `<div class="ln"><span style="color:#6b7078">· sem informação</span><span class="num">${fmt(r.sup.inc,1)} km</span></div>` : ''}` : ''}
+      ${r.tempo ? `<div class="ln"><span>Tempo estimado (carro)</span><span class="num">${horas(r.tempo)}</span></div>` : ''}
+      ${r.reta ? `<div class="warn">Rota não encontrada; distância em linha reta × 1,3.</div>` : !r.sup ? `<div class="hint">Tipo de pavimento indisponível agora.</div>` : ''}
+      <div class="btns"><button class="mini" id="rr-usar">Usar no cálculo de DMT</button></div>`;
+  }
+  box.innerHTML = `<h3>Rota até a obra <button class="x" id="rr-x" title="Fechar (Esc)">×</button></h3>
+    <div><b>${esc(o.nome)}</b></div>${corpo}${opcoes}
+    <div class="hint" style="font-size:11px">Rota e pavimento pelo OpenStreetMap — confira se conhecer a estrada.</div>`;
+  box.style.display = 'block';
+  $('rr-x').onclick = rrLimpar;
+  $('rr-sel').onchange = e => { const x = st.pontos.find(q => q.id === e.target.value); if(x) rrSelecionarPonto(x); };
+  const usar = $('rr-usar'); if(usar) usar.onclick = rrUsarNoCalculo;
+}
+
+function rrUsarNoCalculo(){
+  const o = rr.obra, p = rr.ponto, r = rr.rota; if(!o || !p || !r) return;
+  trocarAba('dmt');
+  const b = $('seg-tipo').querySelector(`[data-t=${p.tipo}]`); if(b && st.tipo !== p.tipo) b.click();
+  definirObra(o.lat, o.lng, o.nome);
+  $('busca').value = '';
+  st.rotas[p.id] = {km: r.km, geo: r.geo, sup: r.sup, chao: r.sup ? +r.sup.chao.toFixed(1) : 0, chaoManual: false, manual: false,
+    erro: r.reta ? 'Rota não encontrada; usada distância em linha reta × 1,3. Confira o total.' : r.sup ? null : 'Não foi possível ler o tipo de pavimento no mapa; informe os km de chão.'};
+  st.sel = p.id;
+  rrLimpar();
+  renderTabela();
+  $('calc-status').textContent = 'Rota trazida do mapa. Use "Calcular rotas" para comparar com as outras origens.';
 }
 
 (async function init(){
