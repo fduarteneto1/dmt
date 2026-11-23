@@ -1,4 +1,4 @@
-# Calculadora de DMT – BKP Construtora
+# Gestão 360º BKP – BKP Construtora
 
 Ferramenta interna de acesso restrito. Para entrar, você precisa de um usuário e uma senha.
 

@@ -1,4 +1,4 @@
-// Abre e fecha (criptografa) os arquivos da Calculadora de DMT.
+// Abre e fecha (criptografa) os arquivos da Gestão 360º BKP.
 //
 //   DMT_USUARIO=francisco DMT_SENHA='...' node tools/cripto.mjs abrir
 //       decifra app.enc, pontos.enc e obras.enc para a pasta src/ (fora do Git)

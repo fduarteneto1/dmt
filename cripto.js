@@ -1,4 +1,4 @@
-// Criptografia da Calculadora de DMT (AES-256-GCM + PBKDF2-SHA256).
+// Criptografia da Gestão 360º BKP (AES-256-GCM + PBKDF2-SHA256).
 // Usado pela página de login, pelo app e pelo script tools/cripto.mjs.
 // Os arquivos *.enc só abrem com a chave do sistema, que fica guardada em
 // usuarios.json protegida pela senha de cada usuário.
