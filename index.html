@@ -73,11 +73,16 @@
       <button data-t="emulsao">Emulsão (distribuidora)</button>
     </div>
     <div class="row">
-      <div><label for="qtd">Quantidade</label><input id="qtd" type="number" min="0" step="any" value="1"></div>
+      <div><label for="qtd">Quantidade a transportar</label><input id="qtd" type="number" min="0" step="any" value="1"></div>
+      <div><label for="qtd-un">Unidade</label><select id="qtd-un"><option value="t">t (peso)</option><option value="m3">m³ (volume)</option></select></div>
+    </div>
+    <div class="row">
+      <div><label for="dens">Peso específico <span id="dens-mat">da brita</span> (t/m³)</label><input id="dens" type="number" min="0" step="any"></div>
       <div><label for="sistema">Referência de custo</label>
         <select id="sistema"><option value="SICRO">SICRO</option><option value="SINAPI">SINAPI</option></select></div>
     </div>
-    <div class="hint">Quantidade na mesma unidade do preço de transporte (ex.: t para t·km).</div>
+    <div class="hint" id="conv-info"></div>
+    <div class="hint">Padrão: brita 1,5 t/m³ (SICRO) e emulsão 1,0 t/m³. Pode alterar; fica salvo neste navegador por material. <a href="#" id="dens-padrao">Voltar ao padrão</a></div>
   </div>
 
   <div class="card">
@@ -135,6 +140,8 @@
 
 <script>
 "use strict";
+const DENS_PADRAO = {pedreira:1.5, emulsao:1.0};
+const NOME_MAT = {pedreira:'Brita', emulsao:'Emulsão asfáltica'};
 const COR = {pedreira:'#1d4ed8', emulsao:'#ea580c'};
 const NOME_TIPO = {pedreira:'Pedreira', emulsao:'Distribuidora de emulsão'};
 const LS = k => 'dmtbkp_' + k;
@@ -149,6 +156,7 @@ const $ = id => document.getElementById(id);
 const st = {
   obra: null, tipo: 'pedreira', pontos: [], oficiais: [],
   rotas: {}, sel: null, modo: null,
+  dens: Object.assign({pedreira:1.5, emulsao:1.0}, ls.get('dens', {})),
   precos: ls.get('precos', {SICRO:{asf:'',chao:'',unid:'t·km',ref:''}, SINAPI:{asf:'',chao:'',unid:'t·km',ref:''}})
 };
 
@@ -267,7 +275,7 @@ $('btn-clicar-obra').onclick = () => setModo('obra');
 // ---------- Tipo / preços ----------
 $('seg-tipo').querySelectorAll('button').forEach(b => b.onclick = () => {
   $('seg-tipo').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
-  st.tipo = b.dataset.t; st.sel = null; desenharPontos(); limparResultado(); atualizarBotao();
+  st.tipo = b.dataset.t; st.sel = null; carregarDens(); desenharPontos(); limparResultado(); atualizarBotao();
 });
 
 function carregarPrecos(){
@@ -287,6 +295,31 @@ $('sistema').onchange = () => { carregarPrecos(); renderTabela(); };
 ['p-asf','p-chao','unid','ref'].forEach(id => $(id).addEventListener('input', salvarPrecos));
 $('unid').addEventListener('change', salvarPrecos);
 $('qtd').addEventListener('input', renderTabela);
+$('qtd-un').addEventListener('change', () => { ls.set('qtdUn', $('qtd-un').value); renderTabela(); });
+$('qtd-un').value = ls.get('qtdUn', 't');
+function carregarDens(){
+  $('dens').value = st.dens[st.tipo];
+  $('dens-mat').textContent = st.tipo === 'pedreira' ? 'da brita' : 'da emulsão';
+  mostrarConv();
+}
+$('dens').addEventListener('input', () => {
+  const v = parseFloat($('dens').value);
+  if(v > 0){ st.dens[st.tipo] = v; ls.set('dens', st.dens); }
+  renderTabela();
+});
+$('dens-padrao').onclick = e => { e.preventDefault(); st.dens[st.tipo] = DENS_PADRAO[st.tipo]; ls.set('dens', st.dens); carregarDens(); renderTabela(); };
+// Quantidade convertida: massa (t) e volume (m³)
+function quantidades(){
+  const q = parseFloat($('qtd').value) || 0, un = $('qtd-un').value, d = parseFloat($('dens').value) || st.dens[st.tipo];
+  const t = un === 't' ? q : q * d, m3 = un === 'm3' ? q : (d > 0 ? q / d : 0);
+  return {q, un, d, t, m3};
+}
+function mostrarConv(){
+  const k = quantidades();
+  $('conv-info').innerHTML = k.un === 't'
+    ? `${fmt(k.t,3)} t ÷ ${fmt(k.d,3)} t/m³ = <b>${fmt(k.m3,3)} m³</b>`
+    : `${fmt(k.m3,3)} m³ × ${fmt(k.d,3)} t/m³ = <b>${fmt(k.t,3)} t</b>`;
+}
 
 // ---------- Rotas ----------
 function atualizarBotao(){
@@ -401,11 +434,12 @@ $('btn-calc').onclick = async () => {
 };
 
 function custoDe(r){
-  const s = st.precos[$('sistema').value], q = parseFloat($('qtd').value) || 0;
+  const s = st.precos[$('sistema').value], k = quantidades();
+  const q = s.unid === 'm³·km' ? k.m3 : k.t; // quantidade na unidade do preço
   const pa = parseFloat(s.asf), pc = parseFloat(s.chao);
   const kmA = Math.max(0, r.km - r.chao), kmC = Math.min(r.chao, r.km);
   const ok = isFinite(pa) && isFinite(pc);
-  return {kmA, kmC, ok, custo: ok ? q * (kmA * pa + kmC * pc) : NaN, pa, pc, q};
+  return {kmA, kmC, ok, custo: ok ? q * (kmA * pa + kmC * pc) : NaN, pa, pc, q, k};
 }
 function linhasOrdenadas(){
   return st.pontos.filter(p => p.tipo === st.tipo && st.rotas[p.id])
@@ -414,6 +448,7 @@ function linhasOrdenadas(){
 }
 
 function renderTabela(){
+  mostrarConv();
   const linhas = linhasOrdenadas(), tb = $('tab').querySelector('tbody');
   $('tab').style.display = linhas.length ? '' : 'none';
   tb.innerHTML = '';
@@ -467,7 +502,12 @@ function renderResultado(){
     <div><span>DMT total</span><b class="num">${fmt(r.km,1)} km</b></div>
     <div><span>· pavimentado</span><span class="num">${fmt(c.kmA,1)} km</span></div>
     <div><span>· não pavimentado</span><span class="num">${fmt(c.kmC,1)} km</span></div>
-    <div><span>Momento de transporte</span><span class="num">${fmt(c.q * r.km)} ${u}</span></div>
+    <div><span>Quantidade</span><span class="num">${fmt(c.k.t,3)} t · ${fmt(c.k.m3,3)} m³ <span style="color:var(--mut)">(${fmt(c.k.d,3)} t/m³)</span></span></div>
+    <div style="margin-top:4px"><b>Momento de transporte</b><span></span></div>
+    <div><span>· em peso</span><b class="num">${fmt(c.k.t * r.km)} t·km</b></div>
+    <div><span style="padding-left:10px">pav. / não pav.</span><span class="num">${fmt(c.k.t * c.kmA)} / ${fmt(c.k.t * c.kmC)} t·km</span></div>
+    <div><span>· em volume</span><b class="num">${fmt(c.k.m3 * r.km)} m³·km</b></div>
+    <div><span style="padding-left:10px">pav. / não pav.</span><span class="num">${fmt(c.k.m3 * c.kmA)} / ${fmt(c.k.m3 * c.kmC)} m³·km</span></div>
     ${c.ok ? `<div><span>Custo unitário</span><span class="num">R$ ${fmt(c.kmA*c.pa + c.kmC*c.pc)} / ${uq}</span></div>
     <div style="margin-top:6px"><span>Custo de transporte (${$('sistema').value})</span><span class="total num">R$ ${fmt(c.custo)}</span></div>`
     : `<div class="warn">Preencha os preços de transporte (item 3) para calcular o custo.</div>`}
@@ -487,7 +527,9 @@ $('btn-copiar').onclick = () => {
     `DMT total: ${fmt(r.km,1)} km (pavimentado ${fmt(c.kmA,1)} km; não pavimentado ${fmt(c.kmC,1)} km)`,
     `Referência: ${sis}${s.ref ? ' – ' + s.ref : ''}`,
     c.ok ? `Preços: pavimentado R$ ${fmt(c.pa,4)}/${s.unid}; não pavimentado R$ ${fmt(c.pc,4)}/${s.unid}` : 'Preços: não informados',
-    `Quantidade: ${fmt(c.q,3)} ${s.unid.split('·')[0]}`,
+    `Quantidade: ${fmt(c.k.t,3)} t = ${fmt(c.k.m3,3)} m³ (peso específico ${fmt(c.k.d,3)} t/m³; informado em ${c.k.un === 't' ? 't' : 'm³'})`,
+    `Momento de transporte (peso): ${fmt(c.k.t * r.km)} t·km (pavimentado ${fmt(c.k.t * c.kmA)}; não pavimentado ${fmt(c.k.t * c.kmC)})`,
+    `Momento de transporte (volume): ${fmt(c.k.m3 * r.km)} m³·km (pavimentado ${fmt(c.k.m3 * c.kmA)}; não pavimentado ${fmt(c.k.m3 * c.kmC)})`,
     c.ok ? `Custo unitário: R$ ${fmt(c.kmA*c.pa + c.kmC*c.pc)} / ${s.unid.split('·')[0]}` : '',
     c.ok ? `Custo total de transporte: R$ ${fmt(c.custo)}` : '',
     '', 'Rota: OpenStreetMap/OSRM. Trecho não pavimentado informado pelo usuário.'
@@ -521,7 +563,7 @@ $('btn-reset').onclick = () => { if(confirm('Descartar as mudanças locais e vol
     st.oficiais.forEach(o => { if(!ids.has(o.id) && !removidos.includes(o.id)) locais.push(JSON.parse(JSON.stringify(o))); });
     st.pontos = locais; ls.set('pontos', locais);
   } else st.pontos = JSON.parse(JSON.stringify(st.oficiais));
-  carregarPrecos(); desenharPontos(); atualizarBotao();
+  carregarPrecos(); carregarDens(); desenharPontos(); atualizarBotao();
 })();
 </script>
 </body>
