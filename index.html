@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Gestão 360º BKP</title>
 <script src="cripto.js"></script>
-<link rel="stylesheet" href="tema.css">
+<link rel="stylesheet" href="tema.css?v=2">
 <style>
   :root{--erro:#b42318}
   *{box-sizing:border-box}
@@ -47,7 +47,7 @@
   async function abrir(s){
     let html = await DMTC.decifrar(s.k, await buscar('app.enc'));
     const boot = '<script src="cripto.js"><\/script><script>window.DMT_SESSAO=' + JSON.stringify({k: s.k, u: s.u}).replace(/</g, '\\u003c') + ';<\/script>';
-    const tema = '<link rel="stylesheet" href="tema.css">';
+    const tema = '<link rel="stylesheet" href="tema.css?v=2">';
     const cab = '<header><img class="logo-bkp" src="logo-bkp.png" alt="BKP Construtora"><div class="tit"><h1>Gestão 360º BKP</h1><span>BKP Construtora · Mato Grosso</span></div>';
     html = html.replace(/<head>/i, '<head>' + boot).replace(/<\/head>/i, tema + '</head>')
                .replace('<header><h1>Gestão 360º BKP</h1><span>BKP Construtora · Mato Grosso</span>', cab);
