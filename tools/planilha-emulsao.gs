@@ -21,12 +21,14 @@ function tratar(p) {
     if (p.acao === 'dados') return dados(ss);
     if (p.acao === 'lerObras') return lerObras(ss);
     if (p.acao === 'lerEquipamentos') return lerEquipamentos(ss);
+    if (p.acao === 'lerDiarias') return lerDiarias(ss);
     lock.waitLock(20000);
     if (p.acao === 'registro') return registro(ss, p.r || {});
     if (p.acao === 'usina') return usina(ss, p.u || {});
     if (p.acao === 'obra') return obra(ss, String(p.nome || '').trim());
     if (p.acao === 'gravarObras') return gravarObras(ss, p.obras);
     if (p.acao === 'gravarEquipamentos') return gravarEquipamentos(ss, p.dados);
+    if (p.acao === 'gravarDiarias') return gravarDiarias(ss, p.dados);
     return { ok: false, erro: 'Ação desconhecida.' };
   } catch (err) {
     return { ok: false, erro: String(err && err.message || err) };
@@ -149,4 +151,66 @@ function gravarEquipamentos(ss, d) {
   var sh = abaG360(ss);
   sh.getRange(2, 1, 1, 3).setValues([['equipamentos', txt, new Date()]]);
   return { ok: true };
+}
+
+// ---------- Diárias do Gestão 360º (lançamentos, fechamentos, diaristas, PIX, feriados) ----------
+// Os dados completos ficam como texto JSON na aba oculta "G360Diarias", dividido em pedaços
+// (coluna A, a partir da linha 2), porque uma célula aceita no máximo 50 mil caracteres.
+// B1 = quando foi gravado. A cada gravação, as abas "Diárias" e "Diárias – Fechamentos"
+// são refeitas em formato de tabela, só para consulta (não edite por lá).
+var PEDACO = 40000;
+function abaDiarias(ss) {
+  var sh = ss.getSheetByName('G360Diarias');
+  if (!sh) { sh = ss.insertSheet('G360Diarias'); sh.getRange(1, 1).setValue('diarias'); sh.hideSheet(); }
+  return sh;
+}
+function lerDiarias(ss) {
+  var sh = abaDiarias(ss), ult = ultimaLinha(sh), txt = '';
+  if (ult > 1) txt = sh.getRange(2, 1, ult - 1, 1).getValues().map(function (r) { return String(r[0] || '').replace(/^~/, ''); }).join('');
+  var d = null;
+  try { d = txt ? JSON.parse(txt) : null; } catch (x) {}
+  return { ok: true, dados: d && Array.isArray(d.lanc) ? d : null, quando: iso(sh.getRange(1, 2).getValue()) };
+}
+function gravarDiarias(ss, d) {
+  if (!d || !Array.isArray(d.lanc) || !Array.isArray(d.fech)) return { ok: false, erro: 'Dados de diárias inválidos.' };
+  var txt = JSON.stringify(d), partes = [];
+  for (var i = 0; i < txt.length; i += PEDACO) partes.push(['~' + txt.slice(i, i + PEDACO)]); // "~" evita que um pedaço vire fórmula
+  var sh = abaDiarias(ss), ult = ultimaLinha(sh);
+  if (partes.length + 1 > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), partes.length + 10);
+  if (ult > 1) sh.getRange(2, 1, ult - 1, 1).clearContent();
+  sh.getRange(2, 1, partes.length, 1).setNumberFormat('@').setValues(partes);
+  sh.getRange(1, 1, 1, 2).setValues([['diarias', new Date()]]);
+  try { tabelasDiarias(ss, d); } catch (x) {}
+  return { ok: true };
+}
+function tabelasDiarias(ss, d) {
+  var SEM = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  var fech = {}, pix = d.pix || {};
+  (d.fech || []).forEach(function (f) { if (!f.del) fech[f.id] = f; });
+  var br = function (s) { s = String(s || ''); return s.length >= 10 ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : ''; };
+  var lin = [['Data', 'Dia', 'Nome', 'Função', 'Obra', 'Período', 'Tipo de dia', 'Valor', 'Chave PIX', 'Fechamento', 'Situação', 'Lançado por', 'Observação']];
+  d.lanc.filter(function (x) { return !x.del; }).sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; }).forEach(function (x) {
+    var p = String(x.d).split('-'), dt = new Date(+p[0], +p[1] - 1, +p[2]), f = x.fx && fech[x.fx];
+    lin.push([dt, SEM[dt.getDay()], x.n, x.f, x.o, x.t === 'I' ? 'Inteira' : 'Meia',
+      x.fer || ({ sab: 'Sábado', dom: 'Domingo', util: 'Dia útil' })[x.k] || '', +x.v || 0,
+      (f && f.pix && f.pix[x.p]) || (pix[x.p] && pix[x.p].v) || '', f ? 'Nº ' + f.n : '',
+      f ? (f.st === 'pago' ? 'Pago' : 'Pagamento solicitado') : 'Em aberto', x.u || '', x.obs || '']);
+  });
+  var sh = ss.getSheetByName('Diárias') || ss.insertSheet('Diárias');
+  sh.clearContents();
+  sh.getRange(1, 1, lin.length, lin[0].length).setValues(lin);
+  sh.getRange(2, 1, Math.max(1, lin.length - 1), 1).setNumberFormat('dd/MM/yyyy');
+  sh.getRange(2, 8, Math.max(1, lin.length - 1), 1).setNumberFormat('"R$" #,##0.00');
+  sh.getRange(1, 1, 1, lin[0].length).setFontWeight('bold'); sh.setFrozenRows(1);
+
+  var fl = [['Nº', 'Período', 'Obra', 'Diárias', 'Total', 'Fechado em', 'Por', 'Situação', 'Pago em']];
+  Object.keys(fech).map(function (k) { return fech[k]; }).sort(function (a, b) { return (b.n || 0) - (a.n || 0); }).forEach(function (f) {
+    fl.push([f.n, br(f.ini) + ' a ' + br(f.fim), f.o || 'Todas', f.qtd, +f.tot || 0, br(f.q) + ' ' + String(f.q || '').slice(11, 16), f.u || '',
+      f.st === 'pago' ? 'Pago' : 'Pagamento solicitado', br(f.pg)]);
+  });
+  var sf = ss.getSheetByName('Diárias – Fechamentos') || ss.insertSheet('Diárias – Fechamentos');
+  sf.clearContents();
+  sf.getRange(1, 1, fl.length, fl[0].length).setValues(fl);
+  sf.getRange(2, 5, Math.max(1, fl.length - 1), 1).setNumberFormat('"R$" #,##0.00');
+  sf.getRange(1, 1, 1, fl[0].length).setFontWeight('bold'); sf.setFrozenRows(1);
 }
