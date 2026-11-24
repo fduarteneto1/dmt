@@ -50,3 +50,13 @@ Cadastro de máquinas e veículos (veio do quadro "Cadastro de Máquinas e Veíc
 - Ao passar o mouse sobre a obra ou a sede no mapa, aparece quantos equipamentos estão lá e quantos estão operando.
 - **Baixar planilha (CSV)** exporta a lista filtrada.
 - O Apps Script da planilha precisa ter as ações `lerEquipamentos` e `gravarEquipamentos` (já estão em `tools/planilha-emulsao.gs`). Depois de colar, publique em **Implantar → Gerenciar implantações → editar → Nova versão**.
+
+## Diárias (aba Diárias)
+Lançamento e fechamento das diárias de quem trabalha no fim de semana ou feriado. O código está em `diarias.js`, carregado pelo `index.html` como o `equipamentos.js`, sem nada secreto.
+- **Regras:** colaborador CLT recebe pelo valor da função (encarregado R$ 250; motorista e operador R$ 200; apontador R$ 180; ajudante, rasteleiro e mesista R$ 150). Sábado só meia diária (a manhã é jornada normal). Domingo e feriado: inteira ou meia. Dia útil não gera diária para CLT. Diaristas (cadastrados à mão) podem trabalhar qualquer dia: R$ 150 a inteira e R$ 75 a meia. Os valores se alteram em **Cadastros**.
+- **Lançar:** escolha data, obra e período; marque as pessoas. A ferramenta mostra o tipo do dia, bloqueia o que não pode e não deixa lançar a mesma pessoa duas vezes no mesmo dia.
+- **Feriados:** os nacionais (inclusive Sexta-feira Santa e Consciência Negra) já estão incluídos. Estaduais, municipais e pontos facultativos se cadastram em **Cadastros**, para todas as obras ou só uma, com opção de repetir todo ano.
+- **Fechamento:** escolha o período e a obra (ou todas), confira e preencha as chaves PIX que faltam, e clique em **Fechar período e imprimir**. O relatório sai agrupado por obra, com os dias de cada pessoa, o total e a chave PIX, e linhas para assinatura. **Imprimir prévia** imprime sem fechar.
+- **Histórico:** todos os fechamentos ficam guardados para reimprimir, marcar como pago ou reabrir (os lançamentos voltam para "em aberto"). Em **Consultar lançamentos** dá para filtrar por período, obra e pessoa e baixar CSV.
+- **Onde ficam os dados:** na aba oculta **G360Diarias** da planilha (JSON dividido em pedaços). A cada gravação, as abas **Diárias** e **Diárias – Fechamentos** são refeitas em formato de tabela, só para consulta. Se dois computadores lançarem ao mesmo tempo, os lançamentos dos dois são somados (vale a alteração mais recente de cada item).
+- O Apps Script da planilha precisa ter as ações `lerDiarias` e `gravarDiarias` (já estão em `tools/planilha-emulsao.gs`). Depois de colar, publique em **Implantar → Gerenciar implantações → editar → Nova versão**. Até lá, os lançamentos ficam guardados no computador e são enviados assim que a planilha aceitar.
