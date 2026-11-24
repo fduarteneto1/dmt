@@ -67,3 +67,10 @@ Lançamento e fechamento das diárias de quem trabalha no fim de semana ou feria
 - Os módulos (Transporte, Obras, Colaboradores, Emulsão, Equipamentos, Diárias…) ficam numa coluna à esquerda do painel. Um módulo novo que adicione seu botão em `#abas` entra automaticamente na coluna.
 - Clique no título de qualquer bloco (ex.: **Obras da BKP**) para minimizar ou abrir. Fica salvo neste navegador; na impressão, tudo sai aberto.
 - O código está em `layout.js`, carregado pelo `index.html` por último, sem nada secreto.
+
+## Clima (aba Clima)
+Tempo em cada obra do mapa e semáforo para aplicar microrrevestimento. O código está em `clima.js`, carregado pelo `index.html` como os outros módulos, sem nada secreto.
+- **Previsão:** Open-Meteo (gratuita, sem chave), pelas coordenadas das obras. Atualiza a cada 20 minutos com a aba aberta, ou no botão **Atualizar**.
+- **Semáforo:** avalia a janela de aplicação (padrão 5 h) mais as horas de cura sem chuva (padrão 3 h). 🔴 Não aplicar: temperatura ≤ 10 °C, chance de chuva ≥ 60% ou chuva ≥ 0,5 mm/h. 🟡 Atenção: chuva ≥ 30%, garoa, umidade ≥ 85%, vento ≥ 30 km/h, calor ≥ 38 °C na aplicação, temperatura perto do mínimo ou chuva nas 3 h anteriores. Os limites se alteram em **Critérios do semáforo** (ficam salvos no navegador).
+- Ao passar o mouse sobre a obra no mapa, aparece a temperatura e o semáforo do momento.
+- **Para voltar à versão sem a aba Clima:** existe o ramo `backup-antes-clima` no GitHub com a versão anterior. Também basta apagar `<script src="clima.js?v=1"><\/script>` do `index.html`.
