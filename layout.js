@@ -75,6 +75,56 @@
     if(h2 && ev.target === h2){ ev.preventDefault(); alternar(h2); }
   });
 
+  // ---- Botão para recolher a coluna inteira (mapa em tela cheia) ----
+  // Fica na borda entre a coluna e o mapa. O estado fica salvo neste navegador.
+  // Atalho: tecla "[" (fora de campos de texto). Na impressão, a coluna aparece sempre.
+  const KEY_COL = 'dmtbkp_coluna_recolhida';
+  const area = aside.nextElementSibling; // bloco do mapa (position:relative)
+  if(area){
+    const css2 = document.createElement('style');
+    css2.textContent = `
+    @media screen{ body.g360-col-off aside{display:none!important} }
+    .g360-col{position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:1000;
+      display:flex;align-items:center;gap:6px;height:44px;padding:0 9px 0 6px;
+      background:#fff;color:var(--ink2);border:1px solid var(--line);border-left:0;border-radius:0 10px 10px 0;
+      box-shadow:0 1px 3px rgba(0,0,0,.08);font-size:11.5px;font-weight:700;cursor:pointer}
+    .g360-col:hover:not(:disabled){background:var(--head);color:var(--ink);filter:none}
+    .g360-col svg{flex:none;transition:transform .15s}
+    body.g360-col-off .g360-col svg{transform:rotate(180deg)}
+    .g360-col .g360-col-t{display:none}
+    body.g360-col-off .g360-col .g360-col-t{display:inline}
+    @media print{.g360-col{display:none!important}}`;
+    document.head.appendChild(css2);
+
+    const bt = document.createElement('button');
+    bt.type = 'button'; bt.className = 'g360-col';
+    bt.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M8.5 3 4.5 7l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="g360-col-t">Ferramentas</span>';
+    area.appendChild(bt);
+
+    const aplicar = off => {
+      document.body.classList.toggle('g360-col-off', off);
+      bt.title = off ? 'Mostrar a coluna de ferramentas (tecla [)' : 'Recolher a coluna e deixar o mapa em tela cheia (tecla [)';
+      bt.setAttribute('aria-label', bt.title);
+      bt.setAttribute('aria-expanded', String(!off));
+      window.dispatchEvent(new Event('resize')); // o mapa ocupa o espaço liberado
+    };
+    const alternarCol = () => {
+      const off = !document.body.classList.contains('g360-col-off');
+      try{ off ? localStorage.setItem(KEY_COL, '1') : localStorage.removeItem(KEY_COL); }catch(e){}
+      aplicar(off);
+    };
+    bt.addEventListener('click', ev => { ev.stopPropagation(); alternarCol(); });
+    ['mousedown','dblclick','wheel','touchstart'].forEach(t => bt.addEventListener(t, ev => ev.stopPropagation())); // não mexe no mapa
+    document.addEventListener('keydown', ev => {
+      if(ev.key !== '[' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      const el = ev.target;
+      if(el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      ev.preventDefault(); alternarCol();
+    });
+    let ini = false; try{ ini = localStorage.getItem(KEY_COL) === '1'; }catch(e){}
+    aplicar(ini);
+  }
+
   const varrer = () => aside.querySelectorAll('.card').forEach(preparar);
   let pend = false;
   new MutationObserver(() => { if(pend) return; pend = true; requestAnimationFrame(() => { pend = false; varrer(); }); })
