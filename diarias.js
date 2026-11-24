@@ -181,6 +181,10 @@
       <div class="card">
         <h2>Lançamentos em aberto</h2>
         <div class="tot" style="margin-top:0"><span id="dia-ab-n"></span><b id="dia-ab-t"></b></div>
+        <div class="aviso" id="dia-ab-aviso" style="display:none"></div>
+        <div class="btns" id="dia-ab-btns" style="margin:6px 0 8px">
+          <button class="sec mini" id="dia-ab-corrigir" style="display:none">Corrigir obras</button>
+          <button class="sec mini" id="dia-ab-limpar" style="color:#b42318">Limpar todos em aberto</button></div>
         <ul class="dl" id="dia-ab"></ul>
       </div>
     </div>
@@ -259,7 +263,9 @@
   const L = {sel: new Set()};
   $('dia-d').value = hoje();
   ['dia-d', 'dia-o', 'dia-t'].forEach(id => $(id).onchange = () => { L.sel.clear(); renderLancar(); });
-  $('dia-todos').onchange = () => renderLancar();
+  $('dia-todos').onchange = () => { L.sel.clear(); renderLancar(); };
+  $('dia-ab-limpar').onclick = limparAbertos;
+  $('dia-ab-corrigir').onclick = corrigirObras;
   $('dia-marcar').onclick = () => {
     const disp = [...$('dia-pess').querySelectorAll('input[data-p]:not(:disabled)')];
     const todos = disp.every(i => i.checked);
@@ -313,6 +319,7 @@
       util: 'dia normal de trabalho: só diaristas recebem diária.'})[dia.k];
     const todos = $('dia-todos').checked;
     const ps = pessoas().filter(p => todos || p.o === o);
+    L.vis = new Set(ps.map(p => p.p));
     let soma = 0, n = 0;
     $('dia-pess').innerHTML = ps.map(p => {
       const r = regra(p, dia), ja = lancDe(p.p, d);
@@ -337,8 +344,37 @@
     renderAberto();
   }
 
-  function linhaLanc(x, comX){
+  // lançamentos cuja obra é diferente da obra em que a pessoa está alocada hoje (id -> obra do cadastro)
+  function divergentes(lista){
+    const m = new Map(), oc = new Map(pessoas().map(p => [p.p, p.o]));
+    lista.forEach(x => { const c = oc.get(x.p); if(c && c !== x.o) m.set(x.id, c); });
+    return m;
+  }
+  function limparAbertos(){
+    const ab = vivos(D.lanc).filter(x => !x.fx);
+    if(!ab.length) return;
+    const tot = ab.reduce((s, x) => s + x.v, 0);
+    if(!confirm('Excluir TODOS os ' + ab.length + ' lançamentos em aberto (' + R$(tot) + ')?\n\nOs lançamentos já fechados não são afetados.')) return;
+    const t = agora(); ab.forEach(x => { x.del = true; x.upd = t; });
+    salvar(); aviso(ab.length + ' lançamento(s) em aberto excluído(s).');
+  }
+  function corrigirObras(){
+    const ab = vivos(D.lanc).filter(x => !x.fx), dv = divergentes(ab);
+    if(!dv.size) return;
+    const ls = ab.filter(x => dv.has(x.id));
+    if(!confirm('Passar ' + ls.length + ' lançamento(s) para a obra em que cada pessoa está alocada?\n\n'
+      + ls.slice(0, 15).map(x => '• ' + x.n + ' ' + dm(x.d) + ': ' + x.o + ' → ' + dv.get(x.id)).join('\n') + (ls.length > 15 ? '\n…' : ''))) return;
+    const t = agora();
+    ls.forEach(x => {
+      const no = dv.get(x.id), dia = tipoDia(x.d, no);
+      x.o = no; x.k = dia.k; x.fer = dia.fer || ''; x.upd = t;
+    });
+    salvar(); aviso(ls.length + ' lançamento(s) passados para a obra do cadastro.');
+  }
+
+  function linhaLanc(x, comX, obraCad){
     return '<li class="li"><span class="nm"><b>' + h(x.n) + '</b><small>' + dm(x.d) + ' ' + SEM[dt(x.d).getDay()] + ' · ' + h(x.o) + ' · '
+      + (obraCad ? '<span style="color:#b26a00">⚠ alocado em ' + h(obraCad) + '</span> · ' : '')
       + (x.t === 'I' ? 'inteira' : 'meia') + (x.fer ? ' · ' + h(x.fer) : '') + (x.obs ? ' · ' + h(x.obs) : '') + (x.u ? ' · por ' + h(x.u) : '') + '</small></span>'
       + '<span class="vl">' + R$(x.v) + '</span>' + (comX ? '<button class="x" data-id="' + h(x.id) + '" title="Excluir lançamento">✕</button>' : '') + '</li>';
   }
@@ -347,7 +383,13 @@
     const ab = vivos(D.lanc).filter(x => !x.fx).sort((a, b) => b.d.localeCompare(a.d) || String(a.n).localeCompare(String(b.n), 'pt-BR'));
     $('dia-ab-n').textContent = ab.length ? ab.length + ' lançamento(s) a fechar' : 'Nada em aberto.';
     $('dia-ab-t').textContent = ab.length ? R$(ab.reduce((s, x) => s + x.v, 0)) : '';
-    $('dia-ab').innerHTML = ab.map(x => linhaLanc(x, true)).join('');
+    const dv = divergentes(ab);
+    $('dia-ab').innerHTML = ab.map(x => linhaLanc(x, true, dv.get(x.id))).join('');
+    $('dia-ab-limpar').style.display = ab.length ? '' : 'none';
+    $('dia-ab-corrigir').style.display = dv.size ? '' : 'none';
+    $('dia-ab-corrigir').textContent = 'Corrigir obras (' + dv.size + ')';
+    $('dia-ab-aviso').style.display = dv.size ? '' : 'none';
+    $('dia-ab-aviso').textContent = dv.size ? dv.size + ' lançamento(s) estão numa obra diferente da obra em que a pessoa está alocada (marcados com ⚠). Confira ou clique em "Corrigir obras" para passar cada um para a obra do cadastro.' : '';
     $('dia-ab').querySelectorAll('.x').forEach(b => b.onclick = () => {
       const x = D.lanc.find(l => l.id === b.dataset.id);
       if(!x || !confirm('Excluir a diária de ' + x.n + ' em ' + dataBR(x.d) + '?')) return;
@@ -357,7 +399,11 @@
 
   function lancar(){
     const d = $('dia-d').value, o = $('dia-o').value, t = $('dia-t').value, obs = $('dia-obs').value.trim();
-    const dia = tipoDia(d, o), ps = pessoas().filter(p => L.sel.has(p.p));
+    const dia = tipoDia(d, o), ps = pessoas().filter(p => L.sel.has(p.p) && (!L.vis || L.vis.has(p.p)));
+    const fora = ps.filter(p => p.o !== o);
+    if(fora.length && !confirm(fora.length + ' pessoa(s) marcada(s) estão alocadas em outra obra:\n\n'
+      + fora.slice(0, 15).map(p => '• ' + p.n + ' (' + (p.o || 'sem obra') + ')').join('\n') + (fora.length > 15 ? '\n…' : '')
+      + '\n\nLançar mesmo assim em ' + o + '?')) return;
     let n = 0;
     ps.forEach(p => {
       const r = regra(p, dia); if(r.erro || lancDe(p.p, d)) return;
