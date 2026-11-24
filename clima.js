@@ -1,13 +1,14 @@
 // Aba "Clima" do Gestão 360º BKP: tempo nas obras e semáforo para aplicar microrrevestimento (MRAF).
 // Carregado por index.html depois do app, como equipamentos.js e diarias.js. Não guarda nada secreto.
 // Previsão: Open-Meteo (api.open-meteo.com), gratuita e sem chave. As coordenadas vêm das obras do mapa.
-// Os limites do semáforo ficam neste navegador e podem ser alterados no bloco "Critérios".
+// Os limites do semáforo ficam na aba oculta "Gestao360" da planilha (linha 3), pela mesma ligação da aba
+// Emulsão (txApi): quem altera no bloco "Critérios" altera para todos os computadores.
 (function(){
   if(typeof st === 'undefined' || typeof trocarAba !== 'function') return;
 
   const $ = id => document.getElementById(id);
   const h = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
-  const KCFG = 'dmtbkp_clima_cfg', KSEL = 'dmtbkp_clima_sel', KCACHE = 'dmtbkp_clima_cache';
+  const KCFG = 'dmtbkp_clima_cfg', KPEND = 'dmtbkp_clima_cfgPend', KSEL = 'dmtbkp_clima_sel', KCACHE = 'dmtbkp_clima_cache';
   const PADRAO = {tmin: 10, tcalor: 38, p1: 30, p2: 60, mm1: 0.1, mm2: 0.5, ur: 85, vento: 30, dur: 5, cura: 3, hIni: 6, hFim: 17};
   let CFG = Object.assign({}, PADRAO);
   try{ Object.assign(CFG, JSON.parse(localStorage.getItem(KCFG) || '{}')); }catch(e){}
@@ -215,6 +216,7 @@
         <div><label>Expediente termina (h)</label><input type="number" data-c="hFim" min="0" max="23" step="1"></div>
       </div>
       <div class="btns"><button class="sec mini" id="cl-padrao">Voltar aos valores padrão</button></div>
+      <div class="hint" id="cl-cfg-est" style="margin-top:6px"></div>
       <div class="hint" style="margin-top:6px">Previsão do Open-Meteo (modelos meteorológicos globais), atualizada a cada 20 minutos com a aba aberta. Pancadas de verão em MT são difíceis de prever com exatidão: em caso de dúvida, confirme no céu e no radar antes de mobilizar a equipe.</div>
     </div>`;
   const ref = $('aba-diar') || $('aba-equip') || $('aba-taxa');
@@ -229,7 +231,52 @@
   $('cl-cura').onchange = e => numCfg('cura', Math.max(0, Math.round(e.target.value)));
   aba.querySelectorAll('[data-c]').forEach(i => i.onchange = () => numCfg(i.dataset.c, i.value));
   $('cl-padrao').onclick = () => { CFG = Object.assign({}, PADRAO); salvarCfg(); render(); atualizarMapa(); };
-  function salvarCfg(){ try{ localStorage.setItem(KCFG, JSON.stringify(CFG)); }catch(e){} }
+  function salvarCfg(){
+    try{ localStorage.setItem(KCFG, JSON.stringify(CFG)); localStorage.setItem(KPEND, '1'); }catch(e){}
+    avisoCfg('Salvando para todos…');
+    clearTimeout(tCfg); tCfg = setTimeout(enviarCfg, 1200);
+  }
+
+  // ---------- critérios na planilha (iguais para todos) ----------
+  let tCfg = null, lidoCfg = 0, infoCfg = '', erroCfg = false;
+  const temApi = () => typeof txApi === 'function';
+  const quem = () => { try{ return (window.DMT_SESSAO && window.DMT_SESSAO.u) || ''; }catch(e){ return ''; } };
+  const quandoBR = s => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s || '') ? s.slice(8, 10) + '/' + s.slice(5, 7) + ' às ' + s.slice(11, 16) : '';
+  function avisoCfg(t, erro){ infoCfg = t; erroCfg = !!erro; const el = $('cl-cfg-est'); if(el){ el.textContent = t; el.style.color = erro ? '#b42318' : ''; } }
+  const msgApi = e => /desconhecida/i.test(e && e.message || '') ? 'A planilha ainda não aceita os critérios: atualize o Apps Script (ver README). Por enquanto valem só neste computador.' : '';
+  async function enviarCfg(){
+    clearTimeout(tCfg);
+    if(!temApi()) return avisoCfg('Sem ligação com a planilha: os critérios valem só neste computador.', true);
+    try{
+      await txApi({acao: 'gravarClima', cfg: CFG, usuario: quem()});
+      try{ localStorage.removeItem(KPEND); }catch(e){}
+      avisoCfg('Critérios salvos para toda a equipe às ' + new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) + (quem() ? ' (' + quem() + ')' : '') + '.');
+    }catch(e){
+      const m = msgApi(e);
+      avisoCfg(m || 'Sem ligação com a planilha agora. Nova tentativa em 1 minuto.', true);
+      if(!m) tCfg = setTimeout(enviarCfg, 60000);
+    }
+  }
+  async function receberCfg(){
+    if(!temApi()) return;
+    let pend = false; try{ pend = !!localStorage.getItem(KPEND); }catch(e){}
+    if(pend) return enviarCfg(); // mudança deste computador ainda não enviada
+    if(Date.now() - lidoCfg < 30000) return;
+    lidoCfg = Date.now();
+    try{
+      const j = await txApi({acao: 'lerClima'});
+      if(j.cfg){
+        const novo = Object.assign({}, PADRAO, j.cfg);
+        if(JSON.stringify(novo) !== JSON.stringify(CFG)){
+          CFG = novo; try{ localStorage.setItem(KCFG, JSON.stringify(CFG)); }catch(e){}
+          render(); atualizarMapa();
+        }
+        avisoCfg('Critérios da equipe' + (j.quando ? ', alterados em ' + quandoBR(j.quando) : '') + (j.usuario ? ' por ' + j.usuario : '') + '. Qualquer mudança aqui vale para todos.');
+      } else avisoCfg('Usando os valores padrão. Qualquer mudança aqui vale para todos.');
+    }catch(e){
+      avisoCfg(msgApi(e) || 'Sem ligação com a planilha agora; usando os últimos critérios deste computador.', true);
+    }
+  }
   function guardarSel(){ try{ localStorage.setItem(KSEL, JSON.stringify(SEL)); }catch(e){} }
 
   // ---------- desenhar ----------
@@ -250,6 +297,7 @@
     if(!SEL.obra || !l.some(o => chave(o) === SEL.obra)) SEL.obra = l.length ? chave((l.find(o => o.status === 'andamento') || l[0])) : '';
     const est = carregando ? 'Buscando previsão…' : erro ? erro
       : quando ? 'Previsão consultada às ' + new Date(quando).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) + '.' : '';
+    if($('cl-cfg-est').textContent !== infoCfg) avisoCfg(infoCfg, erroCfg);
     $('cl-estado').textContent = est; $('cl-estado').style.color = erro ? '#b42318' : '';
 
     // cartões das obras
@@ -343,17 +391,17 @@
     trocarOrig.apply(this, arguments);
     aba.style.display = a === 'clima' ? '' : 'none';
     btn.classList.toggle('on', a === 'clima');
-    if(a === 'clima'){ render(); buscar(); }
+    if(a === 'clima'){ render(); buscar(); receberCfg(); }
   };
-  document.addEventListener('visibilitychange', () => { if(!document.hidden) buscar(); });
+  document.addEventListener('visibilitychange', () => { if(!document.hidden){ buscar(); receberCfg(); } });
   setInterval(() => { if(!document.hidden) buscar(); }, 20 * 60000);
 
   // espera as obras carregarem e busca a previsão (serve também para a dica no mapa)
   const inicio = Date.now();
   (function esperar(){
-    if((st.obras && st.obras.length) || Date.now() - inicio > 8000) buscar();
+    if((st.obras && st.obras.length) || Date.now() - inicio > 8000){ receberCfg().finally(buscar); }
     else setTimeout(esperar, 400);
   })();
   try{ if(ls.get('aba') === 'clima') trocarAba('clima'); }catch(e){}
-  window.G360Clima = {buscar, render, cfg: () => CFG, dados: () => DADOS, avaliarJanela};
+  window.G360Clima = {buscar, render, receberCfg, enviarCfg, cfg: () => CFG, dados: () => DADOS, avaliarJanela};
 })();

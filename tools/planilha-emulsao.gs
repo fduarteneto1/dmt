@@ -22,6 +22,7 @@ function tratar(p) {
     if (p.acao === 'lerObras') return lerObras(ss);
     if (p.acao === 'lerEquipamentos') return lerEquipamentos(ss);
     if (p.acao === 'lerDiarias') return lerDiarias(ss);
+    if (p.acao === 'lerClima') return lerClima(ss);
     lock.waitLock(20000);
     if (p.acao === 'registro') return registro(ss, p.r || {});
     if (p.acao === 'usina') return usina(ss, p.u || {});
@@ -29,6 +30,7 @@ function tratar(p) {
     if (p.acao === 'gravarObras') return gravarObras(ss, p.obras);
     if (p.acao === 'gravarEquipamentos') return gravarEquipamentos(ss, p.dados);
     if (p.acao === 'gravarDiarias') return gravarDiarias(ss, p.dados);
+    if (p.acao === 'gravarClima') return gravarClima(ss, p.cfg, p.usuario);
     return { ok: false, erro: 'Ação desconhecida.' };
   } catch (err) {
     return { ok: false, erro: String(err && err.message || err) };
@@ -150,6 +152,23 @@ function gravarEquipamentos(ss, d) {
   if (txt.length > 49000) return { ok: false, erro: 'Dados de equipamentos grandes demais para a planilha.' };
   var sh = abaG360(ss);
   sh.getRange(2, 1, 1, 3).setValues([['equipamentos', txt, new Date()]]);
+  return { ok: true };
+}
+
+// ---------- Critérios do semáforo da aba Clima (valem para todos os computadores) ----------
+// Mesma aba oculta "Gestao360": A3 = 'clima', B3 = {tmin, tcalor, p1, ...}, C3 = quando, D3 = quem alterou.
+function lerClima(ss) {
+  var sh = abaG360(ss), txt = String(sh.getRange(3, 2).getValue() || '');
+  var c = null;
+  try { c = txt ? JSON.parse(txt) : null; } catch (x) {}
+  return { ok: true, cfg: c && typeof c === 'object' ? c : null, quando: iso(sh.getRange(3, 3).getValue()), usuario: String(sh.getRange(3, 4).getValue() || '') };
+}
+function gravarClima(ss, c, usuario) {
+  if (!c || typeof c !== 'object') return { ok: false, erro: 'Critérios inválidos.' };
+  var limpo = {};
+  Object.keys(c).forEach(function (k) { var v = n(c[k]); if (/^[a-zA-Z0-9]{1,12}$/.test(k) && isFinite(v)) limpo[k] = v; });
+  var sh = abaG360(ss);
+  sh.getRange(3, 1, 1, 4).setValues([['clima', JSON.stringify(limpo), new Date(), String(usuario || '').slice(0, 60)]]);
   return { ok: true };
 }
 
