@@ -62,3 +62,8 @@ Lançamento e fechamento das diárias de quem trabalha no fim de semana ou feria
 - **Histórico:** todos os fechamentos ficam guardados para reimprimir, marcar como pago ou reabrir (os lançamentos voltam para "em aberto"). Em **Consultar lançamentos** dá para filtrar por período, obra e pessoa e baixar CSV.
 - **Onde ficam os dados:** na aba oculta **G360Diarias** da planilha (JSON dividido em pedaços). A cada gravação, as abas **Diárias** e **Diárias – Fechamentos** são refeitas em formato de tabela, só para consulta. Se dois computadores lançarem ao mesmo tempo, os lançamentos dos dois são somados (vale a alteração mais recente de cada item).
 - O Apps Script da planilha precisa ter as ações `lerDiarias` e `gravarDiarias` (já estão em `tools/planilha-emulsao.gs`). Depois de colar, publique em **Implantar → Gerenciar implantações → editar → Nova versão**. Até lá, os lançamentos ficam guardados no computador e são enviados assim que a planilha aceitar.
+
+## Layout do painel (menu vertical e blocos minimizáveis)
+- Os módulos (Transporte, Obras, Colaboradores, Emulsão, Equipamentos, Diárias…) ficam numa coluna à esquerda do painel. Um módulo novo que adicione seu botão em `#abas` entra automaticamente na coluna.
+- Clique no título de qualquer bloco (ex.: **Obras da BKP**) para minimizar ou abrir. Fica salvo neste navegador; na impressão, tudo sai aberto.
+- O código está em `layout.js`, carregado pelo `index.html` por último, sem nada secreto.
