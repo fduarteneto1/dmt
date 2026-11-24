@@ -93,12 +93,13 @@
     body.g360-col-off .g360-col svg{transform:rotate(180deg)}
     .g360-col .g360-col-t{display:none}
     body.g360-col-off .g360-col .g360-col-t{display:inline}
+    .g360-col .g360-col-m{display:none}
     @media print{.g360-col{display:none!important}}`;
     document.head.appendChild(css2);
 
     const bt = document.createElement('button');
     bt.type = 'button'; bt.className = 'g360-col';
-    bt.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M8.5 3 4.5 7l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="g360-col-t">Ferramentas</span>';
+    bt.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M8.5 3 4.5 7l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="g360-col-t">Ferramentas</span><span class="g360-col-m">Ampliar mapa</span>';
     area.appendChild(bt);
 
     const aplicar = off => {
@@ -123,6 +124,55 @@
     });
     let ini = false; try{ ini = localStorage.getItem(KEY_COL) === '1'; }catch(e){}
     aplicar(ini);
+  }
+
+  // ---- Celular (tela até 800px) ----
+  // Mapa em cima (42% da tela), ferramentas embaixo com a página rolando normalmente.
+  // Cabeçalho compacto, menu de módulos numa linha só (arrasta para o lado) e fixo no topo,
+  // campos com fonte 16px (o iPhone não dá zoom ao tocar), legenda do mapa recolhível,
+  // e o botão "Ampliar mapa" deixa o mapa em tela cheia.
+  const css3 = document.createElement('style');
+  css3.textContent = `
+  @media screen and (max-width:800px){
+    html,body{height:auto!important;min-height:100%}
+    body{display:block!important;overflow-x:hidden}
+    header{position:sticky;top:0;z-index:1200;padding:8px 12px!important;gap:10px!important;flex-wrap:nowrap!important}
+    header .logo-bkp{height:24px!important}
+    header .tit{min-width:0;flex:1 1 auto}
+    header h1{font-size:16px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    header .tit>span,header #ses-user{display:none!important}
+    header .sessao{gap:6px!important;flex:none}
+    header .sessao-b{padding:5px 9px!important;font-size:12px!important}
+    main{display:flex!important;flex-direction:column-reverse!important;min-height:0!important}
+    main>aside{width:100%!important;max-width:100%!important;overflow:visible!important;border:0!important;padding:10px!important;display:block!important}
+    main>aside+div{flex:none!important;height:42vh;height:42dvh;min-height:240px}
+    body.g360-col-off main>aside+div{height:calc(100vh - var(--g360-hh,44px));height:calc(100dvh - var(--g360-hh,44px))}
+    #map{flex:1 1 auto!important;width:100%!important;height:auto!important;min-height:0!important}
+    aside>#abas{position:sticky;top:var(--g360-hh,44px);z-index:1100;display:flex;flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;margin:0 0 12px!important;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+    aside>#abas::-webkit-scrollbar{display:none}
+    aside>#abas button{flex:0 0 auto!important;white-space:nowrap;padding:8px 13px!important}
+    input,select,textarea{font-size:16px!important}
+    .card{padding:14px!important}
+    aside table{display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .rr{top:auto!important;bottom:58px!important;left:10px!important;right:10px!important;width:auto!important;max-height:calc(100% - 120px);overflow:auto}
+    .g360-col{top:auto!important;bottom:10px!important;left:10px!important;transform:none!important;border:1px solid var(--line)!important;border-radius:10px!important;height:38px!important;padding:0 12px!important}
+    .g360-col svg,.g360-col .g360-col-t{display:none!important}
+    .g360-col .g360-col-m{display:inline}
+    body.g360-col-off .g360-col .g360-col-m{display:none}
+    body.g360-col-off .g360-col .g360-col-t{display:inline!important}
+    .g360-leg{cursor:pointer;max-width:60vw}
+    .g360-leg::before{content:"Legenda ▾";display:block;font-weight:700;color:var(--ink)}
+    .g360-leg.g360-leg-min{max-height:32px;overflow:hidden}
+    .g360-leg.g360-leg-min::before{content:"Legenda ▸"}
+  }`;
+  document.head.appendChild(css3);
+  const cab = document.querySelector('header');
+  const medirCab = () => { if(cab) document.documentElement.style.setProperty('--g360-hh', cab.offsetHeight + 'px'); };
+  medirCab(); window.addEventListener('resize', medirCab);
+  const leg = Array.from(document.querySelectorAll('.leaflet-control')).find(c => !c.classList.contains('leaflet-bar') && !c.classList.contains('leaflet-control-attribution'));
+  if(leg){
+    leg.classList.add('g360-leg', 'g360-leg-min');
+    leg.addEventListener('click', ev => { if(window.matchMedia('(max-width:800px)').matches && !ev.target.closest('input,select,button,a')) leg.classList.toggle('g360-leg-min'); });
   }
 
   const varrer = () => aside.querySelectorAll('.card').forEach(preparar);
