@@ -154,8 +154,8 @@
     input,select,textarea{font-size:16px!important}
     .card{padding:14px!important}
     aside table{display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
-    .rr{top:auto!important;bottom:58px!important;left:10px!important;right:10px!important;width:auto!important;max-height:calc(100% - 120px);overflow:auto}
-    .g360-col{top:auto!important;bottom:10px!important;left:10px!important;transform:none!important;border:1px solid var(--line)!important;border-radius:10px!important;height:38px!important;padding:0 12px!important}
+    .rr{top:auto!important;bottom:10px!important;left:10px!important;right:10px!important;width:auto!important;max-height:calc(100% - 120px);overflow:auto}
+    .g360-col{top:10px!important;right:10px!important;left:auto!important;transform:none!important;border:1px solid var(--line)!important;border-radius:10px!important;height:38px!important;padding:0 12px!important}
     .g360-col svg,.g360-col .g360-col-t{display:none!important}
     .g360-col .g360-col-m{display:inline}
     body.g360-col-off .g360-col .g360-col-m{display:none}
