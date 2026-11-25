@@ -75,3 +75,11 @@ Tempo em cada obra do mapa e semáforo para aplicar microrrevestimento. O códig
 - **Critérios iguais para todos:** ficam na aba oculta **Gestao360** da planilha, linha 3 (`A3 = clima`, com data e usuário da última alteração). O Apps Script precisa ter as ações `lerClima` e `gravarClima` (já estão em `tools/planilha-emulsao.gs`). Depois de colar, publique em **Implantar → Gerenciar implantações → editar → Nova versão**. Até lá, a mudança vale só no computador em que foi feita e é enviada assim que a planilha aceitar.
 - Ao passar o mouse sobre a obra no mapa, aparece a temperatura e o semáforo do momento.
 - **Para voltar à versão sem a aba Clima:** existe o ramo `backup-antes-clima` no GitHub com a versão anterior. Também basta apagar `<script src="clima.js?v=2"><\/script>` do `index.html`.
+
+## Relatório de usinadas (aba Usinadas)
+Resumo das usinadas de microrrevestimento por obra, para mandar no grupo no fim do dia. O código está em `usinadas.js`, carregado pelo `index.html` como os outros módulos, sem nada secreto.
+- **Período:** Hoje, Ontem, 7 dias, Este mês ou Período (de/até), e filtro por obra.
+- **Números:** quantidade de usinadas, consumo de emulsão (L), área aplicada (m²) e taxa (L/m² = litros ÷ área, com a faixa mínima e máxima).
+- **Gráficos interativos:** por obra (Área, Consumo ou L/m²) e, embaixo, por usinada (quando é um dia só) ou por dia (quando é período). Passe o mouse ou toque para ver os números; clique numa obra para filtrar só ela. Na tabela, clique na obra para ver cada usinada.
+- **Enviar no grupo:** **Enviar no WhatsApp** (texto pronto, formatado para o WhatsApp), **Imagem do relatório** (PNG para mandar no grupo), **Imprimir / PDF** (com os gráficos e a lista de usinadas) e **Copiar texto**.
+- **Dados:** vêm da aba **Registros** da planilha, pela ação `dados` que a aba Emulsão já usa. Não precisa atualizar o Apps Script. Usinadas guardadas no aparelho sem internet só aparecem depois de enviadas.
