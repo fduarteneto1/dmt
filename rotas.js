@@ -37,7 +37,15 @@
     const corpo = {costing:'auto', shape_match:'edge_walk',
       filters:{attributes:['edge.surface','edge.length','edge.way_id','edge.begin_shape_index','edge.end_shape_index'], action:'include'}};
     if(t.enc) corpo.encoded_polyline = t.enc; else corpo.shape = t.coords.map(c => ({lat: c[1], lon: c[0]}));
-    const ta = await valhalla('trace_attributes', corpo);
+    let ta;
+    try{ ta = await valhalla('trace_attributes', corpo); }
+    catch(e){
+      // com ponto de passagem o casamento exato às vezes falha; aí casa pelo mapa e usa o traçado casado
+      corpo.shape_match = 'walk_or_snap';
+      ta = await valhalla('trace_attributes', corpo);
+      if(!ta.shape) throw e;
+      t.coords = decodificar(ta.shape);
+    }
     let tags = new Map();
     try{
       const ids = [...new Set(ta.edges.map(e => e.way_id))];
@@ -96,7 +104,7 @@
     let n = 1; A.lista.forEach((x, i) => { if(i && x.nome === 'Alternativa') x.nome = 'Alternativa ' + (n++); });
     A.status = 'ok';
     A.msg = faltam.length ? '' : 'O roteador não encontrou outra rota diferente. Use "Passar por um ponto" para indicar o caminho.';
-    if(chave() === k) desenhar();
+    if(chave() === k) desenhar(true);
   }
 
   async function rotaPorPontos(){
@@ -135,7 +143,7 @@
           .bindTooltip(`${h(x.nome)}: ${f1(x.km)} km${x.sup ? ' · chão ' + f1(x.sup.chao) + ' km' : ''} — clique para escolher`, {sticky: true})
           .on('click', ev => { L.DomEvent.stop(ev); escolher(i); })).filter(Boolean)).addTo(map);
       rr.linha = camadaRota(rr.rota, rr.ponto, rr.obra).addTo(map);
-      if(enquadrar){ const b = camadaAlt.getLayers().length ? camadaAlt.getBounds().extend(rr.linha.getBounds()) : rr.linha.getBounds(); map.fitBounds(b, {padding: [40, 40]}); }
+      if(enquadrar) enquadra(camadaAlt.getLayers().length ? camadaAlt.getBounds().extend(rr.linha.getBounds()) : rr.linha.getBounds());
     }else if(rr.rota && rr.status === 'ok'){
       rr.linha = camadaRota(rr.rota, rr.ponto, rr.obra).addTo(map);
     }
@@ -146,6 +154,12 @@
         .on('click', ev => { L.DomEvent.stop(ev); A.via.splice(i, 1); A.via.length ? rotaPorPontos() : limparPontos(); }))).addTo(map);
     }
     rrRender();
+  }
+
+  // enquadra a rota sem deixá-la atrás da caixa "Rota até a obra" (canto superior direito do mapa)
+  function enquadra(b){
+    const box = $('rr'), w = box && box.offsetWidth && map.getSize().x > 700 ? box.offsetWidth + 30 : 40;
+    map.fitBounds(b, {paddingTopLeft: [40, 40], paddingBottomRight: [w, 40]});
   }
 
   function tirarCamadas(){
