@@ -76,8 +76,13 @@ Tempo em cada obra do mapa e semáforo para aplicar microrrevestimento. O códig
 - Ao passar o mouse sobre a obra no mapa, aparece a temperatura e o semáforo do momento.
 - **Para voltar à versão sem a aba Clima:** existe o ramo `backup-antes-clima` no GitHub com a versão anterior. Também basta apagar `<script src="clima.js?v=2"><\/script>` do `index.html`.
 
-## Relatório de usinadas (aba Usinadas)
-Resumo das usinadas de microrrevestimento por obra, para mandar no grupo no fim do dia. O código está em `usinadas.js`, carregado pelo `index.html` como os outros módulos, sem nada secreto.
+## Relatórios (aba Relatórios)
+Um único botão no menu, com os relatórios escolhidos dentro dela (seletor no topo da aba). O código está em `relatorios.js`, carregado pelo `index.html` antes dos relatórios, sem nada secreto.
+- **Para criar um relatório novo:** faça um arquivo `.js` que monte o conteúdo num `<div>` e chame `G360Relatorios.registrar({id, nome, el, mostrar, esconder})`. Carregue-o no `index.html` depois de `relatorios.js`. Ele aparece sozinho no seletor, sem criar botão novo no menu.
+- A aba lembra o último relatório aberto neste navegador.
+
+### Usinadas
+Resumo das usinadas de microrrevestimento por obra, para mandar no grupo no fim do dia. O código está em `usinadas.js`.
 - **Período:** Hoje, Ontem, 7 dias, Este mês ou Período (de/até), e filtro por obra.
 - **Números:** quantidade de usinadas, consumo de emulsão (L), área aplicada (m²) e taxa (L/m² = litros ÷ área, com a faixa mínima e máxima).
 - **Gráficos interativos:** por obra (Área, Consumo ou L/m²) e, embaixo, por usinada (quando é um dia só) ou por dia (quando é período). Passe o mouse ou toque para ver os números; clique numa obra para filtrar só ela. Na tabela, clique na obra para ver cada usinada.

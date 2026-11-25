@@ -1,11 +1,11 @@
 // Aba "Usinadas" do Gestão 360º BKP: relatório das usinadas de microrrevestimento (MRAF) por obra.
-// Carregado por index.html depois do app, como clima.js e diarias.js. Não guarda nada secreto.
+// Fica dentro da aba "Relatórios" (relatorios.js), carregado depois dela pelo index.html. Não guarda nada secreto.
 // Os dados vêm da aba "Registros" da planilha "Taxa de Emulsão – Microrrevestimento (MRAF)", pela
 // mesma ligação da aba Emulsão (txApi, ação "dados", que já existia): nada muda no Apps Script.
 // Mostra consumo de emulsão (L), área aplicada (m²) e taxa (L/m²) por obra, no dia ou num período,
 // com gráficos interativos, e gera texto, imagem e PDF para mandar no grupo das obras.
 (function(){
-  if(typeof txApi !== 'function' || typeof st === 'undefined' || typeof trocarAba !== 'function') return;
+  if(typeof txApi !== 'function' || typeof st === 'undefined' || !window.G360Relatorios) return;
 
   const $ = id => document.getElementById(id);
   const h = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
@@ -109,50 +109,44 @@
   // ---------- estilos ----------
   const css = document.createElement('style');
   css.textContent = `
-  #aba-usin .us-per{display:flex;flex-wrap:wrap;gap:4px}
-  #aba-usin .us-per button{flex:1 1 auto}
-  #aba-usin .row2{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
-  #aba-usin .row2 input,#aba-usin .row2 select,#aba-usin #us-obra{width:100%}
-  #aba-usin .us-kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-  #aba-usin .us-kpi div{border:1px solid var(--line,#E8E8EA);border-radius:10px;padding:9px 10px;background:#fff;min-width:0}
-  #aba-usin .us-kpi span{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3,#8E8E8E)}
-  #aba-usin .us-kpi b{display:block;font-size:20px;line-height:1.2;margin-top:3px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  #aba-usin .us-kpi small{color:var(--ink3,#8E8E8E);font-size:11px}
-  @media (max-width:520px){ #aba-usin .us-kpi{grid-template-columns:1fr 1fr} }
-  #aba-usin .us-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-  #aba-usin .us-cab .seg{flex:0 1 auto}
-  #aba-usin .us-cab .seg button{padding:5px 10px;font-size:12px}
-  #aba-usin .us-leg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink2,#5C5C5C);margin:2px 0 6px}
-  #aba-usin .us-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
-  #aba-usin svg{display:block;width:100%;height:auto;overflow:visible}
-  #aba-usin svg [data-tip]{cursor:pointer}
-  #aba-usin .us-vazio{padding:22px 8px;text-align:center;color:var(--ink3,#8E8E8E)}
-  #aba-usin table.us-tab{width:100%;border-collapse:collapse}
-  #aba-usin .us-tab th,#aba-usin .us-tab td{padding:6px 5px;text-align:right;white-space:nowrap}
-  #aba-usin .us-tab th:first-child,#aba-usin .us-tab td:first-child{text-align:left;white-space:normal}
-  #aba-usin .us-tab tr.ob{cursor:pointer}
-  #aba-usin .us-tab tr.ob:hover td{background:var(--head,#F6F6F7)}
-  #aba-usin .us-tab tr.ob td:first-child i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
-  #aba-usin .us-tab tr.ob td:first-child em{font-style:normal;color:var(--ink3,#8E8E8E);margin-right:4px;display:inline-block;width:10px}
-  #aba-usin .us-tab tr.det td{font-size:11.5px;color:var(--ink2,#5C5C5C);background:#FCFCFD}
-  #aba-usin .us-tab tr.det td:first-child{padding-left:30px}
-  #aba-usin .us-tab tr.tot td{font-weight:700;border-top:1px solid var(--line,#E8E8EA)}
-  #aba-usin .btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-  #aba-usin .us-txt{box-sizing:border-box;width:100%;min-height:150px;font-family:inherit;font-size:12px;border:1px solid var(--line,#E8E8EA);border-radius:8px;padding:8px 10px;resize:vertical;margin-top:8px}
+  #rel-usin .us-per{display:flex;flex-wrap:wrap;gap:4px}
+  #rel-usin .us-per button{flex:1 1 auto}
+  #rel-usin .row2{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
+  #rel-usin .row2 input,#rel-usin .row2 select,#rel-usin #us-obra{width:100%}
+  #rel-usin .us-kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  #rel-usin .us-kpi div{border:1px solid var(--line,#E8E8EA);border-radius:10px;padding:9px 10px;background:#fff;min-width:0}
+  #rel-usin .us-kpi span{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3,#8E8E8E)}
+  #rel-usin .us-kpi b{display:block;font-size:20px;line-height:1.2;margin-top:3px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #rel-usin .us-kpi small{color:var(--ink3,#8E8E8E);font-size:11px}
+  @media (max-width:520px){ #rel-usin .us-kpi{grid-template-columns:1fr 1fr} }
+  #rel-usin .us-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  #rel-usin .us-cab .seg{flex:0 1 auto}
+  #rel-usin .us-cab .seg button{padding:5px 10px;font-size:12px}
+  #rel-usin .us-leg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink2,#5C5C5C);margin:2px 0 6px}
+  #rel-usin .us-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  #rel-usin svg{display:block;width:100%;height:auto;overflow:visible}
+  #rel-usin svg [data-tip]{cursor:pointer}
+  #rel-usin .us-vazio{padding:22px 8px;text-align:center;color:var(--ink3,#8E8E8E)}
+  #rel-usin table.us-tab{width:100%;border-collapse:collapse}
+  #rel-usin .us-tab th,#rel-usin .us-tab td{padding:6px 5px;text-align:right;white-space:nowrap}
+  #rel-usin .us-tab th:first-child,#rel-usin .us-tab td:first-child{text-align:left;white-space:normal}
+  #rel-usin .us-tab tr.ob{cursor:pointer}
+  #rel-usin .us-tab tr.ob:hover td{background:var(--head,#F6F6F7)}
+  #rel-usin .us-tab tr.ob td:first-child i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  #rel-usin .us-tab tr.ob td:first-child em{font-style:normal;color:var(--ink3,#8E8E8E);margin-right:4px;display:inline-block;width:10px}
+  #rel-usin .us-tab tr.det td{font-size:11.5px;color:var(--ink2,#5C5C5C);background:#FCFCFD}
+  #rel-usin .us-tab tr.det td:first-child{padding-left:30px}
+  #rel-usin .us-tab tr.tot td{font-weight:700;border-top:1px solid var(--line,#E8E8EA)}
+  #rel-usin .btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  #rel-usin .us-txt{box-sizing:border-box;width:100%;min-height:150px;font-family:inherit;font-size:12px;border:1px solid var(--line,#E8E8EA);border-radius:8px;padding:8px 10px;resize:vertical;margin-top:8px}
   #us-tip{position:fixed;z-index:6000;pointer-events:none;background:#fff;border:1px solid #E8E8EA;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.14);padding:8px 10px;font-size:12px;line-height:1.45;color:#232323;max-width:280px;display:none}
   #us-tip b{font-weight:700} #us-tip .t{font-weight:700;margin-bottom:2px} #us-tip .l{display:flex;justify-content:space-between;gap:14px} #us-tip .l span{color:#5C5C5C}
   #us-tip i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px}`;
   document.head.appendChild(css);
 
-  // ---------- aba ----------
-  const btn = document.createElement('button');
-  btn.dataset.aba = 'usin'; btn.textContent = 'Usinadas';
-  const bEmul = document.querySelector('#abas button[data-aba="taxa"]');
-  if(bEmul && bEmul.nextSibling) $('abas').insertBefore(btn, bEmul.nextSibling); else $('abas').appendChild(btn);
-  btn.addEventListener('click', () => trocarAba('usin'));
-
+  // ---------- conteúdo (registrado na aba Relatórios mais abaixo) ----------
   const aba = document.createElement('div');
-  aba.id = 'aba-usin'; aba.style.display = 'none';
+  aba.id = 'rel-usin';
   aba.innerHTML = `
     <div class="card">
       <h2>Relatório de usinadas</h2>
@@ -199,9 +193,8 @@
       <textarea class="us-txt" id="us-txt" readonly></textarea>
       <div class="hint" id="us-env" style="margin-top:4px">No celular, "Enviar no WhatsApp" e "Imagem do relatório" abrem o compartilhamento: é só escolher o grupo.</div>
     </div>`;
-  const ref = $('aba-clima') || $('aba-diar') || $('aba-equip') || $('aba-taxa');
-  ref.parentElement.insertBefore(aba, ref.nextSibling);
 
+  aba.style.display = 'none'; document.getElementById('rel-corpo').appendChild(aba); // já no lugar, para os botões abaixo se ligarem
   const tip = document.createElement('div'); tip.id = 'us-tip'; document.body.appendChild(tip);
 
   // ---------- eventos ----------
@@ -259,7 +252,7 @@
   }
 
   function render(){
-    if(aba.style.display === 'none') return;
+    if(!G360Relatorios.visivel('usin')) return;
     esconder();
     aba.querySelectorAll('#us-per button').forEach(b => b.classList.toggle('on', b.dataset.p === SEL.per));
     aba.querySelectorAll('#us-met button').forEach(b => b.classList.toggle('on', b.dataset.m === SEL.met));
@@ -603,16 +596,9 @@ ${gs.length > 1 ? `<tr class="tot"><td>Total</td><td></td><td></td><td>${L(t.lit
     if(img && !img.complete){ img.onload = img.onerror = ir; setTimeout(ir, 3000); } else setTimeout(ir, 200);
   };
 
-  // ---------- troca de aba ----------
-  const trocarOrig = window.trocarAba;
-  window.trocarAba = function(a){
-    trocarOrig.apply(this, arguments);
-    aba.style.display = a === 'usin' ? '' : 'none';
-    btn.classList.toggle('on', a === 'usin');
-    if(a === 'usin'){ render(); buscar(); } else esconder();
-  };
-  document.addEventListener('visibilitychange', () => { if(!document.hidden && aba.style.display !== 'none') buscar(); });
+  // ---------- registro na aba Relatórios ----------
+  G360Relatorios.registrar({id: 'usin', nome: 'Usinadas', el: aba, mostrar(){ render(); buscar(); }, esconder});
+  document.addEventListener('visibilitychange', () => { if(!document.hidden && G360Relatorios.visivel('usin')) buscar(); });
 
-  try{ if(typeof ls !== 'undefined' && ls.get('aba') === 'usin') trocarAba('usin'); }catch(e){}
   window.G360Usinadas = {render, buscar, dados: () => REG};
 })();
