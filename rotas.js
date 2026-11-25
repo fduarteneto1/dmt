@@ -1,7 +1,8 @@
 // Rotas alternativas na "Rota até a obra" (clique na obra + na pedreira/distribuidora) do Gestão 360º BKP.
 // Carregado por index.html depois do app, como clima.js e equipamentos.js. Não guarda nada secreto.
-// - "Ver rotas alternativas": pede ao roteador (Valhalla/OpenStreetMap) outras rotas e uma rota que
-//   evita estrada de chão, e mostra km, asfalto, chão e tempo de cada uma para escolher.
+// - "Ver rotas alternativas": pede ao roteador (Valhalla/OpenStreetMap) outros caminhos lógicos (as
+//   sugestões dele, a mais curta em km e desvios da estrada principal), sem forçar evitar estrada de
+//   chão, e mostra km, asfalto, chão e tempo de cada uma para escolher.
 // - "Passar por um ponto": clique no mapa num lugar por onde a rota deve passar (ex.: uma cidade ou
 //   um trevo numa rodovia asfaltada). Dá para marcar mais de um ponto.
 // A rota escolhida é a que aparece no mapa e a que vai para "Usar no cálculo de DMT".
@@ -72,29 +73,91 @@
   // duas rotas são "a mesma" se a distância e o tempo praticamente coincidem
   const igual = (a, b) => Math.abs(a.km - b.km) < Math.max(0.3, a.km * 0.004) && Math.abs((a.tempo || 0) - (b.tempo || 0)) < Math.max(60, (a.tempo || 0) * 0.01);
 
+  // ---------- comparar traçados ----------
+  // marca as "quadrículas" (~500 m) por onde um traçado passa, preenchendo os trechos retos longos
+  const Q = 0.005;
+  function celulas(coords, set){
+    set = set || new Set();
+    for(let i = 0; i < coords.length; i++){
+      const [x1, y1] = coords[i];
+      set.add(Math.round(x1 / Q) + ':' + Math.round(y1 / Q));
+      if(i + 1 < coords.length){
+        const [x2, y2] = coords[i + 1], n = Math.ceil(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) / (Q / 2));
+        for(let j = 1; j < n; j++) set.add(Math.round((x1 + (x2 - x1) * j / n) / Q) + ':' + Math.round((y1 + (y2 - y1) * j / n) / Q));
+      }
+    }
+    return set;
+  }
+  // fração do traçado novo que passa por onde outra rota já passa
+  function sobreposicao(coords, set){
+    const c = [...celulas(coords)];
+    return c.length ? c.filter(x => set.has(x)).length / c.length : 1;
+  }
+  // ponto que fica a uma fração do comprimento do traçado
+  function pontoEm(coords, fr){
+    const d = [0];
+    for(let i = 1; i < coords.length; i++) d.push(d[i - 1] + Math.hypot(coords[i][0] - coords[i - 1][0], coords[i][1] - coords[i - 1][1]));
+    const alvo = d[d.length - 1] * fr;
+    let i = d.findIndex(v => v >= alvo); if(i < 1) i = 1;
+    const t = (alvo - d[i - 1]) / ((d[i] - d[i - 1]) || 1), a = coords[i - 1], b = coords[i];
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  }
+  // quadrado de ~2 km em volta de um ponto (lon, lat) — o servidor limita o perímetro das áreas a evitar
+  function quadrado([x, y]){
+    const dy = 0.009, dx = 0.009 / Math.max(0.2, Math.cos(y * Math.PI / 180));
+    return [[x - dx, y - dy], [x + dx, y - dy], [x + dx, y + dy], [x - dx, y + dy], [x - dx, y - dy]];
+  }
+
   // ---------- buscar alternativas ----------
+  // Rotas alternativas "normais": as que o roteador sugere, a mais curta em km e, se faltar opção,
+  // desvios que obrigam a sair da estrada da rota proposta em algum trecho. Não força evitar chão:
+  // cada rota mostra asfalto, chão, km e tempo para a escolha ser de quem conhece a região.
+  const MAX_ALT = 3;
   async function buscarAlternativas(){
     const k = chave(), p = rr.ponto, o = rr.obra, base = rr.rota;
     if(!k || !base || base.reta) return;
     const A = ALT[k] = ALT[k] || {lista: [Object.assign({}, base, {nome: base.nome || 'Rota proposta'})], sel: 0, via: []};
     A.status = 'busca'; A.buscou = true; A.msg = 'Pedindo rotas ao OpenStreetMap…'; rrRender();
     const locs = [{lat: p.lat, lon: p.lng}, {lat: o.lat, lon: o.lng}];
-    const novas = [];
+    const prop = A.lista[0], kmMax = prop.km * 1.4 + 15;
+    const vistos = new Set();
+    A.lista.forEach(x => { if(x.geo && x.geo.coordinates) celulas(x.geo.coordinates, vistos); });
+    const faltam = [];
+    // aceita uma rota se ela for de fato outro caminho e não ficar longa demais
+    const tentar = (tr, nome) => {
+      if(!tr || faltam.length >= MAX_ALT) return;
+      const t = trajeto(tr);
+      if(t.km > kmMax) return;
+      if(A.lista.some(x => igual(x, t)) || faltam.some(x => igual(x.t, t))) return;
+      if(vistos.size && sobreposicao(t.coords, vistos) > 0.85) return;
+      celulas(t.coords, vistos);
+      faltam.push({t, nome});
+    };
     try{
-      const r1 = await valhalla('route', {locations: locs, costing: 'auto', alternates: 2});
-      [r1.trip, ...(r1.alternates || []).map(x => x.trip)].forEach(tr => novas.push({t: trajeto(tr), nome: 'Alternativa'}));
-    }catch(e){}
-    try{
-      const r2 = await valhalla('route', {locations: locs, costing: 'auto', costing_options: {auto: {exclude_unpaved: true}}});
-      novas.push({t: trajeto(r2.trip), nome: 'Evitando estrada de chão'});
+      const r1 = await valhalla('route', {locations: locs, costing: 'auto', alternates: 3});
+      [r1.trip, ...(r1.alternates || []).map(x => x.trip)].forEach(tr => tentar(tr, 'Alternativa'));
     }catch(e){}
     if(ALT[k] !== A) return;
-    const faltam = [];
-    novas.forEach(n => {
-      const ja = A.lista.find(x => igual(x, n.t)) || faltam.find(x => igual(x.t, n.t));
-      if(!ja) faltam.push(n);
-      else if(n.nome !== 'Alternativa' && ja.nome && !/chão/.test(ja.nome)) ja.obs = 'já evita o chão que dá para evitar';
-    });
+    if(faltam.length < MAX_ALT){
+      A.msg = 'Procurando a rota mais curta em km…'; if(chave() === k) rrRender();
+      try{
+        const r2 = await valhalla('route', {locations: locs, costing: 'auto', costing_options: {auto: {shortest: true}}});
+        tentar(r2.trip, 'Mais curta em km');
+      }catch(e){}
+    }
+    // desvios: bloqueia um trecho da rota proposta (meio, depois 1/3 e 2/3 do caminho) e vê por onde o roteador vai
+    const coordsProp = prop.geo && prop.geo.coordinates;
+    if(coordsProp && coordsProp.length > 1 && prop.km > 15){
+      for(const fr of [0.5, 0.3, 0.7]){
+        if(faltam.length >= MAX_ALT || ALT[k] !== A) break;
+        A.msg = 'Procurando outros caminhos…'; if(chave() === k) rrRender();
+        try{
+          const r3 = await valhalla('route', {locations: locs, costing: 'auto', exclude_polygons: [quadrado(pontoEm(coordsProp, fr))]});
+          tentar(r3.trip, 'Alternativa');
+        }catch(e){}
+      }
+    }
+    if(ALT[k] !== A) return;
     for(let i = 0; i < faltam.length; i++){
       if(ALT[k] !== A) return;
       A.msg = `Lendo o tipo de pavimento da rota ${i + 1} de ${faltam.length}…`; if(chave() === k) rrRender();
@@ -205,15 +268,16 @@
     const bt = (id, txt, tit) => `<button class="mini" id="${id}" title="${h(tit || '')}">${txt}</button>`;
     let html = '<div id="rr-alt" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line,#e5e5e5)">';
     if(!A || (A.lista.length < 2 && A.status !== 'busca' && !A.msg && !A.via.length)){
-      html += `<div class="btns" style="flex-wrap:wrap;gap:6px">${bt('rra-ver', '🔀 Ver rotas alternativas', 'Outras rotas e uma que evita estrada de chão')}${bt('rra-via', '📍 Passar por um ponto', 'Clique no mapa por onde a rota deve passar')}</div>`;
+      html += `<div class="btns" style="flex-wrap:wrap;gap:6px">${bt('rra-ver', '🔀 Ver rotas alternativas', 'Outros caminhos possíveis, com km de asfalto e de chão de cada um')}${bt('rra-via', '📍 Passar por um ponto', 'Clique no mapa por onde a rota deve passar')}</div>`;
     }else{
       const prop = A.lista[0];
       html += '<div style="font-weight:600;font-size:12.5px;margin-bottom:4px">Rotas — clique para escolher</div>';
-      const minChao = Math.min(...A.lista.map(x => x.sup ? x.sup.chao : Infinity)), minKm = Math.min(...A.lista.map(x => x.km));
+      const minChao = Math.min(...A.lista.map(x => x.sup ? x.sup.chao : Infinity)), minKm = Math.min(...A.lista.map(x => x.km)), minT = Math.min(...A.lista.map(x => x.tempo || Infinity));
       A.lista.forEach((x, i) => {
         const sel = i === A.sel, ch = x.sup ? x.sup.chao : null;
         const tags = [];
         if(A.lista.length > 1 && x.km === minKm) tags.push('mais curta');
+        if(A.lista.length > 1 && x.tempo && x.tempo === minT) tags.push('mais rápida');
         if(A.lista.length > 1 && ch != null && ch === minChao && minChao < (prop.sup ? prop.sup.chao : Infinity) - 0.5) tags.push('menos chão');
         const dif = i && prop ? `<div style="font-size:11px;color:var(--ink3,#6b7078)">vs. proposta: ${sinal(x.km - prop.km, ' km')}${ch != null && prop.sup ? ' · chão ' + sinal(ch - prop.sup.chao, ' km') : ''}${x.tempo && prop.tempo ? ' · ' + (x.tempo >= prop.tempo ? '+' : '−') + dur(Math.abs(x.tempo - prop.tempo)) : ''}</div>` : '';
         html += `<div class="rra-op" data-i="${i}" style="cursor:pointer;border:1px solid ${sel ? '#1F1F1F' : 'var(--line,#e5e5e5)'};background:${sel ? '#f4f4f2' : '#fff'};border-radius:8px;padding:6px 8px;margin:4px 0">
