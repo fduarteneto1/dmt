@@ -157,7 +157,7 @@
 
   // enquadra a rota sem deixá-la atrás da caixa "Rota até a obra" (canto superior direito do mapa)
   function enquadra(b){
-    const box = $('rr'), w = box && box.offsetWidth && map.getSize().x > 700 ? box.offsetWidth + 30 : 40;
+    const box = $('rr'), W = map.getSize().x, w = box && box.offsetWidth ? Math.min(box.offsetWidth + 30, W * 0.5) : 40;
     map.fitBounds(b, {paddingTopLeft: [40, 40], paddingBottomRight: [w, 40]});
   }
 
