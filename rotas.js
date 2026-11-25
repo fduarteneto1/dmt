@@ -26,29 +26,28 @@
   async function vez(){ const esp = ultima + 1150 - Date.now(); if(esp > 0) await new Promise(r => setTimeout(r, esp)); ultima = Date.now(); }
   async function valhalla(servico, corpo){ await vez(); return buscar(V + '/' + servico, {method:'POST', body: JSON.stringify(corpo)}, 25000); }
 
+  // junta os trechos (um por ponto de passagem) num traçado só; base = onde cada trecho começa no traçado
   function trajeto(trip){
-    const coords = [];
-    trip.legs.forEach((l, i) => { const c = decodificar(l.shape); coords.push(...(i ? c.slice(1) : c)); });
-    return {km: trip.summary.length, tempo: trip.summary.time, coords, enc: trip.legs.length === 1 ? trip.legs[0].shape : null};
+    const coords = [], legs = [];
+    trip.legs.forEach((l, i) => {
+      const c = decodificar(l.shape);
+      legs.push({enc: l.shape, base: i ? coords.length - 1 : 0});
+      coords.push(...(i ? c.slice(1) : c));
+    });
+    return {km: trip.summary.length, tempo: trip.summary.time, coords, legs};
   }
 
   // mesma separação asfalto/chão do app (etiquetas do OpenStreetMap; sem elas, a estimativa do roteador)
   async function superficie(t){
-    const corpo = {costing:'auto', shape_match:'edge_walk',
-      filters:{attributes:['edge.surface','edge.length','edge.way_id','edge.begin_shape_index','edge.end_shape_index'], action:'include'}};
-    if(t.enc) corpo.encoded_polyline = t.enc; else corpo.shape = t.coords.map(c => ({lat: c[1], lon: c[0]}));
-    let ta;
-    try{ ta = await valhalla('trace_attributes', corpo); }
-    catch(e){
-      // com ponto de passagem o casamento exato às vezes falha; aí casa pelo mapa e usa o traçado casado
-      corpo.shape_match = 'walk_or_snap';
-      ta = await valhalla('trace_attributes', corpo);
-      if(!ta.shape) throw e;
-      t.coords = decodificar(ta.shape);
+    const edges = [];
+    for(const l of t.legs){
+      const ta = await valhalla('trace_attributes', {encoded_polyline: l.enc, costing:'auto', shape_match:'edge_walk',
+        filters:{attributes:['edge.surface','edge.length','edge.way_id','edge.begin_shape_index','edge.end_shape_index'], action:'include'}});
+      ta.edges.forEach(e => edges.push(Object.assign({}, e, {begin_shape_index: e.begin_shape_index + l.base, end_shape_index: e.end_shape_index + l.base})));
     }
     let tags = new Map();
     try{
-      const ids = [...new Set(ta.edges.map(e => e.way_id))];
+      const ids = [...new Set(edges.map(e => e.way_id))];
       for(let i = 0; i < ids.length; i += 1500){
         const j = await buscar('https://overpass-api.de/api/interpreter', {method:'POST',
           body: 'data=' + encodeURIComponent(`[out:json][timeout:25];way(id:${ids.slice(i, i + 1500).join(',')});out tags;`)}, 25000);
@@ -56,7 +55,7 @@
       }
     }catch(e){ tags = null; }
     const tot = {pav: 0, chao: 0, inc: 0}, trechos = [];
-    ta.edges.forEach(e => {
+    edges.forEach(e => {
       const c = classe(tags ? (tags.get(e.way_id) || {}) : null, e);
       tot[c] += e.length;
       trechos.push({c, i0: e.begin_shape_index, i1: e.end_shape_index});
@@ -112,7 +111,7 @@
     if(!A || !A.via.length) return;
     A.status = 'busca'; A.msg = 'Calculando a rota pelos pontos marcados…'; rrRender();
     try{
-      const locs = [{lat: p.lat, lon: p.lng}, ...A.via.map(v => ({lat: v.lat, lon: v.lng, type: 'through'})), {lat: o.lat, lon: o.lng}];
+      const locs = [{lat: p.lat, lon: p.lng}, ...A.via.map(v => ({lat: v.lat, lon: v.lng})), {lat: o.lat, lon: o.lng}];
       const r = await valhalla('route', {locations: locs, costing: 'auto'});
       if(ALT[k] !== A) return;
       A.msg = 'Lendo o tipo de pavimento…'; rrRender();
