@@ -85,6 +85,8 @@
     PRACAS.forEach(pr => {
       if(pr.lng < minX - 0.01 || pr.lng > maxX + 0.01 || pr.lat < minY - 0.01 || pr.lat > maxY + 0.01) return;
       const p = [pr.lng, pr.lat];
+      // praça colada na origem ou no destino (ex.: pedreira ao lado da praça): não dá para saber se passa por ela
+      if(distSeg(p, c[0], c[0]) < 0.6 || distSeg(p, c[c.length - 1], c[c.length - 1]) < 0.6) return;
       let melhor = Infinity, idx = -1;
       for(let i = 1; i < c.length; i++){
         const a = c[i - 1], b = c[i];
@@ -154,10 +156,10 @@
       <a href="#" id="ped-cfg" style="font-size:11.5px">${aberto ? '▾' : '▸'} Veículo e carga</a>`;
     if(aberto){
       html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;font-size:11.5px">
-        <label>Veículo<select id="ped-eixos" style="width:100%">${ops}</select></label>
-        <label>Carga por viagem (t)<input id="ped-carga" type="number" min="0" step="0.5" value="${h(CFG.carga)}" style="width:100%"></label>
-        <label style="display:flex;gap:4px;align-items:center"><input id="ped-volta" type="checkbox"${CFG.volta ? ' checked' : ''}> Contar a volta</label>
-        <label>Eixos suspensos na volta vazia<input id="ped-susp" type="number" min="0" max="${Math.max(0, +CFG.eixos - 2)}" step="1" value="${h(CFG.susp)}" style="width:100%"${CFG.volta ? '' : ' disabled'}></label></div>
+        <label style="text-transform:none;letter-spacing:0;font-weight:500;font-size:11.5px;color:inherit">Veículo<select id="ped-eixos" style="width:100%">${ops}</select></label>
+        <label style="text-transform:none;letter-spacing:0;font-weight:500;font-size:11.5px;color:inherit">Carga por viagem (t)<input id="ped-carga" type="number" min="0" step="0.5" value="${h(CFG.carga)}" style="width:100%"></label>
+        <label style="text-transform:none;letter-spacing:0;font-weight:500;font-size:11.5px;color:inherit;display:flex;gap:4px;align-items:center"><input id="ped-volta" style="width:auto;margin:0" type="checkbox"${CFG.volta ? ' checked' : ''}> Contar a volta</label>
+        <label style="text-transform:none;letter-spacing:0;font-weight:500;font-size:11.5px;color:inherit">Eixos suspensos na volta vazia<input id="ped-susp" type="number" min="0" max="${Math.max(0, +CFG.eixos - 2)}" step="1" value="${h(CFG.susp)}" style="width:100%"${CFG.volta ? '' : ' disabled'}></label></div>
         <div class="hint" style="font-size:11px">Caminhão paga por eixo. Vazio, o eixo suspenso não paga (Lei 13.103/2015). O valor por tonelada é o pedágio da viagem (ida + volta) ÷ carga. Tarifas de ${ATUALIZADO}; praças estaduais pela tarifa básica da AGER-MT.</div>`;
     }
     return html + '</div>';
