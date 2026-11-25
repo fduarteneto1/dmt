@@ -43,6 +43,13 @@ Calcula a taxa de emulsão do microrrevestimento por usinada e grava na planilha
 - As rotas vêm do OpenStreetMap (serviço público OSRM). A separação entre trecho pavimentado e não pavimentado não é automática.
 - Se a rota não for encontrada, a ferramenta usa a distância em linha reta × 1,3 e mostra um aviso.
 
+## Rotas alternativas (Rota até a obra)
+Ao clicar numa obra e depois numa pedreira ou distribuidora, a caixa **Rota até a obra** mostra a rota proposta. Embaixo dela:
+- **🔀 Ver rotas alternativas:** pede ao roteador outras rotas e uma rota **evitando estrada de chão**. Cada uma mostra km total, asfalto, chão, tempo e a diferença para a proposta. As que não estão escolhidas aparecem no mapa em cinza tracejado; clique na lista ou na linha para escolher.
+- **📍 Passar por um ponto:** clique no mapa num ponto da estrada por onde a rota deve passar (uma cidade, um trevo na rodovia asfaltada). Dá para marcar vários; a ferramenta encaixa cada um na ordem do caminho. Clique no número no mapa para tirar um ponto, ou em **Limpar pontos**. Esc cancela a marcação.
+- A rota escolhida é a desenhada no mapa e a que vai para **Usar no cálculo de DMT**. Ela fica guardada enquanto a ferramenta estiver aberta.
+- O código está em `rotas.js`, carregado pelo `index.html` como os outros módulos, sem nada secreto. Usa o mesmo roteador público (Valhalla/OpenStreetMap), que aceita 1 consulta por segundo, por isso as alternativas levam alguns segundos.
+
 ## Equipamentos (aba Equipamentos)
 Cadastro de máquinas e veículos (veio do quadro "Cadastro de Máquinas e Veículos" do Trello) e alocação de cada um numa obra (pelo **código** da obra), na sede (`ADM`) ou sem alocação, com a situação: Operando, Parado, Manutenção ou Disponível.
 - Os dados ficam na aba oculta **Gestao360** da planilha, linha 2 (`A2 = equipamentos`). O código da aba está em `equipamentos.js`, carregado pelo `index.html` como o `obras-sync.js`, sem nada secreto.
