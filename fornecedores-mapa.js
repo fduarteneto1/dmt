@@ -99,7 +99,13 @@
   const halo = L.marker([0, 0], {interactive: false, keyboard: false, zIndexOffset: 900,
     icon: L.divIcon({className: 'g360-fhalo', iconSize: [44, 44], iconAnchor: [22, 22], html: '<i></i><i></i>'})});
   let selId = null;
+  function limpar(){
+    if(selId && marcas[selId]) marcas[selId].setZIndexOffset(-100);
+    selId = null; halo.remove();
+    document.querySelectorAll('#for-lista li.sel').forEach(x => x.classList.remove('sel'));
+  }
   function destacar(id){
+    if(id === selId){ map.closePopup(); limpar(); return true; } // clicou de novo: desmarca
     if(!ligado){ ligado = true; try{ localStorage.setItem(CHAVE, '1'); }catch(e){} camada.addTo(map); pintar(); }
     const mk = marcas[id];
     if(!mk){ selId = null; halo.remove(); return false; }
@@ -114,7 +120,8 @@
     map.flyTo(ll, Math.max(map.getZoom(), 13), {duration: .8});
     return true;
   }
-  map.on('click', () => { selId = null; halo.remove(); });
+  map.on('click', limpar);
+  map.on('popupclose', e => { if(selId && e.popup._source === marcas[selId]) limpar(); });
 
   // ---------- botão liga/desliga ----------
   let botao = null;
@@ -127,7 +134,7 @@
     botao = d.firstChild; pintar();
     L.DomEvent.on(botao, 'click', ev => { L.DomEvent.preventDefault(ev); ligado = !ligado;
       try{ localStorage.setItem(CHAVE, ligado ? '1' : '0'); }catch(e){}
-      ligado ? camada.addTo(map) : camada.remove(); pintar(); });
+      ligado ? camada.addTo(map) : (camada.remove(), limpar()); pintar(); });
     return d;
   }});
   new Botao().addTo(map);
@@ -146,5 +153,5 @@
   if(ligado) camada.addTo(map);
   legenda(); setTimeout(legenda, 1500);
   document.addEventListener('g360-cotacoes', desenhar);
-  window.G360FornMapa = {desenhar, camada, destacar};
+  window.G360FornMapa = {desenhar, camada, destacar, limpar};
 })();
