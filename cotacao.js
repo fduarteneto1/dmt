@@ -66,6 +66,10 @@
   const opcoes = (c, i) => { const r = raiz(c, i); return r.alt ? [r] : [r].concat(c.itens.filter(x => x.alt === r.id)); };
   const ativo = (c, i) => { const op = opcoes(c, i); if(op.length < 2) return true; const r = op[0]; return (op.find(x => x.id === r.sel) || r) === i; };
   const letraOp = (c, i) => String.fromCharCode(65 + Math.max(0, opcoes(c, i).indexOf(i)));
+  // Cada fornecedor pode valer com uma opção diferente (ex.: Todimo com a B, Verdão com a A): o principal guarda
+  // em i.sf = {id do fornecedor: id da opção}. Fornecedor sem marcação usa a opção padrão (i.sel).
+  const opPad = (c, i) => { const op = opcoes(c, i), r = op[0]; return op.find(x => x.id === r.sel) || r; };
+  const opDe = (c, i, fid) => { const op = opcoes(c, i); if(op.length < 2) return i; const s = op[0].sf && op[0].sf[fid]; return op.find(x => x.id === s) || opPad(c, i); };
   const numCot = c => 'COT-' + (c.ano || String(c.d || '').slice(0, 4)) + '-' + String(c.n || 0).padStart(3, '0');
 
   function locais(){
@@ -89,7 +93,8 @@
       c.tit = base.tit ? base.tit + ' (cópia)' : ''; c.o = base.o; c.sol = base.sol;
       const mp = {}; base.itens.forEach(i => mp[i.id] = uid());
       c.itens = base.itens.map(i => { const n = {id: mp[i.id], desc: i.desc, un: i.un, q: i.q, obs: i.obs};
-        if(i.alt && mp[i.alt]) n.alt = mp[i.alt]; if(i.sel && mp[i.sel]) n.sel = mp[i.sel]; return n; });
+        if(i.alt && mp[i.alt]) n.alt = mp[i.alt]; if(i.sel && mp[i.sel]) n.sel = mp[i.sel];
+        if(i.sf){ n.sf = {}; Object.keys(i.sf).forEach(f => { if(mp[i.sf[f]]) n.sf[f] = mp[i.sf[f]]; }); } return n; });
       c.fs = base.fs.map(f => ({id: f.id, nome: f.nome, frete: 0, tf: f.tf || 'CIF', desc: 0, prazo: '', pag: f.pag || '', val: '', obs: '', p: {}}));
       c.hist[0].a = 'Criada a partir de ' + numCot(base);
     }
@@ -103,8 +108,15 @@
     const todos = c.itens.filter(i => String(i.desc || '').trim() || ok(num(i.q)));
     const itens = todos.filter(i => ativo(c, i)); // só a opção escolhida de cada item entra na conta
     const fs = c.fs;
-    const ef = (f, i) => { const p = num(f.p && f.p[i.id]); return ok(p) ? p * (1 - (num(f.desc) || 0) / 100) : null; };
-    const R = {itens, todos, fs, it: {}, f: {}, semPreco: 0};
+    // na linha que representa o item na conta, o preço de cada fornecedor vem da opção que vale para ele
+    const alvo = (f, i) => itens.includes(i) ? opDe(c, i, f.id) : i;
+    const efB = (f, i) => { const p = num(f.p && f.p[i.id]); return ok(p) ? p * (1 - (num(f.desc) || 0) / 100) : null; };
+    const ef = (f, i) => efB(f, alvo(f, i));
+    const R = {itens, todos, fs, it: {}, f: {}, raw: {}, semPreco: 0};
+    todos.forEach(i => { // preços crus de cada linha (cada opção separada), para comparar as opções entre si
+      const vs = fs.map(f => efB(f, i)).filter(v => v != null);
+      R.raw[i.id] = {q: num(i.q) || 0, min: vs.length ? Math.min(...vs) : null, melhores: vs.length ? fs.filter(f => efB(f, i) != null && efB(f, i) - Math.min(...vs) < 0.000001).map(f => f.id) : []};
+    });
     todos.forEach(i => {
       const q = num(i.q) || 0, vs = fs.map(f => ({f, v: ef(f, i)})).filter(x => x.v != null);
       const r = {q, n: vs.length, min: null, max: null, med: null, melhores: []};
@@ -117,7 +129,7 @@
     });
     fs.forEach(f => {
       let sub = 0, n = 0;
-      itens.forEach(i => { const p = num(f.p && f.p[i.id]); if(ok(p)){ sub += p * R.it[i.id].q; n++; } });
+      itens.forEach(i => { const p = num(f.p && f.p[alvo(f, i).id]); if(ok(p)){ sub += p * R.it[i.id].q; n++; } });
       const dv = sub * (num(f.desc) || 0) / 100, fr = num(f.frete) || 0;
       R.f[f.id] = {sub, dv, fr, tot: sub - dv + fr, n, completo: itens.length > 0 && n === itens.length};
     });
@@ -159,7 +171,9 @@
       eMed = med - R.final.tot; eMax = Math.max(...tc) - R.final.tot; base = med;
     }
     R.ecoMed = eMed; R.ecoMax = eMax; R.ecoPct = base > 0 ? eMed / base * 100 : 0;
-    R.ef = ef;
+    R.ef = ef; R.alvo = alvo;
+    R.rep = i => itens.find(x => x === i) || itens.find(x => opcoes(c, x).includes(i)); // linha que representa o item na conta
+    R.escOp = (i, fid) => { const r = R.rep(i); return !!r && R.esc[r.id] === fid && alvo(c.fs.find(f => f.id === fid) || {}, r) === i; };
     return R;
   }
 
@@ -302,7 +316,11 @@
   #cot-mapa .cv-t tr.grp td.it{box-shadow:inset 3px 0 0 var(--line,#d9d9dc)}
   #cot-mapa .cv-t tr.grp.on td.it{box-shadow:inset 3px 0 0 var(--cv)}
   #cot-mapa .cv-t tr.grp.alt td{border-top:1px dashed var(--line,#e8e8ea)}
-  #cot-mapa .cv-t tr.off td.it textarea,#cot-mapa .cv-t tr.off td.u,#cot-mapa .cv-t tr.off td.q,#cot-mapa .cv-t tr.off td.pc{opacity:.55}
+  #cot-mapa .cv-t tr.off td.it textarea,#cot-mapa .cv-t tr.off td.u,#cot-mapa .cv-t tr.off td.q{opacity:.55}
+  #cot-mapa .cv-t td.pc.fo .pw,#cot-mapa .cv-t td.pc.fo .tv,#cot-mapa .cv-t td.pc.fo .mk{opacity:.45}
+  #cot-mapa .cv-t td.pc .sfo{float:left;display:inline-flex;align-items:center;gap:2px;margin:0;font-size:10px;font-weight:700;color:var(--ink3,#8e8e8e);cursor:pointer}
+  #cot-mapa .cv-t td.pc .sfo input{width:auto;margin:0;padding:0;accent-color:var(--cv);cursor:pointer}
+  #cot-mapa .cv-t td.pc:not(.fo) .sfo{color:var(--cv)}
   #cot-mapa .cv-t tr.off .opc label{color:var(--ink3,#8e8e8e)}
   #cot-mapa .cv-t td.ac{white-space:nowrap;width:58px}
   #cot-mapa .cv-t td.ac .ao{background:none;border:0;color:var(--cv);padding:0 3px;font-size:13px;font-weight:700;cursor:pointer;opacity:0}
@@ -477,8 +495,8 @@
     vivos(D.cot).forEach(c => { const R = calc(c);
       R.todos.forEach(i => c.fs.forEach(f => { const p = num(f.p[i.id]); if(!ok(p)) return;
         lin.push([numCot(c), dataBR(c.d), c.tit, c.o, c.sol, c.u, (SIT[c.st] || {}).n, i.desc, i.un, fq(i.q), f.nome, f2(p), f2(p * (num(i.q) || 0)),
-          R.it[i.id].melhores.includes(f.id) ? 'sim' : '', R.esc[i.id] === f.id ? 'sim' : '',
-          opcoes(c, i).length > 1 ? letraOp(c, i) + (ativo(c, i) ? ' (considerada)' : ' (não considerada)') : '']); })); });
+          R.raw[i.id].melhores.includes(f.id) ? 'sim' : '', R.escOp(i, f.id) ? 'sim' : '',
+          opcoes(c, i).length > 1 ? letraOp(c, i) + (opDe(c, i, f.id) === i ? ' (considerada)' : ' (não considerada)') : '']); })); });
     const csv = '\ufeff' + lin.map(r => r.map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(';')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
     a.download = 'cotacoes-' + hoje() + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -758,7 +776,7 @@
     const l = [];
     vivos(D.cot).filter(c => c.st !== 'cancelada').forEach(c => { const R = calc(c);
       R.todos.filter(i => pal.every(p => String(i.desc).toLowerCase().includes(p))).forEach(i => c.fs.forEach(f => {
-        const p = num(f.p[i.id]); if(ok(p)) l.push({c, i, f, p, esc: R.esc[i.id] === f.id && c.st !== 'aberta', min: R.it[i.id].melhores.includes(f.id)}); })); });
+        const p = num(f.p[i.id]); if(ok(p)) l.push({c, i, f, p, esc: R.escOp(i, f.id) && c.st !== 'aberta', min: R.raw[i.id].melhores.includes(f.id)}); })); });
     l.sort((a, b2) => String(b2.c.d).localeCompare(String(a.c.d)) || a.p - b2.p);
     const esc = l.filter(x => x.esc);
     const ps = l.map(x => x.p);
@@ -775,8 +793,9 @@
     const d = String(desc || '').trim().toLowerCase(); if(d.length < 3) return null;
     let m = null;
     vivos(D.cot).forEach(c => { if(c.id === menosId || c.st === 'aberta' || c.st === 'cancelada' || c.st === 'aprovacao') return; const R = calc(c);
-      R.itens.forEach(i => { if(String(i.desc).trim().toLowerCase() !== d) return; const fid = R.esc[i.id], f = c.fs.find(x => x.id === fid); if(!f) return;
-        const p = num(f.p[i.id]); if(ok(p) && (!m || c.d > m.d)) m = {p, d: c.d, f: f.nome}; }); });
+      R.itens.forEach(i => { const fid = R.esc[i.id], f = c.fs.find(x => x.id === fid); if(!f) return; const a = R.alvo(f, i);
+        if(String(a.desc).trim().toLowerCase() !== d) return;
+        const p = num(f.p[a.id]); if(ok(p) && (!m || c.d > m.d)) m = {p, d: c.d, f: f.nome}; }); });
     return m;
   }
 
@@ -998,7 +1017,7 @@
           ${tr ? '' : '<tbody class="nv"><tr><td class="fix" colspan="3"><a data-a="item">+ novo item</a><a data-a="colar">📋 colar do Excel</a></td>' + '<td colspan="' + (fs.length + (fs.length > 1 ? 1 : 0) + 1) + '"></td></tr></tbody>'}
           <tfoot id="cm-f"></tfoot>
         </table></div>
-        ${tr ? '' : '<div class="hint cv-dica">Clique no valor para lançar o preço unitário; em branco = o fornecedor não cotou. Enter desce para o próximo item. Verde = menor preço do item (já com desconto) · vermelho = o mais caro · fundo verde-petróleo = compra escolhida. ⎇ (no fim da linha) cria uma opção alternativa do item — ex.: pneu 1000x20 borrachudo × liso — e você marca qual opção entra no cálculo.</div>'}
+        ${tr ? '' : '<div class="hint cv-dica">Clique no valor para lançar o preço unitário; em branco = o fornecedor não cotou. Enter desce para o próximo item. Verde = menor preço do item (já com desconto) · vermelho = o mais caro · fundo verde-petróleo = compra escolhida. ⎇ (no fim da linha) cria uma opção alternativa do item — ex.: pneu 1000x20 borrachudo × liso — e você marca qual opção entra no cálculo: a bolinha "Opção A/B" vale para todos os fornecedores, e a bolinha A/B ao lado de cada preço escolhe a opção de um fornecedor só (ex.: Todimo na B, Verdão na A).</div>'}
       </div>
 
       <div class="cv-folha"><h2>Resultado</h2><div id="cm-res"></div></div>
@@ -1060,16 +1079,17 @@
     const disQ = filho ? ' disabled title="Mesma unidade e quantidade da opção A"' : dis;
     return '<tr data-i="' + i.id + '"' + (grp ? ' class="grp' + (filho ? ' alt' : '') + (at ? ' on' : ' off') + '"' : '') + '>'
       + '<td class="it fix">'
-      + (grp ? '<div class="opc"><label title="Marque a opção que entra no cálculo da cotação"><input type="radio" name="op-' + op[0].id + '" data-op' + (at ? ' checked' : '') + dis + '>Opção ' + letraOp(c, i)
-        + (at ? ' · no cálculo' : '') + '</label><span class="opm"></span></div>' : '')
+      + (grp ? '<div class="opc"><label title="Usar esta opção para todos os fornecedores (depois dá para trocar fornecedor a fornecedor, no ◉ ao lado do preço)"><input type="radio" name="op-' + op[0].id + '" data-op' + (at ? ' checked' : '') + dis + '>Opção ' + letraOp(c, i)
+        + '<span class="opq"></span></label><span class="opm"></span></div>' : '')
       + '<textarea data-ik="desc" rows="1" placeholder="' + (filho ? 'descrição da alternativa (ex.: mesma medida, outra especificação)' : 'descrição do item') + '"' + dis + '>' + h(i.desc) + '</textarea>'
       + (ult ? '<span class="ult">último preço: ' + R$(ult.p) + ' · ' + h(ult.f) + ' · ' + dataBR(ult.d) + '</span>' : '') + '</td>'
       + '<td class="c u"><input data-ik="un" value="' + h(i.un) + '" list="cot-un" style="text-align:center"' + disQ + '></td>'
       + '<td class="n q"><input data-ik="q" value="' + h(i.q == null ? '' : fqIn(i.q)) + '" inputmode="decimal" style="text-align:right"' + disQ + '></td>'
       + c.fs.map(f => '<td class="pc" data-c="' + f.id + '">'
+        + (grp ? '<label class="sfo" title="Considerar a opção ' + letraOp(c, i) + ' para ' + h(f.nome) + '"><input type="radio" name="sf-' + op[0].id + '-' + f.id + '" data-sf="' + f.id + '"' + dis + '>' + letraOp(c, i) + '</label>' : '')
         + (edita ? '<div class="pw"><span class="rs">R$</span><input class="pr" data-p="' + f.id + '" inputmode="decimal" value="' + h(prIn(f.p[i.id])) + '" placeholder="–"></div>' : '<span class="tv"></span>')
         + '<span class="mk"></span></td>').join('')
-      + (c.fs.length > 1 ? '<td class="cd">' + (at ? '<select data-v' + dis + '></select>' : '<span class="hint">fora do cálculo</span>') + '</td>' : '')
+      + (c.fs.length > 1 ? '<td class="cd">' + (at ? '<select data-v' + dis + '></select>' : '<span class="hint">escolha na opção ' + letraOp(c, op.find(x => ativo(c, x)) || op[0]) + '</span>') + '</td>' : '')
       + (tr ? '' : '<td class="ac"><button class="ao" data-ao title="Criar opção alternativa deste item (mesma medida, outra especificação — ex.: pneu borrachudo × liso)">⎇</button><button class="x" data-ri title="Excluir ' + (filho ? 'esta opção' : 'item') + '">×</button></td>') + '</tr>';
   }
   const prIn = v => ok(num(v)) ? f2(num(v)) : '';
@@ -1099,7 +1119,7 @@
         el.addEventListener('focus', () => el.select());
       });
       // clicar em qualquer ponto da célula do preço leva ao campo
-      tr.querySelectorAll('td.pc').forEach(td => td.addEventListener('mousedown', e => { const inp = td.querySelector('input'); if(inp && e.target !== inp){ e.preventDefault(); inp.focus(); } }));
+      tr.querySelectorAll('td.pc').forEach(td => td.addEventListener('mousedown', e => { const inp = td.querySelector('input.pr'); if(e.target.closest('.sfo')) return; if(inp && e.target !== inp){ e.preventDefault(); inp.focus(); } }));
       const sv = tr.querySelector('select[data-v]');
       if(sv) sv.onchange = () => {
         c.venc = c.venc || {};
@@ -1110,8 +1130,15 @@
         if(foco){ const t = M.querySelector('#cm-b tr[data-i="' + foco + '"] [data-ik=desc]'); if(t){ t.focus(); t.setSelectionRange(t.value.length, t.value.length); } } };
       // qual opção do item entra no cálculo
       const ro = tr.querySelector('input[data-op]');
-      if(ro) ro.onchange = () => { const r = raiz(c, i); r.sel = r === i ? '' : i.id;
-        registrar(c, 'Opção ' + letraOp(c, i) + ' considerada: ' + (i.desc || 'sem descrição')); mexeu(c, true); redesenhar(); };
+      if(ro) ro.onchange = () => { const r = raiz(c, i); r.sel = r === i ? '' : i.id; delete r.sf;
+        registrar(c, 'Opção ' + letraOp(c, i) + ' considerada para todos os fornecedores: ' + (i.desc || 'sem descrição')); mexeu(c, true); redesenhar(); };
+      // opção que vale para um fornecedor só (ex.: Todimo com a B, os outros com a A)
+      tr.querySelectorAll('input[data-sf]').forEach(el => el.onchange = () => {
+        const r = raiz(c, i), fid = el.dataset.sf, f = c.fs.find(x => x.id === fid);
+        r.sf = r.sf || {}; if(opPad(c, i) === i) delete r.sf[fid]; else r.sf[fid] = i.id;
+        if(!Object.keys(r.sf).length) delete r.sf;
+        registrar(c, (f ? f.nome : 'Fornecedor') + ': opção ' + letraOp(c, i) + ' considerada (' + (i.desc || 'sem descrição') + ')'); mexeu(c);
+      });
       // nova opção alternativa, logo abaixo das opções que o item já tem
       const ao = tr.querySelector('[data-ao]');
       if(ao) ao.onclick = () => {
@@ -1125,7 +1152,9 @@
         if((i.desc || c.fs.some(f => ok(num(f.p[i.id])))) && !confirm('Excluir ' + (grp ? 'a opção ' + letraOp(c, i) : 'o item') + ' "' + (i.desc || 'sem descrição') + '"?')) return;
         if(grp && op[0] === i){ // saiu a opção A: a B passa a ser a principal
           const nv = op[1]; delete nv.alt; op.slice(2).forEach(x => x.alt = nv.id); nv.sel = i.sel && i.sel !== nv.id ? i.sel : '';
-        } else if(grp && op[0].sel === i.id) op[0].sel = '';
+          if(i.sf){ nv.sf = {}; Object.keys(i.sf).forEach(f => { if(i.sf[f] !== nv.id) nv.sf[f] = i.sf[f]; }); if(!Object.keys(nv.sf).length) delete nv.sf; }
+        } else if(grp){ if(op[0].sel === i.id) op[0].sel = '';
+          if(op[0].sf){ Object.keys(op[0].sf).forEach(f => { if(op[0].sf[f] === i.id) delete op[0].sf[f]; }); if(!Object.keys(op[0].sf).length) delete op[0].sf; } }
         c.itens = c.itens.filter(x => x !== i); c.fs.forEach(f => delete f.p[i.id]); mexeu(c, true); redesenhar();
       };
     });
@@ -1146,23 +1175,31 @@
     const R = calc(c), tr = travada(c);
     estadoSalvo();
     $('cm-b').querySelectorAll('tr[data-i]').forEach(row => {
-      const i = c.itens.find(x => x.id === row.dataset.i), r = R.it[i.id];
+      const i = c.itens.find(x => x.id === row.dataset.i), grp = opcoes(c, i).length > 1, rp = grp ? R.rep(i) : i;
+      let usam = 0;
       c.fs.forEach(f => {
         const p = num(f.p[i.id]), td = row.querySelector('td[data-c="' + f.id + '"]'); if(!td) return;
-        const v = R.ef(f, i), min = r && v != null && r.n > 1 && r.melhores.includes(f.id), esc = r && R.esc[i.id] === f.id && c.fs.length > 1;
+        // item com opções: a célula só conta se esta for a opção que vale para o fornecedor
+        const usa = !grp || (rp && R.alvo(f, rp) === i); if(usa) usam++;
+        td.classList.toggle('fo', !usa);
+        const sf = td.querySelector('input[data-sf]'); if(sf) sf.checked = usa;
+        const r = usa ? R.it[rp.id] : null;
+        const v = usa ? R.ef(f, rp) : null, min = r && v != null && r.n > 1 && r.melhores.includes(f.id), esc = r && R.esc[rp.id] === f.id && c.fs.length > 1;
         td.classList.toggle('min', !!min);
         td.classList.toggle('esc', !!esc);
         td.classList.toggle('alto', !!(r && v != null && r.n > 2 && v - r.max > -0.000001 && r.max > r.min));
         td.classList.toggle('vz', !ok(p));
-        const q = r ? r.q : (num(i.q) || 0);
+        const q = num(i.q) || 0;
         const tv = td.querySelector('.tv'); if(tv) tv.textContent = ok(p) ? R$(MOS === 't' ? p * q : p) : 'R$ –';
         const mk = td.querySelector('.mk');
         if(mk) mk.textContent = !ok(p) ? '' : MOS === 't' ? 'unit. ' + R$(p) : (q ? '= ' + R$(p * q) : '');
-        td.title = r && v != null && r.min != null && v > r.min ? '+' + pct((v / r.min - 1) * 100) + ' sobre o menor' : (min ? 'Menor preço do item' : '');
+        td.title = !usa ? 'Opção não considerada para ' + f.nome + ' — marque o ◉ para usar esta' : r && v != null && r.min != null && v > r.min ? '+' + pct((v / r.min - 1) * 100) + ' sobre o menor' : (min ? 'Menor preço do item' : '');
       });
+      if(grp){ row.classList.toggle('on', usam > 0); row.classList.toggle('off', !usam);
+        const oq = row.querySelector('.opq'); if(oq) oq.textContent = usam === c.fs.length && c.fs.length ? ' · no cálculo' : usam ? ' · ' + c.fs.filter(f => R.alvo(f, rp) === i).map(f => f.nome).join(', ') : ''; }
       const om = row.querySelector('.opm');
       if(om){ // menor total de cada opção, para ajudar a escolher
-        const tot = x => { const y = R.it[x.id]; return y && y.min != null ? y.min * y.q : null; };
+        const tot = x => { const y = R.raw[x.id]; return y && y.min != null ? y.min * y.q : null; };
         const ts = opcoes(c, i).map(tot).filter(v => v != null), t = tot(i);
         const bar = t != null && ts.length > 1 && t - Math.min(...ts) < 0.005;
         om.textContent = t == null ? 'sem preço' : 'melhor: ' + R$(t) + (bar ? ' · mais barata' : '');
@@ -1277,7 +1314,7 @@
     });
     $('cm-ped').innerHTML = !ped.length ? '<div class="hint">Assim que houver preços, aparece aqui o que comprar de cada fornecedor.</div>'
       : ped.map(p => '<div class="ped"><b>' + h(p.f.nome) + '</b><b class="t">' + R$(p.tot) + '</b><ul>'
-        + p.its.map(i => '<li>' + h(i.desc) + ' — ' + fq(i.q) + ' ' + h(i.un || '') + ' × ' + R$(R.ef(p.f, i)) + '</li>').join('')
+        + p.its.map(i => '<li>' + h(R.alvo(p.f, i).desc) + ' — ' + fq(i.q) + ' ' + h(i.un || '') + ' × ' + R$(R.ef(p.f, i)) + '</li>').join('')
         + (R.f[p.f.id].fr ? '<li>Frete ' + h(p.f.tf || '') + ': ' + R$(R.f[p.f.id].fr) + '</li>' : '') + '</ul>'
         + '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="sec mini" data-pf="' + p.f.id + '" data-t="zap">Pedido no WhatsApp</button><button class="sec mini" data-pf="' + p.f.id + '" data-t="cp">Copiar texto</button>'
         + '<span class="hint">' + [p.f.prazo && 'Entrega: ' + h(p.f.prazo), p.f.pag && 'Pagto: ' + h(p.f.pag)].filter(Boolean).join(' · ') + '</span></div></div>').join('')
@@ -1286,7 +1323,7 @@
       const p = ped.find(x => x.f.id === b.dataset.pf); if(!p) return;
       const o = c.o ? nomeLocal(c.o) : '';
       const t = '*Pedido de compra – BKP Construtora*\nRef.: ' + numCot(c) + (c.tit ? ' – ' + c.tit : '') + (o ? '\nObra: ' + o : '') + '\n\n'
-        + p.its.map((i, k) => (k + 1) + '. ' + i.desc + ' — ' + fq(i.q) + ' ' + (i.un || '') + ' × ' + R$(R.ef(p.f, i)) + ' = ' + R$(R.ef(p.f, i) * R.it[i.id].q)).join('\n')
+        + p.its.map((i, k) => (k + 1) + '. ' + R.alvo(p.f, i).desc + ' — ' + fq(i.q) + ' ' + (i.un || '') + ' × ' + R$(R.ef(p.f, i)) + ' = ' + R$(R.ef(p.f, i) * R.it[i.id].q)).join('\n')
         + (R.f[p.f.id].fr ? '\nFrete (' + (p.f.tf || '') + '): ' + R$(R.f[p.f.id].fr) : '')
         + '\n\n*Total: ' + R$(p.tot) + '*' + (p.f.pag ? '\nPagamento: ' + p.f.pag : '') + (p.f.prazo ? '\nEntrega: ' + p.f.prazo : '')
         + '\n\nPor favor, confirme o recebimento do pedido e a data de entrega. Faturar para BKP Construtora.';
@@ -1427,8 +1464,9 @@
     const linhaCond = (rot, fn) => '<tr class="cond"><td colspan="4" class="r">' + rot + '</td>' + fs.map(f => '<td colspan="2" class="c">' + fn(f) + '</td>').join('') + '</tr>';
     const melhorTot = Math.min(...fs.filter(f => R.f[f.id].completo).map(f => R.f[f.id].tot), Infinity);
     // item com opções: mostra a escolhida na tabela e lista as outras embaixo da descrição
-    const notaOp = i => { const op = opcoes(c, i).filter(x => x !== i && R.it[x.id]); if(!op.length) return '';
-      return '<br><small style="color:#8e8e8e">Opção ' + letraOp(c, i) + ' escolhida · outra(s): ' + op.map(x => letraOp(c, x) + ') ' + h(x.desc) + (R.it[x.id].min != null ? ' – melhor ' + R$(R.it[x.id].min * R.it[x.id].q) : ' – sem preço')).join('; ') + '</small>'; };
+    const notaOp = i => { const op = opcoes(c, i).filter(x => x !== i && R.raw[x.id]); if(!op.length) return '';
+      return '<br><small style="color:#8e8e8e">Opção ' + letraOp(c, i) + ' (padrão) · outra(s): ' + op.map(x => letraOp(c, x) + ') ' + h(x.desc) + (R.raw[x.id].min != null ? ' – melhor ' + R$(R.raw[x.id].min * R.raw[x.id].q) : ' – sem preço')).join('; ')
+        + (fs.some(f => R.alvo(f, i) !== i) ? ' · ' + fs.filter(f => R.alvo(f, i) !== i).map(f => h(f.nome) + ' cotado na opção ' + letraOp(c, R.alvo(f, i))).join('; ') : '') + '</small>'; };
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Mapa de cotação ${numCot(c)}</title>
 <style>
  @page{size:A4 landscape;margin:10mm}
@@ -1463,9 +1501,9 @@
  ${fs.map(f => '<th colspan="2" class="f">' + h(f.nome) + '</th>').join('')}</tr>
  <tr>${fs.map(() => '<th>Unitário</th><th>Total</th>').join('')}</tr></thead><tbody>
  ${R.itens.map((i, k) => '<tr><td class="c">' + (k + 1) + '</td><td>' + h(i.desc) + notaOp(i) + '</td><td class="c">' + h(i.un || '') + '</td><td class="n">' + fq(i.q) + '</td>'
-   + fs.map(f => { const p = num(f.p[i.id]), r = R.it[i.id], min = ok(p) && r.n > 1 && r.melhores.includes(f.id), e = R.esc[i.id] === f.id && fs.length > 1;
+   + fs.map(f => { const a = R.alvo(f, i), p = num(f.p[a.id]), r = R.it[i.id], min = ok(p) && r.n > 1 && r.melhores.includes(f.id), e = R.esc[i.id] === f.id && fs.length > 1;
      const cl = (min ? 'min ' : '') + (e ? 'esc' : '');
-     return ok(p) ? '<td class="n ' + cl + '">' + f2(p) + '</td><td class="n ' + cl + '">' + f2(p * r.q) + '</td>' : '<td class="c" colspan="2" style="color:#aaa">não cotou</td>'; }).join('') + '</tr>').join('')}
+     return ok(p) ? '<td class="n ' + cl + '">' + (a !== i ? '<small style="color:#8e8e8e">(' + letraOp(c, a) + ') </small>' : '') + f2(p) + '</td><td class="n ' + cl + '">' + f2(p * r.q) + '</td>' : '<td class="c" colspan="2" style="color:#aaa">não cotou</td>'; }).join('') + '</tr>').join('')}
  ${linhaCond('Subtotal', f => R$(R.f[f.id].sub))}
  ${fs.some(f => num(f.desc) > 0) ? linhaCond('Desconto', f => num(f.desc) > 0 ? pct(num(f.desc)) + ' (− ' + R$(R.f[f.id].dv) + ')' : '—') : ''}
  ${linhaCond('Frete', f => (f.tf || '') + (R.f[f.id].fr ? ' · ' + R$(R.f[f.id].fr) : ''))}
