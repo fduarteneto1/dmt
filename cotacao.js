@@ -166,7 +166,7 @@
   #aba-cot .li .vl{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap;text-align:right}
   #aba-cot .li .vl small{display:block;font-weight:400;color:#1f7a3d;font-size:10.5px}
   #for-lista .li.sel{background:#cffafe;box-shadow:inset 3px 0 0 #0e7490}
-  #for-lista .li .ed{flex:none;border:1px solid var(--line,#e4e4e7);background:#fff;border-radius:6px;padding:3px 7px;font-size:13px;line-height:1;cursor:pointer;color:var(--ink2,#555)}
+  #for-lista .li .ed{flex:none;width:auto;min-width:0;margin:0;border:1px solid var(--line,#e4e4e7);background:#fff;border-radius:6px;padding:3px 7px;font-size:13px;line-height:1;cursor:pointer;color:var(--ink2,#555)}
   #for-lista .li .ed:hover{background:var(--head,#f6f6f7)}
   #for-lista .li .sp{display:block;color:#b45309;font-size:10.5px}
   .cot-tag{display:inline-block;font-size:10px;font-weight:700;border-radius:5px;padding:0 6px;border:1px solid currentColor;white-space:nowrap;line-height:16px}
