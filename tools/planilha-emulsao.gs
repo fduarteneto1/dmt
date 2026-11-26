@@ -23,6 +23,7 @@ function tratar(p) {
     if (p.acao === 'lerEquipamentos') return lerEquipamentos(ss);
     if (p.acao === 'lerDiarias') return lerDiarias(ss);
     if (p.acao === 'lerClima') return lerClima(ss);
+    if (p.acao === 'lerCotacoes') return lerCotacoes(ss);
     lock.waitLock(20000);
     if (p.acao === 'registro') return registro(ss, p.r || {});
     if (p.acao === 'usina') return usina(ss, p.u || {});
@@ -31,6 +32,7 @@ function tratar(p) {
     if (p.acao === 'gravarEquipamentos') return gravarEquipamentos(ss, p.dados);
     if (p.acao === 'gravarDiarias') return gravarDiarias(ss, p.dados);
     if (p.acao === 'gravarClima') return gravarClima(ss, p.cfg, p.usuario);
+    if (p.acao === 'gravarCotacoes') return gravarCotacoes(ss, p.dados);
     return { ok: false, erro: 'Ação desconhecida.' };
   } catch (err) {
     return { ok: false, erro: String(err && err.message || err) };
@@ -232,4 +234,63 @@ function tabelasDiarias(ss, d) {
   sf.getRange(1, 1, fl.length, fl[0].length).setValues(fl);
   sf.getRange(2, 5, Math.max(1, fl.length - 1), 1).setNumberFormat('"R$" #,##0.00');
   sf.getRange(1, 1, 1, fl[0].length).setFontWeight('bold'); sf.setFrozenRows(1);
+}
+
+// ---------- Cotações do Gestão 360º (mapas de cotação e fornecedores) ----------
+// Mesmo formato das diárias: JSON completo na aba oculta "G360Cotacoes", em pedaços (coluna A, da linha 2).
+// A cada gravação, as abas "Cotações" (uma linha por cotação) e "Cotações – Preços"
+// (uma linha por item × fornecedor) são refeitas só para consulta (não edite por lá).
+function abaCotacoes(ss) {
+  var sh = ss.getSheetByName('G360Cotacoes');
+  if (!sh) { sh = ss.insertSheet('G360Cotacoes'); sh.getRange(1, 1).setValue('cotacoes'); sh.hideSheet(); }
+  return sh;
+}
+function lerCotacoes(ss) {
+  var sh = abaCotacoes(ss), ult = ultimaLinha(sh), txt = '';
+  if (ult > 1) txt = sh.getRange(2, 1, ult - 1, 1).getValues().map(function (r) { return String(r[0] || '').replace(/^~/, ''); }).join('');
+  var d = null;
+  try { d = txt ? JSON.parse(txt) : null; } catch (x) {}
+  return { ok: true, dados: d && Array.isArray(d.cot) ? d : null, quando: iso(sh.getRange(1, 2).getValue()) };
+}
+function gravarCotacoes(ss, d) {
+  if (!d || !Array.isArray(d.cot) || !Array.isArray(d.forn)) return { ok: false, erro: 'Dados de cotações inválidos.' };
+  var txt = JSON.stringify(d), partes = [];
+  for (var i = 0; i < txt.length; i += PEDACO) partes.push(['~' + txt.slice(i, i + PEDACO)]);
+  var sh = abaCotacoes(ss), ult = ultimaLinha(sh);
+  if (partes.length + 1 > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), partes.length + 10);
+  if (ult > 1) sh.getRange(2, 1, ult - 1, 1).clearContent();
+  sh.getRange(2, 1, partes.length, 1).setNumberFormat('@').setValues(partes);
+  sh.getRange(1, 1, 1, 2).setValues([['cotacoes', new Date()]]);
+  try { tabelasCotacoes(ss, d); } catch (x) {}
+  return { ok: true };
+}
+function tabelasCotacoes(ss, d) {
+  var SIT = { aberta: 'Em cotação', aprovacao: 'Aguardando aprovação', aprovada: 'Aprovada', pedido: 'Pedido emitido', cancelada: 'Cancelada' };
+  var dt = function (s) { s = String(s || ''); if (s.length < 10) return ''; var p = s.slice(0, 10).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); };
+  var nr = function (c) { return 'COT-' + c.ano + '-' + ('00' + c.n).slice(-3); };
+  var lin = [['Nº', 'Data', 'Título', 'Obra', 'Solicitante', 'Comprador', 'Situação', 'Itens', 'Fornecedores', 'Fornecedor(es) escolhido(s)', 'Total escolhido', 'Aprovado por', 'Aprovado em']];
+  var pre = [['Nº', 'Data', 'Obra', 'Situação', 'Item', 'Un', 'Qtd', 'Fornecedor', 'Preço unit.', 'Total', 'Escolhido']];
+  d.cot.filter(function (c) { return !c.del; }).sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : (b.n || 0) - (a.n || 0); }).forEach(function (c) {
+    var r = c.res || {};
+    lin.push([nr(c), dt(c.d), c.tit || '', c.o || '', c.sol || '', c.u || '', SIT[c.st] || c.st, (c.itens || []).length, (c.fs || []).length,
+      (r.forn || []).join(', '), +r.tot || 0, c.apr || '', dt(c.aprd)]);
+    (c.itens || []).forEach(function (i) {
+      (c.fs || []).forEach(function (f) {
+        var p = n(f.p && f.p[i.id]); if (!(p > 0)) return;
+        var q = n(i.q) || 0;
+        pre.push([nr(c), dt(c.d), c.o || '', SIT[c.st] || c.st, i.desc || '', i.un || '', q, f.nome || '', p, p * q, r.esc && r.esc[i.id] === f.id ? 'sim' : '']);
+      });
+    });
+  });
+  var escreve = function (nome, t, datas, reais) {
+    var s = ss.getSheetByName(nome) || ss.insertSheet(nome);
+    s.clearContents();
+    s.getRange(1, 1, t.length, t[0].length).setValues(t);
+    var nl = Math.max(1, t.length - 1);
+    datas.forEach(function (c) { s.getRange(2, c, nl, 1).setNumberFormat('dd/MM/yyyy'); });
+    reais.forEach(function (c) { s.getRange(2, c, nl, 1).setNumberFormat('"R$" #,##0.00'); });
+    s.getRange(1, 1, 1, t[0].length).setFontWeight('bold'); s.setFrozenRows(1);
+  };
+  escreve('Cotações', lin, [2, 13], [11]);
+  escreve('Cotações – Preços', pre, [2], [9, 10]);
 }
