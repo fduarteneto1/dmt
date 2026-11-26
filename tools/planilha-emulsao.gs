@@ -331,16 +331,23 @@ function gravarRH(ss, d) {
   try { tabelasRH(ss, d); } catch (x) {}
   return { ok: true };
 }
+function hoje0() { var h = new Date(); h.setHours(0, 0, 0, 0); return h; }
 function tabelasRH(ss, d) {
   var dt = function (s) { s = String(s || ''); if (s.length < 10) return ''; var p = s.slice(0, 10).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); };
   var mais = function (s, n) { var x = dt(s); if (!x) return ''; x.setDate(x.getDate() + n); return x; };
   var maisMes = function (s, m) { var x = dt(s); if (!x) return ''; x.setMonth(x.getMonth() + m); return x; };
   var pes = {};
   (d.pes || []).forEach(function (p) { if (!p.del) pes[p.id] = p; });
+  var SITP = { ativo: 'Ativo', afastado: 'Afastado', desligado: 'Desligado', conferir: 'Conferir' };
+  var cad = [['Nome', 'Função', 'Setor', 'Obra', 'Registrado', 'Situação', 'Admissão', 'Desligamento', 'Tipo de desligamento', 'Código contab.', 'Observação']];
+  Object.keys(pes).map(function (k) { return pes[k]; }).sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome)); }).forEach(function (p) {
+    var vs = (d.vis || {})[p.id] || {};
+    cad.push([p.nome || '', vs.f || p.funcao || '', p.setor || '', vs.o || p.aloc || '', p.reg || '', SITP[p.dem && dt(p.dem) < hoje0() ? 'desligado' : p.sit] || p.sit || '', dt(p.adm), dt(p.dem), p.tipoDem || '', p.cod || '', p.obsDem || p.obs || '']);
+  });
   var per = [['Código', 'Nome', 'Admissão', 'Situação', 'Início aquisitivo', 'Fim aquisitivo', 'Fim concessivo', 'Direito', 'Gozados', 'Saldo (contab.)', 'Faltas', 'Afastamento', 'Data base']];
   Object.keys(pes).map(function (k) { return pes[k]; }).sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome)); }).forEach(function (p) {
     (p.per || []).forEach(function (x) {
-      per.push([p.cod || '', p.nome || '', dt(p.adm), p.ativo === false ? 'fora da programação' : 'ativo', dt(x.ini), dt(x.fim), maisMes(x.fim, 12), +x.dir || 0, +x.goz || 0, +x.rest || 0, +x.faltas || 0, +x.afast || 0, dt(x.base)]);
+      per.push([p.cod || '', p.nome || '', dt(p.adm), SITP[p.sit] || (p.ativo === false ? 'desligado' : 'ativo'), dt(x.ini), dt(x.fim), maisMes(x.fim, 12), +x.dir || 0, +x.goz || 0, +x.rest || 0, +x.faltas || 0, +x.afast || 0, dt(x.base)]);
     });
   });
   var SIT = { sug: 'Sugestão', prog: 'Programada', aviso: 'Aviso emitido', canc: 'Cancelada' };
@@ -362,6 +369,7 @@ function tabelasRH(ss, d) {
     datas.forEach(function (c) { s.getRange(2, c, nl, 1).setNumberFormat('dd/MM/yyyy'); });
     s.getRange(1, 1, 1, t[0].length).setFontWeight('bold'); s.setFrozenRows(1);
   };
+  escreve('RH – Colaboradores', cad, [7, 8]);
   escreve('Férias – Períodos', per, [3, 5, 6, 7, 13]);
   escreve('Férias – Programação', prog, [4, 5, 6, 7, 11, 12, 13]);
 }

@@ -50,21 +50,47 @@
   const usuario = () => (window.DMT_SESSAO && window.DMT_SESSAO.u) || '';
   const cod = v => typeof codObra === 'function' ? codObra(v) : String(v || '').trim().toUpperCase();
   const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
-  const titulo = s => String(s || '').toLowerCase().replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase()).replace(/\b(Da|De|Do|Das|Dos|E)\b/g, m => m.toLowerCase());
+  const titulo = s => String(s || '').toLowerCase().replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase()).replace(/(\s)(Da|De|Do|Das|Dos|E|As|Os|A|O|Por|Pelo|Pela)(?=\s)/g, (m, a, b) => a + b.toLowerCase());
   const lsGet = k => { try{ return localStorage.getItem(k); }catch(e){ return null; } };
   const lsSet = (k, v) => { try{ localStorage.setItem(k, v); }catch(e){} };
   const lsDel = k => { try{ localStorage.removeItem(k); }catch(e){} };
 
   // ---------- dados ----------
   const CFG0 = () => ({crit: 60, alto: 120, medio: 240, aviso: 30, maxAus: 30, acesso: [], upd: 0});
-  const VAZIO = () => ({v: 1, cfg: CFG0(), pes: [], gozos: [], imp: null});
+  const VAZIO = () => ({v: 2, cfg: CFG0(), pes: [], gozos: [], imp: null, semeado: null});
   let D = VAZIO();
   try{ const v = JSON.parse(lsGet(KEY) || 'null'); if(v && Array.isArray(v.pes)) D = Object.assign(VAZIO(), v, {cfg: Object.assign(CFG0(), v.cfg)}); }catch(e){}
   let timer = null, ultimaLeitura = 0, estado = {t: '', err: false};
 
+  // Pessoa (cadastro do RH): {id, n, nome, funcao, setor (SEDE/OBRA), aloc (ADM ou código da obra), reg (SIM/NÃO),
+  //   sit (ativo, afastado, desligado, conferir), adm, dem, mesDem, tipoDem, obsDem, obs, cod (código na contabilidade),
+  //   sal, cid (ligação com a aba Colaboradores), per (períodos de férias da contabilidade, ponto de partida),
+  //   perAj {ini: {faltas, afast}}, desde (data em que entrou no controle)}
   const vivos = l => (l || []).filter(x => !x.del);
-  const pesAtivas = () => vivos(D.pes).filter(p => p.ativo !== false);
+  const desligado = p => p.sit === 'desligado' || p.ativo === false || (!!p.dem && p.dem < hoje());
+  const pesAtivas = () => vivos(D.pes).filter(p => !desligado(p));
   const pessoa = id => D.pes.find(p => p.id === id);
+  const SITP = {ativo: 'Ativo', afastado: 'Afastado', desligado: 'Desligado', conferir: 'Conferir'};
+  const TIPOS = ['SEM JUSTA CAUSA', 'PEDIDO DE DEMISSÃO', 'TÉRMINO DA EXPERIÊNCIA', 'ANTECIPAÇÃO DA EXPERIÊNCIA (EMPREGADOR)', 'ANTECIPAÇÃO DA EXPERIÊNCIA (EMPREGADO)', 'JUSTA CAUSA', 'ACORDO ENTRE AS PARTES', 'TÉRMINO DE CONTRATO', 'FALECIMENTO', 'OUTRO'];
+  const iniciativa = t => !t ? 'NÃO INFORMADO' : /PEDIDO|\(EMPREGADO\)/.test(t) ? 'EMPREGADO' : /ACORDO/.test(t) ? 'ACORDO' : /FALEC|OUTRO/.test(t) ? 'OUTRO' : 'EMPRESA';
+
+  // períodos aquisitivos da pessoa: os da contabilidade (ponto de partida) e, depois deles, um a cada 12 meses
+  // a partir da admissão, até o período em andamento. Os gerados valem 30 dias (menos faltas, art. 130).
+  function periodos(p){
+    if(!p) return [];
+    const base = (p.per || []).slice().sort((a, b) => a.ini.localeCompare(b.ini)), l = base.slice();
+    let ini = base.length ? addD(base[base.length - 1].fim, 1) : p.adm;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(ini || '')) return l;
+    const ate = p.dem && p.dem < hoje() ? p.dem : hoje();
+    for(let k = 0; k < 60 && ini <= ate; k++){
+      const fim = addD(addM(ini, 12), -1), aj = (p.perAj || {})[ini] || {};
+      const faltas = +aj.faltas || 0, afast = +aj.afast || 0, dir = afast > 180 ? 0 : direitoFaltas(faltas);
+      // sem dado da contabilidade: períodos que já tinham vencido quando a pessoa entrou no controle são dados como quitados
+      if(!(base.length === 0 && p.desde && addM(fim, 12) < p.desde)) l.push({ini, fim, dir, goz: 0, rest: dir, faltas, afast, gerado: true});
+      ini = addD(fim, 1);
+    }
+    return l;
+  }
 
   // colaboradores do Gestão 360º (aba Colaboradores): obra e função
   const colaboradores = () => { try{ return (JSON.parse(lsGet('dmtbkp_colaboradores') || '[]') || []).filter(c => !c.situacao || /ATIV/i.test(c.situacao)); }catch(e){ return []; } };
@@ -102,7 +128,8 @@
     return vinculos;
   }
   const colabDe = p => ligar().get(p.id) || null;
-  const obraDe = p => { const o = cod(p.obra || (colabDe(p) || {}).obra || ''); return /^[-–—]*$/.test(o) ? '' : o; };
+  // obra: a da aba Colaboradores (onde a equipe é movimentada); sem ligação, a alocação do cadastro do RH
+  const obraDe = p => { const c = !desligado(p) && colabDe(p); const o = cod(p.obra || (c ? c.obra : p.aloc) || ''); return /^[-–—]*$/.test(o) ? '' : o; };
   const funcaoDe = p => String(p.funcao || (colabDe(p) || {}).funcao || p.funcaoPl || '').toUpperCase();
   function locais(){
     const l = [{cod: 'ADM', nome: 'Sede (ADM)'}];
@@ -211,14 +238,14 @@
   // todos os períodos com algo a fazer (ou já programados), do mais urgente ao menos
   function fila(ref){
     const l = [];
-    pesAtivas().forEach(p => (p.per || []).forEach(per => { if((+per.rest || 0) > 0) l.push(calcPer(p, per, ref)); }));
+    pesAtivas().forEach(p => periodos(p).forEach(per => { if((+per.rest || 0) > 0) l.push(calcPer(p, per, ref)); }));
     const peso = x => ORDEM.indexOf(x.niv);
     return l.sort((a, b) => (a.niv === 'aquis' || a.niv === 'ok' || b.niv === 'aquis' || b.niv === 'ok') && peso(a) !== peso(b) ? peso(a) - peso(b)
       : (a.lim || a.fimConc).localeCompare(b.lim || b.fimConc) || a.p.nome.localeCompare(b.p.nome));
   }
   // o período mais urgente de cada pessoa
   function principal(p, ref){
-    const l = (p.per || []).filter(per => (+per.rest || 0) > 0).map(per => calcPer(p, per, ref));
+    const l = periodos(p).filter(per => (+per.rest || 0) > 0).map(per => calcPer(p, per, ref));
     if(!l.length) return null;
     const ab = l.filter(x => x.niv !== 'ok');
     const base = ab.length ? ab : l;
@@ -238,13 +265,70 @@
     return {k: 'ok', t: 'Emitir até ' + brc(ate), ate};
   }
 
+  // ---------- turnover (mesmas fórmulas do painel da planilha "visão geral") ----------
+  const eom = s => addD(addM(s.slice(0, 8) + '01', 1), -1);
+  const quadro = () => vivos(D.pes).filter(p => p.sit !== 'conferir');
+  const entrada = p => p.adm || '2000-01-01';               // sem admissão: tratado como admitido antes do ano
+  const saida = p => p.dem ? p.dem : (p.sit === 'desligado' || p.ativo === false) ? (p.mesDem ? eom(p.mesDem + '-01') : '') : '9999-12-31';
+  const casaDias = (p, ref) => p.adm ? dif(p.adm, desligado(p) ? (p.dem || ref) : ref) : null;
+  const FAIXAS = [['Até 45 dias', 0], ['46 a 90 dias', 46], ['3 a 6 meses', 91], ['6 a 12 meses', 181], ['1 a 2 anos', 366], ['Mais de 2 anos', 731]];
+  const faixa = d => d == null || d < 0 ? 'Sem data' : FAIXAS.filter(f => d >= f[1]).pop()[0];
+  function turnover(ano, ref){
+    ref = ref || hoje();
+    const ps = quadro().filter(p => saida(p)), ms = [];
+    for(let m = 1; m <= 12; m++){
+      const d1 = ano + '-' + pad(m) + '-01', d2 = eom(d1);
+      if(d1 > ref){ ms.push({d1, futuro: true}); continue; }
+      const ini = ps.filter(p => entrada(p) < d1 && saida(p) >= d1).length;
+      const adm = ps.filter(p => p.adm && p.adm >= d1 && p.adm <= d2);
+      const dem = ps.filter(p => saida(p) >= d1 && saida(p) <= d2);
+      const fim = ini + adm.length - dem.length, med = (ini + fim) / 2;
+      ms.push({d1, ini, adm, dem, fim, saldo: adm.length - dem.length,
+        to: med ? (adm.length + dem.length) / 2 / med : 0, tx: med ? dem.length / med : 0, ret: ini ? (fim - adm.length) / ini : 0,
+        emp: dem.filter(p => iniciativa(p.tipoDem) === 'EMPREGADO').length, emr: dem.filter(p => iniciativa(p.tipoDem) === 'EMPRESA').length,
+        exp: dem.filter(p => p.adm && dif(p.adm, saida(p)) <= 90).length});
+    }
+    const ok = ms.filter(m => !m.futuro), j1 = ano + '-01-01';
+    const admA = ok.reduce((s, m) => s.concat(m.adm), []), demA = ok.reduce((s, m) => s.concat(m.dem), []);
+    const qm = ok.length ? ok.reduce((s, m) => s + (m.ini + m.fim) / 2, 0) / ok.length : 0;
+    const ini01 = ps.filter(p => entrada(p) < j1 && saida(p) >= j1);
+    const ficaram = ini01.filter(p => !desligado(p));
+    const admFic = admA.filter(p => !desligado(p));
+    const pico = ok.reduce((b, m) => m.dem.length > (b ? b.dem.length : -1) ? m : b, null);
+    const atv = quadro().filter(p => !desligado(p));
+    const tAtv = atv.filter(p => p.adm).map(p => dif(p.adm, ref));
+    const tDes = quadro().filter(p => desligado(p) && p.adm && p.dem && p.dem >= p.adm).map(p => dif(p.adm, p.dem));
+    const pend = vivos(D.pes).filter(p => p.sit === 'conferir' || !p.adm || (desligado(p) && !p.dem) || (p.dem && p.adm && p.dem < p.adm));
+    const conta = (l, f) => { const o = {}; l.forEach(p => { const k = f(p); o[k] = (o[k] || 0) + 1; }); return o; };
+    return {ano, ref, ms, ok, admA, demA, qm, ini01, ficaram, admFic, pico, atv, pend,
+      afast: atv.filter(p => p.sit === 'afastado').length,
+      to: qm ? (admA.length + demA.length) / 2 / qm : 0, toMes: ok.length ? ok.reduce((s, m) => s + m.to, 0) / ok.length : 0,
+      tx: qm ? demA.length / qm : 0,
+      ret: ini01.length ? ficaram.length / ini01.length : 0, retAdm: admA.length ? admFic.length / admA.length : 0,
+      exp: demA.filter(p => p.adm && dif(p.adm, saida(p)) <= 90).length,
+      tempoAtv: tAtv.length ? tAtv.reduce((a, b) => a + b, 0) / tAtv.length / (365 / 12) : 0,
+      tempoDes: tDes.length ? tDes.reduce((a, b) => a + b, 0) / tDes.length : 0,
+      porTipo: conta(demA, p => p.tipoDem || 'NÃO INFORMADO'), porIni: conta(demA, p => iniciativa(p.tipoDem)),
+      fxDes: conta(demA, p => faixa(p.adm ? dif(p.adm, saida(p)) : null)), fxAtv: conta(atv, p => faixa(p.adm ? dif(p.adm, ref) : null)),
+      porObra: conta(atv, p => obraDe(p) || 'Sem alocação'),
+      setor: ['SEDE', 'OBRA'].map(k => ({k, a: atv.filter(p => (p.setor || (obraDe(p) === 'ADM' ? 'SEDE' : 'OBRA')) === k).length, d: demA.filter(p => (p.setor || 'OBRA') === k).length}))};
+  }
+  // contratos de experiência (45 + 45 dias) que vencem em breve
+  function experiencias(ref, dias){
+    ref = ref || hoje(); const l = [];
+    pesAtivas().filter(p => p.adm && p.sit !== 'conferir').forEach(p => {
+      [[44, '1º período (45 dias)'], [89, 'fim da experiência (90 dias)']].forEach(([n, t]) => { const d = addD(p.adm, n); if(d >= ref && dif(ref, d) <= (dias || 15)) l.push({p, d, t}); });
+    });
+    return l.sort((a, b) => a.d.localeCompare(b.d));
+  }
+
   // ---------- validação de uma programação ----------
   function validar(g, ref){
     ref = ref || hoje();
     const p = pessoa(g.pid), out = [];
     const er = t => out.push({k: 'erro', t}), al = t => out.push({k: 'alerta', t}), ok = t => out.push({k: 'ok', t});
     if(!p){ er('Escolha o colaborador.'); return out; }
-    const per = (p.per || []).find(x => x.ini === g.per);
+    const per = periodos(p).find(x => x.ini === g.per);
     if(!per){ er('Escolha o período aquisitivo.'); return out; }
     if(!/^\d{4}-\d{2}-\d{2}$/.test(g.ini || '')){ er('Informe a data de início.'); return out; }
     const dias = +g.dias || 0, abono = +g.abono || 0, c = calcPer(p, per, ref, g.id), fim = fimG(g), obra = obraDe(p);
@@ -386,28 +470,44 @@
     });
     return {emissao, base, empresa, total, pes, ignoradas};
   }
-  // aplica a programação lida: substitui os períodos de quem veio no relatório
+  // aplica a programação lida (opcional): atualiza o ponto de partida das férias de quem veio no relatório.
+  // Liga pelo código da contabilidade ou, na falta dele, pelo nome. Quem não existe no cadastro entra como "conferir".
+  function casarPDF(r){
+    const ps = vivos(D.pes).filter(p => !desligado(p)), m = new Map(), usados = new Set(), pares = [];
+    r.pes.forEach(x => { const p = ps.find(q => q.cod && q.cod === x.cod); if(p){ m.set(x.cod, p); usados.add(p.id); } });
+    r.pes.filter(x => !m.has(x.cod)).forEach(x => ps.forEach(p => { if(usados.has(p.id)) return; let sc = semelhanca(x.nome, p.nome); if(sc < 0.6) return; if(p.adm && x.adm) sc += p.adm === x.adm ? 0.05 : -Math.min(0.04, Math.abs(dif(p.adm, x.adm)) / 1000); pares.push({x, p, sc}); }));
+    pares.sort((a, b) => b.sc - a.sc).forEach(o => { if(m.has(o.x.cod) || usados.has(o.p.id)) return; m.set(o.x.cod, o.p); usados.add(o.p.id); });
+    return m;
+  }
   function aplicarProgramacao(r, arquivo){
-    const vistos = new Set(), ref = r.emissao || hoje();
+    const ref = r.emissao || hoje(), m = casarPDF(r);
     let novos = 0, atual = 0;
     r.pes.forEach(x => {
-      let p = vivos(D.pes).find(q => q.cod === x.cod) || vivos(D.pes).find(q => !q.cod && norm(q.nome) === norm(x.nome));
-      if(!p){ p = {id: 'p' + x.cod, cod: x.cod, nome: x.nome, sal: 0, obra: '', funcao: '', cid: '', ativo: true}; D.pes.push(p); novos++; } else atual++;
-      p.nome = x.nome; p.cod = x.cod; p.adm = x.adm; p.ativo = true; p.upd = agora();
+      let p = m.get(x.cod);
+      if(!p){ p = {id: 'c' + x.cod + '-' + uid(), nome: x.nome, funcao: '', setor: '', aloc: '', reg: 'SIM', sit: 'conferir', adm: x.adm, obs: 'Veio da programação de férias da contabilidade e não estava no cadastro.', sal: 0, desde: ref}; D.pes.push(p); novos++; } else atual++;
+      p.cod = x.cod; if(!p.adm) p.adm = x.adm; p.upd = agora();
       p.per = x.per.map(y => ({ini: y.ini, fim: y.fim, dir: y.dir, goz: y.goz, rest: y.rest, limCont: y.limCont, afast: y.afast, faltas: y.faltas, base: ref}));
-      vistos.add(p.id);
-      // férias já marcadas no sistema da contabilidade
       x.per.forEach(y => {
         if(!y.gozo || !(y.gdias > 0)) return;
         const id = 'c' + x.cod + '-' + y.ini + '-' + y.gozo;
         if(!D.gozos.some(g => g.id === id)) D.gozos.push({id, pid: p.id, per: y.ini, ini: y.gozo, dias: y.gdias, abono: y.gabono || 0, adi13: /S/i.test(y.g13), st: 'aviso', obs: 'Lançada pela contabilidade', u: 'contabilidade', upd: agora(), criado: agora()});
       });
     });
-    let sairam = 0;
-    vivos(D.pes).forEach(p => { if(p.ativo !== false && p.cod && !vistos.has(p.id)){ p.ativo = false; p.upd = agora(); sairam++; } });
     D.imp = {quando: agora(), emissao: r.emissao, base: r.base, arquivo: arquivo || '', n: r.pes.length, per: r.pes.reduce((s, x) => s + x.per.length, 0), u: usuario()};
     salvar();
-    return {novos, atual, sairam};
+    return {novos, atual, sairam: 0};
+  }
+  // carga inicial (planilha "Nova.xlsx" + programação da contabilidade): só quando ainda não há dados
+  function semear(j, forcar){
+    if(!j || !Array.isArray(j.pes)) return 'dados inválidos';
+    if(vivos(D.pes).length && !forcar) return 'já existem dados';
+    const t = agora();
+    D.pes = j.pes.map(p => Object.assign({}, p, {upd: t}));
+    if(j.cfg) D.cfg = Object.assign(CFG0(), j.cfg, {upd: t});
+    D.semeado = {quando: t, u: usuario(), n: j.pes.length};
+    D.imp = j.imp || D.imp;
+    vincCache = ''; salvar();
+    return 'ok: ' + j.pes.length + ' pessoas';
   }
   // salários de uma planilha (.xlsx) ou de texto colado (Nome ⇥ Salário)
   async function salariosXLSX(buf){
@@ -462,6 +562,7 @@
     r.cfg = Object.assign(CFG0(), (b.cfg && (b.cfg.upd || 0) > ((a.cfg && a.cfg.upd) || 0)) ? b.cfg : (a.cfg || {}));
     r.pes = lista(a.pes, b.pes); r.gozos = lista(a.gozos, b.gozos);
     r.imp = [a.imp, b.imp].filter(Boolean).sort((x, y) => (y.quando || 0) - (x.quando || 0))[0] || null;
+    r.semeado = a.semeado || b.semeado || null;
     return r;
   }
   function salvar(semRender){
@@ -476,7 +577,7 @@
     try{
       const j = await txApi({acao: 'lerRH'});
       if(j.dados && Array.isArray(j.dados.pes)){ D = juntar(D, j.dados); lsSet(KEY, JSON.stringify(D)); }
-      const vis = {}; pesAtivas().forEach(p => vis[p.id] = {o: obraDe(p), f: funcaoDe(p)}); // só para as abas legíveis
+      const vis = {}; vivos(D.pes).forEach(p => vis[p.id] = {o: obraDe(p), f: funcaoDe(p)}); // só para as abas legíveis
       await txApi({acao: 'gravarRH', dados: Object.assign({}, D, {vis})});
       lsDel(PEND);
       aviso('Salvo na planilha às ' + new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}));
@@ -557,6 +658,14 @@
   @media (min-width:1350px){#rh-tela .kpis{grid-template-columns:repeat(8,minmax(0,1fr))}}
   @media (max-width:700px){#rh-tela .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
   #rh-tela .kpis .rh-kp b{font-size:26px}
+  @media (min-width:1350px){#rh-tela .kpis.k6{grid-template-columns:repeat(6,minmax(0,1fr))}}
+  .rh-hb{display:flex;flex-direction:column;gap:6px}
+  .rh-hb .hr{display:grid;grid-template-columns:minmax(120px,34%) 1fr;gap:10px;align-items:center;font-size:12px}
+  .rh-hb .hl{color:var(--ink2,#5c5c5c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rh-hb .hbs{display:flex;flex-direction:column;gap:2px}
+  .rh-hb .hbw{display:flex;align-items:center;gap:6px}
+  .rh-hb .hbw>div{height:14px;border-radius:0 4px 4px 0;min-width:2px}
+  .rh-hb .hbw b{font-size:11.5px;font-variant-numeric:tabular-nums;white-space:nowrap} .rh-hb .hbw b small{color:var(--ink3,#8e8e8e);font-weight:400}
   #rh-tela .cd{background:var(--card,#fff);border:1px solid var(--line,#e8e8ea);border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);min-width:0}
   #rh-tela .cd>h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3,#8e8e8e);margin:0 0 4px;display:flex;align-items:center;gap:8px}
   #rh-tela .cd>h3 .esp{flex:1}
@@ -703,7 +812,7 @@
 
   // ---------- aba no painel lateral ----------
   const btn = document.createElement('button');
-  btn.dataset.aba = 'rh'; btn.textContent = 'RH · Férias';
+  btn.dataset.aba = 'rh'; btn.textContent = 'RH';
   ABAS.appendChild(btn);
   btn.addEventListener('click', () => trocarAba('rh'));
   const aba = document.createElement('div');
@@ -733,58 +842,55 @@
   function renderAba(){
     if(aba.style.display === 'none') return;
     const ref = hoje();
-    if(!pesAtivas().length){
-      aba.innerHTML = `<div class="card"><h2>Gestão de férias</h2><div class="rh-vazio">
-        <p style="margin:0 0 6px">O módulo RH acompanha as férias de cada colaborador: quanto falta para o limite legal, quem precisa de aviso, quanto vai custar e se a obra fica desfalcada.</p>
-        <b>Para começar:</b><ol><li>Peça à contabilidade o relatório <b>Programação de Férias</b> (PDF).</li><li>Clique em <b>Importar programação</b> e escolha o arquivo.</li><li>Se quiser ver custos, importe também a planilha com os salários.</li></ol></div>
-        <div class="rh-bts"><button id="rh-a-imp">⤓ Importar programação (PDF)</button><button class="sec" id="rh-a-abr">Abrir painel</button></div>
-        <div style="margin-top:10px"><span class="rh-est"></span></div></div>`;
-      $('rh-a-imp').onclick = () => janelaImportar();
+    if(!vivos(D.pes).length){
+      aba.innerHTML = `<div class="card"><h2>Recursos Humanos</h2><div class="rh-vazio"><p style="margin:0 0 6px">Carregando o cadastro de colaboradores da planilha…</p><p class="hint">Se esta mensagem não sumir, a planilha ainda não aceita o módulo RH (ver README) ou ainda não recebeu a carga inicial.</p></div>
+        <div class="rh-bts"><button class="sec" id="rh-a-abr">Abrir RH</button></div><div style="margin-top:10px"><span class="rh-est"></span></div></div>`;
       $('rh-a-abr').onclick = () => abrirTela('ajustes');
       aviso(estado.t || 'Aguardando dados', estado.err);
       return;
     }
-    const k = kpis(ref);
+    const k = kpis(ref), T = turnover(+ref.slice(0, 4), ref), pct = v => fmtN(v * 100, 1) + '%';
     const prox = [];
-    k.venc.forEach(x => prox.push({o: 0, x, t: 'Férias vencidas: conceder já', d: x.lim ? 'limite era ' + brc(x.lim) : 'fim do concessivo ' + brc(x.fimConc), k: 'venc'}));
-    k.avisos.forEach(g => { const a = avisoStatus(g, ref), p = pessoa(g.pid); prox.push({o: 1, g, p, t: 'Emitir aviso de férias', d: 'férias em ' + brc(g.ini) + ' · ' + (a.k === 'atras' ? 'fora do prazo' : 'até ' + brc(a.ate)), k: a.k === 'atras' ? 'venc' : 'crit'}); });
-    k.crit.filter(x => x.saldo > 0).forEach(x => prox.push({o: 2, x, t: 'Programar férias', d: fmtN(x.saldo) + ' dias · limite ' + brc(x.lim), k: 'crit'}));
-    k.alto.filter(x => x.saldo > 0).forEach(x => prox.push({o: 3, x, t: 'Programar férias', d: fmtN(x.saldo) + ' dias · limite ' + brc(x.lim), k: 'alto'}));
-    const proxS = vivos(D.gozos).filter(g => g.st !== 'canc' && g.st !== 'sug' && pessoa(g.pid) && fimG(g) >= ref && dif(ref, g.ini) <= 60).sort((a, b) => a.ini.localeCompare(b.ini));
+    k.venc.forEach(x => prox.push({o: 0, p: x.p, t: 'Férias vencidas: conceder já', d: x.lim ? 'limite era ' + brc(x.lim) : 'fim do concessivo ' + brc(x.fimConc), b: badge('venc')}));
+    experiencias(ref, 15).forEach(e => prox.push({o: 1, p: e.p, t: 'Experiência: ' + e.t, d: 'vence em ' + brc(e.d) + (e.d === ref ? ' (hoje)' : ''), b: '<span class="rh-bd" style="background:#fff5dc;color:#7a5200">experiência</span>'}));
+    k.avisos.forEach(g => { const a = avisoStatus(g, ref), p = pessoa(g.pid); prox.push({o: 2, p, t: 'Emitir aviso de férias', d: 'férias em ' + brc(g.ini) + ' · ' + (a.k === 'atras' ? 'fora do prazo' : 'até ' + brc(a.ate)), b: badge(a.k === 'atras' ? 'venc' : 'crit')}); });
+    k.crit.filter(x => x.saldo > 0).forEach(x => prox.push({o: 3, p: x.p, t: 'Lançar férias', d: fmtN(x.saldo) + ' dias · limite ' + brc(x.lim), b: badge('crit')}));
+    k.alto.filter(x => x.saldo > 0).forEach(x => prox.push({o: 4, p: x.p, t: 'Lançar férias', d: fmtN(x.saldo) + ' dias · limite ' + brc(x.lim), b: badge('alto')}));
+    const proxS = vivos(D.gozos).filter(g => g.st !== 'canc' && g.st !== 'sug' && pessoa(g.pid) && !desligado(pessoa(g.pid)) && fimG(g) >= ref && dif(ref, g.ini) <= 60).sort((a, b) => a.ini.localeCompare(b.ini));
     aba.innerHTML = `
-    <div class="card"><h2>Gestão de férias</h2>
+    <div class="card"><h2>Recursos Humanos</h2>
       <div class="rh-k">
-        <button class="rh-kp" data-go="painel"><small><i style="background:${NIV.venc.c}"></i>Vencidas</small><b>${k.venc.length}</b><span>${k.venc.length ? 'pagamento em dobro' : 'nenhuma em dobro'}</span></button>
-        <button class="rh-kp" data-go="painel"><small><i style="background:${NIV.crit.c}"></i>Críticas</small><b>${k.crit.length}</b><span>até ${D.cfg.crit} dias do limite</span></button>
-        <button class="rh-kp" data-go="programacao"><small>Avisos a emitir</small><b>${k.avisos.length}</b><span>${D.cfg.aviso} dias antes (art. 135)</span></button>
-        <button class="rh-kp" data-go="cronograma"><small>De férias hoje</small><b>${k.fora.length}</b><span>${plural(k.pessoas, 'colaborador', 'colaboradores')} no plano</span></button>
+        <button class="rh-kp" data-go="colaboradores" data-lista="ativos"><small>No quadro hoje</small><b>${T.atv.length}</b><span>${T.afast ? T.afast + ' afastado(s) · ' : ''}${T.admA.length} admissões e ${T.demA.length} saídas no ano</span></button>
+        <button class="rh-kp" data-go="geral"><small>Turnover no ano</small><b>${pct(T.to)}</b><span>retenção ${pct(T.ret)} · ${T.demA.length ? fmtN(T.exp / T.demA.length * 100, 0) + '% saíram na experiência' : 'sem saídas'}</span></button>
+        <button class="rh-kp" data-go="painel"><small><i style="background:${NIV.venc.c}"></i>Férias vencidas</small><b>${k.venc.length}</b><span>${k.crit.length} crítica(s) · ${k.avisos.length} aviso(s) a emitir</span></button>
+        <button class="rh-kp" data-go="cronograma"><small>De férias hoje</small><b>${k.fora.length}</b><span>${proxS.filter(g => g.ini > ref).length} saída(s) nos próximos 60 dias</span></button>
       </div>
-      <div class="rh-bts"><button id="rh-a-abr">▦ Abrir painel de férias</button><button class="sec" id="rh-a-prog">+ Programar</button><button class="sec" id="rh-a-imp">⤓ Importar</button></div>
+      <div class="rh-bts"><button id="rh-a-abr">▦ Abrir RH</button><button class="sec" id="rh-a-prog">+ Lançar férias</button><button class="sec" id="rh-a-adm">+ Admitir</button></div>
       <div style="margin-top:10px"><span class="rh-est"></span></div>
     </div>
     <div class="card"><h2>Próximas ações</h2>
-      ${prox.length ? '<ul>' + prox.sort((a, b) => a.o - b.o).slice(0, 7).map((a, i) => { const p = a.p || a.x.p; return `<li data-pid="${h(p.id)}"><div class="nm"><b>${h(titulo(p.nome))}</b><small>${h(a.t)} · ${h(obraDe(p) || 'sem obra')}</small></div><div class="dt">${badge(a.k)}<br>${h(a.d)}</div></li>`; }).join('') + '</ul>' + (prox.length > 7 ? `<div class="hint" style="margin-top:6px">+ ${prox.length - 7} no painel</div>` : '') : '<div class="hint">Nada urgente. Tudo dentro do prazo.</div>'}
+      ${prox.length ? '<ul>' + prox.sort((a, b) => a.o - b.o).slice(0, 8).map(a => `<li data-pid="${h(a.p.id)}"><div class="nm"><b>${h(titulo(a.p.nome))}</b><small>${h(a.t)} · ${h(obraDe(a.p) || 'sem obra')}</small></div><div class="dt">${a.b}<br>${h(a.d)}</div></li>`).join('') + '</ul>' + (prox.length > 8 ? `<div class="hint" style="margin-top:6px">+ ${prox.length - 8} no painel</div>` : '') : '<div class="hint">Nada urgente.</div>'}
     </div>
     <div class="card"><h2>De férias e próximas saídas (60 dias)</h2>
       ${proxS.length ? '<ul>' + proxS.slice(0, 8).map(g => { const p = pessoa(g.pid), s = situacao(g, ref); return `<li data-pid="${h(p.id)}"><div class="nm"><b>${h(titulo(p.nome))}</b><small>${h(funcaoDe(p).toLowerCase() || '—')} · ${h(obraDe(p) || 'sem obra')}</small></div><div class="dt">${sitBadge(s)}<br>${brc(g.ini)} a ${brc(fimG(g))}</div></li>`; }).join('') + '</ul>' : '<div class="hint">Ninguém de férias nos próximos 60 dias.</div>'}
     </div>
-    <div class="card"><h2>Como funciona</h2>
-      <dl><dt>Período aquisitivo</dt><dd>12 meses de trabalho que dão direito a 30 dias de férias.</dd>
+    <div class="card"><h2>Como funcionam as férias</h2>
+      <dl><dt>Período aquisitivo</dt><dd>A cada 12 meses desde a admissão, o colaborador ganha 30 dias de férias. A ferramenta calcula sozinha pela data de admissão.</dd>
       <dt>Período concessivo</dt><dd>Os 12 meses seguintes. A empresa precisa conceder as férias dentro deles; o que passar é pago em dobro.</dd>
-      <dt>Limite para iniciar</dt><dd>Última data para começar e ainda terminar dentro do concessivo.</dd>
+      <dt>Lançar férias</dt><dd>Informe quando a pessoa sai (já tiradas ou futuras): o saldo, os indicadores e o cronograma se atualizam.</dd>
       <dt>Aviso de férias</dt><dd>Entregue com ${D.cfg.aviso} dias de antecedência, assinado pelo colaborador. O pagamento sai até 2 dias antes do início.</dd></dl>
     </div>`;
-    $('rh-a-abr').onclick = () => abrirTela('painel');
+    $('rh-a-abr').onclick = () => abrirTela();
     $('rh-a-prog').onclick = () => janelaProgramar({});
-    $('rh-a-imp').onclick = () => janelaImportar();
-    aba.querySelectorAll('[data-go]').forEach(b => b.onclick = () => abrirTela(b.dataset.go));
+    $('rh-a-adm').onclick = () => janelaCadastro(null);
+    aba.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { if(b.dataset.lista) filtro.lista = b.dataset.lista; abrirTela(b.dataset.go); });
     aba.querySelectorAll('li[data-pid]').forEach(li => li.onclick = () => janelaFicha(li.dataset.pid));
     aviso(estado.t || 'Sincronizando…', estado.err);
   }
 
   // ---------- tela cheia ----------
-  let tela = null, sub = lsGet(SUBK) || 'painel', filtro = {obra: '', busca: '', niv: '', sit: 'ativas'};
-  const VIEWS = [['painel', 'Painel'], ['colaboradores', 'Colaboradores'], ['cronograma', 'Cronograma'], ['programacao', 'Programação'], ['ajustes', 'Importar e ajustes']];
+  let tela = null, sub = lsGet(SUBK) || 'geral', filtro = {obra: '', busca: '', niv: '', sit: 'ativas', lista: 'ativos'};
+  const VIEWS = [['geral', 'Visão geral'], ['colaboradores', 'Colaboradores'], ['painel', 'Férias'], ['cronograma', 'Cronograma de férias'], ['programacao', 'Lançamentos de férias'], ['ajustes', 'Ajustes']];
   function abrirTela(v){
     if(v) sub = v;
     lsSet(SUBK, sub);
@@ -792,10 +898,10 @@
       tela = document.createElement('div'); tela.id = 'rh-tela';
       tela.innerHTML = `<div class="rt-top">
         <button class="sec" id="rt-volta">← Gestão 360º</button>
-        <img src="logo-bkp.png" alt=""><div class="tt"><b>Gestão de Férias</b><span>RH · BKP Construtora</span></div>
+        <img src="logo-bkp.png" alt=""><div class="tt"><b>Recursos Humanos</b><span>RH · BKP Construtora</span></div>
         <div class="seg" id="rt-seg">${VIEWS.map(([k, t]) => `<button data-v="${k}">${t}</button>`).join('')}</div>
         <div class="esp"></div><span class="rh-est"></span>
-        <button class="sec" id="rt-prog">+ Programar férias</button><button class="sec" id="rt-imp" title="Imprimir esta tela ou salvar em PDF">Imprimir</button>
+        <button class="sec" id="rt-prog">+ Lançar férias</button><button class="sec" id="rt-imp" title="Imprimir esta tela ou salvar em PDF">Imprimir</button>
       </div><div class="rt-corpo"><div class="rt-in" id="rt-in"></div></div>`;
       document.body.appendChild(tela);
       $('rt-volta').onclick = fecharTela;
@@ -815,8 +921,9 @@
     tela.querySelectorAll('#rt-seg button').forEach(b => b.classList.toggle('on', b.dataset.v === sub));
     const el = $('rt-in'), ref = hoje();
     const sc = tela.querySelector('.rt-corpo').scrollTop;
-    if(!pesAtivas().length && sub !== 'ajustes') sub = 'ajustes';
-    ({painel: vPainel, colaboradores: vColab, cronograma: vCrono, programacao: vProg, ajustes: vAjustes})[sub](el, ref);
+    if(!VIEWS.some(v => v[0] === sub)) sub = 'geral';
+    if(!vivos(D.pes).length && sub !== 'ajustes') sub = 'ajustes';
+    ({geral: vGeral, painel: vPainel, colaboradores: vColab, cronograma: vCrono, programacao: vProg, ajustes: vAjustes})[sub](el, ref);
     tela.querySelector('.rt-corpo').scrollTop = sc;
     aviso(estado.t || '', estado.err);
   }
@@ -827,6 +934,108 @@
     el.querySelectorAll('[data-pid]').forEach(r => r.addEventListener('click', ev => { if(ev.target.closest('button')) return; janelaFicha(r.dataset.pid); }));
     el.querySelectorAll('[data-prog]').forEach(b => b.onclick = ev => { ev.stopPropagation(); const [pid, per] = b.dataset.prog.split('|'); janelaProgramar({pid, per}); });
     el.querySelectorAll('[data-gz]').forEach(b => b.onclick = ev => { ev.stopPropagation(); const g = D.gozos.find(x => x.id === b.dataset.gz); if(g) janelaProgramar(g); });
+  }
+
+  // ----- Visão geral (turnover) -----
+  let anoT = +hoje().slice(0, 4);
+  function vGeral(el, ref){
+    const anos = new Set([+ref.slice(0, 4)]); vivos(D.pes).forEach(p => { if(p.adm) anos.add(+p.adm.slice(0, 4)); if(p.dem) anos.add(+p.dem.slice(0, 4)); });
+    const T = turnover(anoT, ref), pct = v => fmtN(v * 100, 1) + '%';
+    const mesPico = T.pico && T.pico.dem.length ? MESL[+T.pico.d1.slice(5, 7) - 1].slice(0, 3) + '/' + T.pico.d1.slice(2, 4) : '—';
+    const fec = T.ok.length;
+    el.innerHTML = `<div class="rt-fil"><label>Ano analisado <select id="rt-ano">${Array.from(anos).filter(a => a >= 2015).sort((a, b) => b - a).map(a => `<option${a === anoT ? ' selected' : ''}>${a}</option>`).join('')}</select></label>
+      <span class="mut">Referência: <b>${br(ref)}</b> · calculado pelo cadastro de colaboradores (ativos e desligados)</span><div class="esp"></div>
+      <button class="sec" id="rt-adm">+ Admitir</button></div>
+      <div class="kpis k6">
+        ${kp('No quadro hoje', T.atv.length, T.afast ? 'dos quais ' + T.afast + ' afastado(s)' : 'ativos e afastados', '', 'colaboradores', '', 'ativos')}
+        ${kp('Admissões no ano', T.admA.length, 'acumulado ' + (fec ? 'jan–' + MES[fec - 1] : ''), '#2370cd', 'colaboradores', '', 'adm-ano')}
+        ${kp('Desligamentos no ano', T.demA.length, 'saldo do ano: ' + (T.admA.length - T.demA.length > 0 ? '+' : '') + (T.admA.length - T.demA.length), '#C05621', 'colaboradores', '', 'dem-ano')}
+        ${kp('Turnover acumulado', pct(T.to), '(admissões + desligamentos) ÷ 2 ÷ quadro médio', '', 'geral')}
+        ${kp('Turnover médio mensal', pct(T.toMes), 'média dos meses do ano até agora', '', 'geral')}
+        ${kp('Taxa de desligamento', pct(T.tx), 'desligamentos ÷ quadro médio (' + fmtN(T.qm, 1) + ')', '', 'geral')}
+        ${kp('Retenção no ano', pct(T.ret), T.ficaram.length + ' de ' + T.ini01.length + ' ativos em 01/01 seguem', '', 'geral')}
+        ${kp('Retenção dos admitidos', pct(T.retAdm), T.admFic.length + ' de ' + T.admA.length + ' admitidos seguem ativos', '', 'colaboradores', '', 'adm-ano')}
+        ${kp('Desligados na experiência', T.demA.length ? pct(T.exp / T.demA.length) : '—', T.exp + ' de ' + T.demA.length + ' saíram com até 90 dias', NIV.venc.c, 'colaboradores', '', 'dem-ano')}
+        ${kp('Pedidos de demissão', T.demA.length ? pct((T.porIni.EMPREGADO || 0) / T.demA.length) : '—', (T.porIni.EMPREGADO || 0) + ' desligamentos voluntários', '', 'geral')}
+        ${kp('Tempo médio de casa', fmtN(T.tempoAtv, 1) + ' meses', 'entre os ativos', '', 'colaboradores', '', 'ativos')}
+        ${kp('Tempo até o desligamento', fmtN(T.tempoDes, 0) + ' dias', 'média dos desligados · pico de saídas: ' + mesPico, '', 'colaboradores', '', 'desligados')}
+      </div>
+      ${T.pend.length ? `<div class="cd" style="border-color:#fbb315;background:rgba(251,179,21,.06);padding:12px 16px"><b>${T.pend.length} pendência(s) de cadastro.</b> <span class="mut">Sem admissão, desligado sem data, datas inconsistentes ou vindos só da contabilidade. Eles podem distorcer os indicadores.</span> <button class="sec mini" data-go="colaboradores" data-lista="pend">Ver pendências</button></div>` : ''}
+      <div class="g2">
+        <div class="cd"><h3>Movimentação mensal do quadro</h3><p class="sub">Admissões e desligamentos em cada mês, e quantos ficaram ativos no fim do mês.</p>${grafMov(T)}</div>
+        <div class="cd"><h3>Turnover e taxa de desligamento por mês</h3><p class="sub">Quanto maior, mais a equipe está sendo trocada.</p>${grafTO(T)}</div>
+      </div>
+      <div class="cd" style="margin-top:14px"><h3>Evolução mês a mês — ${anoT}</h3>${tabMes(T)}</div>
+      <div class="g2">
+        <div class="cd"><h3>Desligamentos por tipo</h3><p class="sub">Desligamentos de ${anoT}.</p>${hbars(Object.entries(T.porTipo).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({r: titulo(k), v: [v]})), [{nome: 'Desligamentos', cor: '#C05621'}], T.demA.length)}</div>
+        <div class="cd"><h3>Tempo de casa</h3><p class="sub">Desligados no ano (tempo até sair) e ativos hoje.</p>${hbars(FAIXAS.map(f => f[0]).concat(['Sem data']).filter(k => T.fxDes[k] || T.fxAtv[k]).map(k => ({r: k, v: [T.fxDes[k] || 0, T.fxAtv[k] || 0]})), [{nome: 'Desligados', cor: '#C05621'}, {nome: 'Ativos', cor: '#2370cd'}])}</div>
+      </div>
+      <div class="g2">
+        <div class="cd"><h3>Ativos por alocação</h3><p class="sub">Pela aba Colaboradores (ou pelo cadastro do RH, quando não ligado).</p>${hbars(Object.entries(T.porObra).sort((a, b) => a[0] === 'ADM' ? -1 : b[0] === 'ADM' ? 1 : b[1] - a[1]).map(([k, v]) => ({r: k === 'ADM' ? 'Sede (ADM)' : k, v: [v]})), [{nome: 'Ativos', cor: '#2370cd'}], T.atv.length)}</div>
+        <div class="cd"><h3>Iniciativa e setor</h3><p class="sub">Quem pediu para sair, e onde estão as saídas.</p>${grafIni(T)}</div>
+      </div>
+      <div class="cd" style="margin-top:14px"><h3>Como ler os indicadores</h3><div class="rh-ler">
+        <b>Turnover</b><span>(admissões + desligamentos) ÷ 2 ÷ quadro médio do período. Quanto maior, mais a equipe está sendo trocada.</span>
+        <b>Taxa de desligamento</b><span>Desligamentos ÷ quadro médio. Acima de 100% no ano significa que saiu mais gente do que o tamanho médio da equipe.</span>
+        <b>Retenção</b><span>No mês: (ativos no fim − admissões) ÷ ativos no início. No ano: quem estava ativo em 01/01 e continua hoje. Admitidos: quem entrou no ano e continua.</span>
+        <b>Experiência</b><span>Desligado na experiência = saiu com até 90 dias de casa. Ativos mês a mês são reconstruídos pelas datas do cadastro; quem não tem admissão é tratado como admitido antes do ano.</span>
+        <b>Atualização</b><span>Tudo se recalcula sozinho: basta admitir e desligar pelo botão em Colaboradores.</span></div></div>`;
+    $('rt-ano').onchange = e => { anoT = +e.target.value; renderTela(); };
+    $('rt-adm').onclick = () => janelaCadastro(null);
+    el.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { if(b.dataset.lista) filtro.lista = b.dataset.lista; if(b.dataset.go !== 'geral'){ sub = b.dataset.go; renderTela(); } });
+  }
+  function tabMes(T){
+    const pct = v => fmtN(v * 100, 1) + '%';
+    const tot = {ini: T.ok.length ? T.ok[0].ini : 0, adm: T.admA.length, dem: T.demA.length, fim: T.ok.length ? T.ok[T.ok.length - 1].fim : 0, emp: T.ok.reduce((s, m) => s + m.emp, 0), emr: T.ok.reduce((s, m) => s + m.emr, 0), exp: T.ok.reduce((s, m) => s + m.exp, 0)};
+    return `<div class="tw"><table><thead><tr><th>Mês</th><th class="n">Ativos no início</th><th class="n">Admissões</th><th class="n">Desligamentos</th><th class="n">Saldo</th><th class="n">Ativos no fim</th><th class="n">Turnover</th><th class="n">Taxa de deslig.</th><th class="n">Retenção</th><th class="n">Pedidos de demissão</th><th class="n">Iniciativa da empresa</th><th class="n">Na experiência</th></tr></thead><tbody>
+      ${T.ms.map(m => m.futuro ? `<tr><td class="mut">${MESL[+m.d1.slice(5, 7) - 1]}</td><td colspan="11"></td></tr>` : `<tr><td><b>${MESL[+m.d1.slice(5, 7) - 1]}</b></td><td class="n">${m.ini}</td><td class="n" data-tip="${h(m.adm.map(p => titulo(p.nome)).join('\n') || 'Nenhuma')}">${m.adm.length}</td><td class="n" data-tip="${h(m.dem.map(p => titulo(p.nome) + ' – ' + titulo(p.tipoDem || 'não informado')).join('\n') || 'Nenhum')}">${m.dem.length}</td>
+        <td class="n" style="color:${m.saldo < 0 ? '#b42318' : m.saldo > 0 ? '#1f7a3d' : 'inherit'}">${m.saldo > 0 ? '+' : ''}${m.saldo}</td><td class="n"><b>${m.fim}</b></td><td class="n">${pct(m.to)}</td><td class="n">${pct(m.tx)}</td><td class="n">${pct(m.ret)}</td><td class="n">${m.emp}</td><td class="n">${m.emr}</td><td class="n">${m.exp}</td></tr>`).join('')}
+      <tr style="font-weight:700;background:var(--head,#f6f6f7)"><td>Ano (acum.)</td><td class="n">${tot.ini}</td><td class="n">${tot.adm}</td><td class="n">${tot.dem}</td><td class="n">${tot.adm - tot.dem > 0 ? '+' : ''}${tot.adm - tot.dem}</td><td class="n">${tot.fim}</td><td class="n">${pct(T.to)}</td><td class="n">${pct(T.tx)}</td><td class="n">${pct(T.ret)}</td><td class="n">${tot.emp}</td><td class="n">${tot.emr}</td><td class="n">${tot.exp}</td></tr>
+    </tbody></table></div>`;
+  }
+  // barras agrupadas (admissões × desligamentos) + linha de ativos no fim do mês, no mesmo eixo (pessoas)
+  function grafMov(T){
+    const W = 640, H = 240, L = 34, B = 26, Tp = 18, ms = T.ms, cw = (W - L - 4) / ms.length, bw = Math.min(14, cw * 0.3);
+    const max = Math.max(4, ...T.ok.map(m => Math.max(m.fim, m.ini, m.adm.length, m.dem.length)));
+    const nice = Math.ceil(max / 10) * 10, y = v => Tp + (H - Tp - B) * (1 - v / nice);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Movimentação mensal">`;
+    [0, .25, .5, .75, 1].forEach(f => s += `<line x1="${L}" x2="${W}" y1="${y(nice * f)}" y2="${y(nice * f)}" stroke="${f ? '#e7e7e7' : '#c2c2c2'}"/><text x="${L - 6}" y="${y(nice * f) + 4}" text-anchor="end">${nice * f}</text>`);
+    const pts = [];
+    ms.forEach((m, i) => {
+      const cx = L + cw * i + cw / 2;
+      s += `<text x="${cx}" y="${H - 8}" text-anchor="middle">${MES[i]}</text>`;
+      if(m.futuro) return;
+      [[m.adm.length, '#2370cd', -bw - 1], [m.dem.length, '#C05621', 1]].forEach(([v, c, dx]) => { if(v) s += `<path d="M${cx + dx},${y(0)} V${y(v) + 3} Q${cx + dx},${y(v)} ${cx + dx + 3},${y(v)} H${cx + dx + bw - 3} Q${cx + dx + bw},${y(v)} ${cx + dx + bw},${y(v) + 3} V${y(0)} Z" fill="${c}"/>`; });
+      pts.push([cx, y(m.fim), m.fim]);
+      s += `<rect class="hit" x="${L + cw * i}" y="${Tp}" width="${cw}" height="${H - Tp - B}" data-tip="<b>${MESL[i]} de ${T.ano}</b>\nAtivos no início: ${m.ini}\nAdmissões: ${m.adm.length}\nDesligamentos: ${m.dem.length}\nAtivos no fim: ${m.fim}"/>`;
+    });
+    if(pts.length) s += `<polyline points="${pts.map(p => p[0] + ',' + p[1]).join(' ')}" fill="none" stroke="#232323" stroke-width="2" style="pointer-events:none"/>` + pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#232323" stroke="var(--card,#fff)" stroke-width="2" style="pointer-events:none"/>${i === pts.length - 1 ? `<text class="val" x="${p[0]}" y="${p[1] - 9}" text-anchor="middle">${p[2]}</text>` : ''}`).join('');
+    return `<div class="rh-lg"><span><i style="background:#2370cd"></i>Admissões</span><span><i style="background:#C05621"></i>Desligamentos</span><span><i style="background:#232323;height:3px;border-radius:2px"></i>Ativos no fim do mês</span></div><div class="rh-ch">${s}</svg></div>`;
+  }
+  function grafTO(T){
+    const W = 640, H = 240, L = 40, B = 26, Tp = 18, ms = T.ms, cw = (W - L - 4) / ms.length;
+    const max = Math.max(0.1, ...T.ok.map(m => Math.max(m.to, m.tx))), nice = Math.ceil(max * 10) / 10, y = v => Tp + (H - Tp - B) * (1 - v / nice);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Turnover por mês">`;
+    [0, .5, 1].forEach(f => s += `<line x1="${L}" x2="${W}" y1="${y(nice * f)}" y2="${y(nice * f)}" stroke="${f ? '#e7e7e7' : '#c2c2c2'}"/><text x="${L - 6}" y="${y(nice * f) + 4}" text-anchor="end">${fmtN(nice * f * 100, 0)}%</text>`);
+    const ser = [['to', '#C05621'], ['tx', '#6B6F77']];
+    ser.forEach(([k, c]) => { const p = T.ok.map((m, i) => [L + cw * i + cw / 2, y(m[k])]); if(p.length) s += `<polyline points="${p.map(q => q.join(',')).join(' ')}" fill="none" stroke="${c}" stroke-width="2"/>` + p.map(q => `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="${c}" stroke="var(--card,#fff)" stroke-width="2"/>`).join(''); });
+    ms.forEach((m, i) => { s += `<text x="${L + cw * i + cw / 2}" y="${H - 8}" text-anchor="middle">${MES[i]}</text>`; if(!m.futuro) s += `<rect class="hit" x="${L + cw * i}" y="${Tp}" width="${cw}" height="${H - Tp - B}" data-tip="<b>${MESL[i]} de ${T.ano}</b>\nTurnover: ${fmtN(m.to * 100, 1)}%\nTaxa de desligamento: ${fmtN(m.tx * 100, 1)}%\nRetenção: ${fmtN(m.ret * 100, 1)}%"/>`; });
+    return `<div class="rh-lg"><span><i style="background:#C05621"></i>Turnover</span><span><i style="background:#6B6F77"></i>Taxa de desligamento</span><span class="mut" style="margin-left:auto">média mensal: ${fmtN(T.toMes * 100, 1)}%</span></div><div class="rh-ch">${s}</svg></div>`;
+  }
+  // barras horizontais (uma ou duas séries)
+  function hbars(rows, series, total){
+    if(!rows.length) return '<div class="mut">Sem dados.</div>';
+    const max = Math.max(1, ...rows.map(r => Math.max(...r.v)));
+    return (series.length > 1 ? `<div class="rh-lg">${series.map(z => `<span><i style="background:${z.cor}"></i>${h(z.nome)}</span>`).join('')}</div>` : '') +
+      `<div class="rh-hb">${rows.map(r => `<div class="hr" data-tip="<b>${h(r.r)}</b>\n${series.map((z, i) => h(z.nome) + ': ' + r.v[i]).join('\n')}"><span class="hl">${h(r.r)}</span><div class="hbs">${r.v.map((v, i) => `<div class="hbw"><div style="width:${v / max * 100}%;background:${series[i].cor}"></div><b>${v}${total && series.length === 1 ? ' <small>' + fmtN(v / total * 100, 0) + '%</small>' : ''}</b></div>`).join('')}</div></div>`).join('')}</div>`;
+  }
+  function grafIni(T){
+    const tot = T.demA.length || 1, cores = {EMPREGADO: '#fbb315', EMPRESA: '#C05621', ACORDO: '#6B6F77', 'NÃO INFORMADO': '#c2c2c2', OUTRO: '#9dc8f7'};
+    const nomes = {EMPREGADO: 'Do empregado (pedido de demissão)', EMPRESA: 'Da empresa', ACORDO: 'Acordo entre as partes', 'NÃO INFORMADO': 'Não informado', OUTRO: 'Outro'};
+    const ks = Object.keys(cores).filter(k => T.porIni[k]);
+    return `<div class="rh-sb">${ks.map(k => `<div style="flex:${T.porIni[k]};background:${cores[k]}" data-tip="<b>${nomes[k]}</b>\n${T.porIni[k]} (${fmtN(T.porIni[k] / tot * 100, 0)}%)"></div>`).join('')}</div>
+      <div class="rh-nl">${ks.map(k => `<i style="width:12px;height:12px;border-radius:3px;background:${cores[k]}"></i><span>${nomes[k]}</span><span class="q">${T.porIni[k]} <span class="mut" style="font-weight:400">· ${fmtN(T.porIni[k] / tot * 100, 0)}%</span></span>`).join('')}</div>
+      <table style="margin-top:14px"><thead><tr><th>Setor</th><th class="n">Ativos</th><th class="n">Desligados no ano</th></tr></thead><tbody>${T.setor.map(x => `<tr><td>${x.k === 'SEDE' ? 'Sede' : 'Obras'}</td><td class="n">${x.a}</td><td class="n">${x.d}</td></tr>`).join('')}</tbody></table>`;
   }
 
   // ----- Painel -----
@@ -870,7 +1079,7 @@
     el.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { if(b.dataset.niv) filtro.niv = b.dataset.niv; sub = b.dataset.go; renderTela(); });
     $('rt-sug').onclick = () => confirmarSugestao();
   }
-  const kp = (t, v, s, cor, go, niv) => `<button class="rh-kp" data-go="${go}"${niv ? ` data-niv="${niv}"` : ''}><small>${cor ? `<i style="background:${cor}"></i>` : ''}${h(t)}</small><b>${v}</b><span>${h(s)}</span></button>`;
+  const kp = (t, v, s, cor, go, niv, lista) => `<button class="rh-kp" data-go="${go}"${niv ? ` data-niv="${niv}"` : ''}${lista ? ` data-lista="${lista}"` : ''}><small>${cor ? `<i style="background:${cor}"></i>` : ''}${h(t)}</small><b>${v}</b><span>${h(s)}</span></button>`;
 
   function grafNiveis(f){
     const cont = ORDEM.map(k => ({k, l: f.filter(x => x.niv === k)})).filter(x => x.l.length);
@@ -978,37 +1187,59 @@
     </tbody></table></div>`;
   }
 
-  // ----- Colaboradores -----
+  // ----- Colaboradores (cadastro do RH: ativos e ex-colaboradores) -----
   function vColab(el, ref){
-    const q = norm(filtro.busca);
-    let ps = pesAtivas().filter(passaObra).filter(p => !q || norm(p.nome).includes(q) || norm(funcaoDe(p)).includes(q) || String(p.cod) === filtro.busca.trim());
-    let rows = ps.map(p => ({p, x: principal(p, ref)}));
-    if(filtro.niv) rows = rows.filter(r => r.x && r.x.niv === filtro.niv);
-    rows.sort((a, b) => !a.x ? 1 : !b.x ? -1 : ORDEM.indexOf(a.x.niv) - ORDEM.indexOf(b.x.niv) || (a.x.lim || a.x.fimConc).localeCompare(b.x.lim || b.x.fimConc));
-    const inativos = vivos(D.pes).filter(p => p.ativo === false);
-    const semDados = colaboradores().filter(c => !Array.from(ligar().values()).some(v => v.id === c.id));
-    el.innerHTML = `<div class="rt-fil"><input type="search" id="rt-q" placeholder="Buscar nome, função ou código" value="${h(filtro.busca)}">${selObra()}
-      <label>Nível <select id="rt-niv"><option value="">Todos</option>${ORDEM.map(k => `<option value="${k}"${filtro.niv === k ? ' selected' : ''}>${NIV[k].t}</option>`).join('')}</select></label>
-      <div class="esp"></div><span class="mut">${plural(rows.length, 'colaborador', 'colaboradores')}</span><button class="sec" id="rt-csv">Baixar planilha (CSV)</button></div>
-      <div class="cd"><div class="tw"><table><thead><tr><th>Colaborador</th><th>Obra</th><th>Admissão</th><th class="n">Tempo de casa</th><th>Período mais urgente</th><th class="n">Saldo</th><th>Limite</th><th class="n">Dias</th><th>Nível</th><th>Programação</th><th class="n">Salário</th><th></th></tr></thead><tbody>
-      ${rows.map(({p, x}) => { const tc = p.adm ? dif(p.adm, ref) : null; const outros = (p.per || []).filter(y => (+y.rest || 0) > 0).length;
-        return `<tr class="clk" data-pid="${h(p.id)}"><td><div class="nm"><b>${h(titulo(p.nome))}</b><small>${h(funcaoDe(p).toLowerCase() || 'função não informada')}${p.cod ? ' · cód. ' + h(p.cod) : ''}${colabDe(p) ? '' : ' · <span style="color:#b26a00">não ligado à aba Colaboradores</span>'}</small></div></td>
-        <td>${obraDe(p) ? `<span class="cod">${h(obraDe(p))}</span>` : '<span class="mut">—</span>'}</td>
-        <td class="n" style="text-align:left">${brc(p.adm)}</td>
-        <td class="n">${tc == null ? '—' : tc >= 365 ? fmtN(tc / 365, 1) + ' anos' : Math.max(1, Math.round(tc / 30)) + (Math.round(tc / 30) > 1 ? ' meses' : ' mês')}</td>
-        <td class="n" style="text-align:left">${x ? brc(x.per.ini) + ' a ' + brc(x.per.fim) : '—'}${outros > 1 ? `<div class="mut" style="font-size:10.5px">${outros} períodos com saldo</div>` : ''}</td>
-        <td class="n">${x ? fmtN(x.saldo) : '—'}</td><td class="n" style="text-align:left">${x && x.lim ? br(x.lim) : '—'}</td>
-        <td class="n${x && x.dias < 0 ? ' red' : ''}">${x && x.dias != null ? fmtN(x.dias, 0) : '—'}</td>
-        <td>${x ? badge(x.niv) : '—'}</td><td>${chipsGozos(p)}</td>
-        <td class="n">${p.sal ? R$(p.sal) : '<span class="mut">—</span>'}</td>
-        <td><div class="acoes">${x && x.saldo > 0 && !x.aberto ? `<button class="mini" data-prog="${h(p.id)}|${h(x.per.ini)}">Programar</button>` : `<button class="mini sec" data-prog="${h(p.id)}|">Programar</button>`}</div></td></tr>`; }).join('')}
+    const q = norm(filtro.busca), ano = String(anoT);
+    const todos = vivos(D.pes);
+    const T = filtro.lista === 'adm-ano' || filtro.lista === 'dem-ano' ? turnover(anoT, ref) : null;
+    const LISTAS = {ativos: ['Ativos', p => !desligado(p) && p.sit !== 'conferir'], desligados: ['Ex-colaboradores', p => desligado(p)],
+      'adm-ano': ['Admitidos em ' + ano, p => T && T.admA.includes(p)], 'dem-ano': ['Desligados em ' + ano, p => T && T.demA.includes(p)],
+      pend: ['Pendências', p => p.sit === 'conferir' || !p.adm || (desligado(p) && !p.dem) || (p.dem && p.adm && p.dem < p.adm)], todos: ['Todos', () => true]};
+    if(!LISTAS[filtro.lista]) filtro.lista = 'ativos';
+    let rows = todos.filter(LISTAS[filtro.lista][1]).filter(p => !filtro.obra || (filtro.obra === '-' ? !obraDe(p) : obraDe(p) === filtro.obra))
+      .filter(p => !q || norm(p.nome).includes(q) || norm(funcaoDe(p)).includes(q) || String(p.cod || '') === filtro.busca.trim());
+    const ord = filtro.lista === 'desligados' || filtro.lista === 'dem-ano' ? (a, b) => (b.dem || '').localeCompare(a.dem || '') : (a, b) => a.nome.localeCompare(b.nome);
+    rows.sort(ord);
+    const deslig = filtro.lista === 'desligados' || filtro.lista === 'dem-ano';
+    el.innerHTML = `<div class="rt-fil"><div class="seg" id="rt-lst">${Object.entries(LISTAS).map(([k, [t, f]]) => `<button data-l="${k}" class="${filtro.lista === k ? 'on' : ''}">${t} <span class="mut">${todos.filter(f).length}</span></button>`).join('')}</div>
+      <input type="search" id="rt-q" placeholder="Buscar nome, função ou código" value="${h(filtro.busca)}">${selObra()}<div class="esp"></div>
+      <button id="rt-nadm">+ Admitir colaborador</button><button class="sec" id="rt-csv">CSV</button></div>
+      <div class="cd"><div class="tw"><table><thead><tr><th>Colaborador</th><th>Situação</th><th>Obra</th><th>Admissão</th>${deslig ? '<th>Desligamento</th><th>Tipo</th>' : '<th>Experiência</th>'}<th class="n">Tempo de casa</th>${deslig ? '' : '<th>Férias</th><th class="n">Saldo</th><th>Limite</th><th>Programação</th>'}<th class="n">Salário</th><th></th></tr></thead><tbody>
+      ${rows.length ? rows.map(p => { const des = desligado(p), tc = casaDias(p, ref), x = des ? null : principal(p, ref);
+        const exp = !des && p.adm && dif(p.adm, ref) < 90 && dif(p.adm, ref) >= 0 ? dif(p.adm, ref) + 1 : 0;
+        return `<tr class="clk" data-pid="${h(p.id)}"><td><div class="nm"><b>${h(titulo(p.nome))}</b><small>${h(funcaoDe(p).toLowerCase() || 'função não informada')}${p.cod ? ' · cód. ' + h(p.cod) : ''}${p.reg === 'NÃO' ? ' · <span style="color:#b26a00">sem registro</span>' : ''}</small></div></td>
+          <td>${sitPes(p)}</td><td>${obraDe(p) ? `<span class="cod">${h(obraDe(p))}</span>` : '<span class="mut">—</span>'}</td>
+          <td class="n" style="text-align:left">${p.adm ? brc(p.adm) : '<span class="red">sem data</span>'}</td>
+          ${deslig ? `<td class="n" style="text-align:left">${p.dem ? brc(p.dem) : p.mesDem ? '<span class="mut">' + mesTxt(p.mesDem + '-01') + '</span>' : '<span class="red">sem data</span>'}</td><td style="font-size:11.5px">${h(titulo(p.tipoDem || '—'))}${p.adm && p.dem && dif(p.adm, p.dem) <= 90 ? ' <span class="rh-bd" style="background:#fdecec;color:#8f1c1c">experiência</span>' : ''}</td>`
+            : `<td>${exp ? `<span data-tip="1º período termina em ${br(addD(p.adm, 44))}\nExperiência termina em ${br(addD(p.adm, 89))}">dia <b>${exp}</b> de 90</span>` : '<span class="mut">—</span>'}</td>`}
+          <td class="n">${tc == null ? '—' : tc >= 365 ? fmtN(tc / 365, 1) + ' anos' : tc >= 30 ? Math.round(tc / 30) + (Math.round(tc / 30) > 1 ? ' meses' : ' mês') : tc + ' dias'}</td>
+          ${deslig ? '' : `<td>${x ? badge(x.niv) : '<span class="mut">—</span>'}</td><td class="n">${x ? fmtN(x.saldo) : '—'}</td><td class="n" style="text-align:left">${x && x.lim ? brc(x.lim) : '—'}</td><td>${chipsGozos(p)}</td>`}
+          <td class="n">${p.sal ? R$(p.sal) : '<span class="mut">—</span>'}</td>
+          <td><div class="acoes">${des ? `<button class="mini sec" data-reat="${h(p.id)}">Reativar</button>` : `<button class="mini" data-prog="${h(p.id)}|">Lançar férias</button><button class="mini sec" data-desl="${h(p.id)}">Desligar</button>`}</div></td></tr>`; }).join('')
+      : `<tr><td colspan="13" class="mut" style="padding:18px;text-align:center">Ninguém nesta lista.</td></tr>`}
       </tbody></table></div></div>
-      ${semDados.length ? `<div class="cd"><h3>Na aba Colaboradores, sem dados de férias (${semDados.length})</h3><p class="sub">Não aparecem na programação da contabilidade (sem registro em carteira, admissão recente ou nome diferente). Se for nome diferente, ligue pela ficha da pessoa.</p><div class="chips">${semDados.map(c => `<span class="cod" style="font-weight:600">${h(titulo(c.nome))} · ${h(cod(c.obra))}</span>`).join('')}</div></div>` : ''}
-      ${inativos.length ? `<div class="cd"><h3>Fora da última programação (${inativos.length})</h3><p class="sub">Estavam numa importação anterior e não vieram na última (desligados). Ficam guardados só para histórico.</p><div class="chips">${inativos.map(p => `<span class="cod" style="font-weight:600">${h(titulo(p.nome))}</span>`).join('')}</div></div>` : ''}`;
+      ${filtro.lista === 'ativos' ? semVinculo() : ''}`;
+    el.querySelectorAll('#rt-lst button').forEach(b => b.onclick = () => { filtro.lista = b.dataset.l; renderTela(); });
     const qi = $('rt-q'); qi.oninput = () => { filtro.busca = qi.value; const pos = qi.selectionStart; renderTela(); const n = $('rt-q'); n.focus(); n.setSelectionRange(pos, pos); };
-    $('rt-niv').onchange = e => { filtro.niv = e.target.value; renderTela(); };
-    $('rt-csv').onclick = () => csvColab(rows, ref);
+    $('rt-nadm').onclick = () => janelaCadastro(null);
+    $('rt-csv').onclick = () => csvCadastro(rows, ref);
+    el.querySelectorAll('[data-desl]').forEach(b => b.onclick = ev => { ev.stopPropagation(); janelaDesligar(b.dataset.desl); });
+    el.querySelectorAll('[data-reat]').forEach(b => b.onclick = ev => { ev.stopPropagation(); reativar(b.dataset.reat); });
     ligarFiltroObra(); ligarLinhas(el);
+  }
+  const sitPes = p => { const k = desligado(p) ? 'desligado' : p.sit || 'ativo', c = {ativo: ['#e7f6ea', '#14602a'], afastado: ['#fff5dc', '#7a5200'], desligado: ['#eee', '#555'], conferir: ['#fdecec', '#8f1c1c']}[k] || ['#eee', '#555']; return `<span class="rh-bd" style="background:${c[0]};color:${c[1]}">${SITP[k] || k}</span>`; };
+  function semVinculo(){
+    const ligados = new Set(Array.from(ligar().values()).map(c => c.id));
+    const cs = colaboradores().filter(c => !ligados.has(c.id));
+    const rh = pesAtivas().filter(p => p.sit !== 'conferir' && !colabDe(p) && p.cid !== 'nenhum');
+    if(!cs.length && !rh.length) return '';
+    return `<div class="cd"><h3>Conferir com a aba Colaboradores</h3><p class="sub">A aba Colaboradores (alocação nas obras) e o cadastro do RH são ligados pelo nome. Estes não acharam par: confira se a pessoa precisa entrar ou sair de um dos lados, ou ligue manualmente na ficha.</p>
+      ${cs.length ? `<div style="margin-bottom:8px"><span class="mut">Na aba Colaboradores, sem cadastro no RH:</span> <span class="chips" style="display:inline-flex">${cs.map(c => `<span class="cod" style="font-weight:600">${h(titulo(c.nome))} · ${h(cod(c.obra))}</span>`).join('')}</span></div>` : ''}
+      ${rh.length ? `<div><span class="mut">No RH, sem par na aba Colaboradores:</span> <span class="chips" style="display:inline-flex">${rh.map(p => `<span class="cod" style="font-weight:600">${h(titulo(p.nome))}</span>`).join('')}</span></div>` : ''}</div>`;
+  }
+  function reativar(pid){
+    const p = pessoa(pid); if(!p) return;
+    janelaCadastro(null, {nome: p.nome, funcao: p.funcao, setor: p.setor, aloc: p.aloc, reg: p.reg, sal: p.sal, cod: p.cod, obs: 'Readmissão (cadastro anterior: admissão ' + br(p.adm) + ', desligamento ' + br(p.dem) + ')'});
   }
 
   // ----- Cronograma -----
@@ -1031,7 +1262,7 @@
           const cont = ms.map(m => { let pico = 0; for(let d = m.ini; d <= m.fim; d = addD(d, 3)){ const n = gzAll.filter(g => { const p = pessoa(g.pid); return p && ps.includes(p) && g.ini <= d && fimG(g) >= d; }).length; if(n > pico) pico = n; } return pico; });
           return `<div class="gg"><div class="nmc" title="${h(o === '~' ? 'Sem alocação' : nomeLocal(o))}">${h(o === '~' ? 'Sem alocação' : o === 'ADM' ? 'Sede (ADM)' : o)} · ${tam} pessoas</div><div class="ms">${cont.map(n => `<div class="${n && n / tam * 100 > D.cfg.maxAus && n > 1 ? 'al' : ''}" title="Pico de pessoas fora no mês">${n || ''}</div>`).join('')}</div></div>` +
           ps.map(p => {
-            const pers = (p.per || []).filter(y => (+y.rest || 0) > 0).map(y => calcPer(p, y, ref));
+            const pers = periodos(p).filter(y => (+y.rest || 0) > 0).map(y => calcPer(p, y, ref));
             let tl = '';
             pers.forEach(c => { if(c.iniConc <= t1 && c.fimConc >= t0) tl += `<div class="cc" style="left:${X(c.iniConc)}%;width:${X(c.fimConc) - X(c.iniConc)}%" data-tip="<b>Período concessivo</b>\nAquisitivo ${br(c.per.ini)} a ${br(c.per.fim)}\nPrazo para gozar: ${br(c.iniConc)} a ${br(c.fimConc)}\nSaldo a programar: ${fmtN(c.saldo)} dias"></div>`;
               if(c.lim && c.lim >= t0 && c.lim <= t1 && c.niv !== 'ok') tl += `<div class="lm" style="left:${X(c.lim)}%" data-tip="<b>Limite para iniciar: ${br(c.lim)}</b>\n${NIV[c.niv].t}${c.dias != null ? ' · ' + (c.dias < 0 ? Math.abs(c.dias) + ' dias atrasado' : c.dias + ' dias') : ''}"></div>`; });
@@ -1094,10 +1325,10 @@
   function vAjustes(el){
     const imp = D.imp, c = D.cfg;
     el.innerHTML = `<div class="g2">
-      <div class="cd"><h3>1. Programação de férias da contabilidade</h3><p class="sub">Relatório "Programação de Férias" em PDF (o que a contabilidade emite todo mês). Atualiza admissão, períodos aquisitivos, dias gozados, saldo, afastamentos e faltas.</p>
+      <div class="cd"><h3>Conferir com a contabilidade (opcional)</h3><p class="sub">Não é preciso importar nada: as férias são calculadas pela admissão e pelo que você lança. Se quiser acertar os saldos com o relatório "Programação de Férias" da contabilidade (PDF), solte-o aqui: ele vira o novo ponto de partida de cada período.</p>
         <div class="rh-drop" id="rt-dpdf"><b>⤓ Solte o PDF aqui ou clique para escolher</b>Nada é enviado para fora: o arquivo é lido aqui no navegador.</div><input type="file" id="rt-fpdf" accept="application/pdf,.pdf" hidden>
         <div class="hint" style="margin-top:10px">${imp ? `Última importação: <b>${h(imp.arquivo || 'PDF')}</b>, emitido em ${br(imp.emissao)}${imp.base ? ', data base ' + br(imp.base) : ''} · ${imp.n} colaboradores, ${imp.per} períodos · por ${h(imp.u || '—')} em ${new Date(imp.quando).toLocaleString('pt-BR')}` : 'Ainda não houve importação.'}</div></div>
-      <div class="cd"><h3>2. Salários (para o custo)</h3><p class="sub">Planilha Excel com uma aba que tenha as colunas <b>NOME</b> e <b>TOTAL</b> (como a "Base salários"), ou cole duas colunas do Excel: nome e salário. O custo usa salário ÷ 30 × dias + 1/3, sem encargos.</p>
+      <div class="cd"><h3>Atualizar salários (opcional)</h3><p class="sub">Planilha Excel com uma aba que tenha as colunas <b>NOME</b> e <b>TOTAL</b> (como a "Base salários"), ou cole duas colunas do Excel: nome e salário. O custo usa salário ÷ 30 × dias + 1/3, sem encargos.</p>
         <div class="rh-drop" id="rt-dxls"><b>⤓ Solte a planilha (.xlsx) aqui ou clique</b>Os salários ficam só na planilha da BKP, não no GitHub.</div><input type="file" id="rt-fxls" accept=".xlsx,.xls,.xlsm" hidden>
         <label>Ou cole aqui (nome ⇥ salário)</label><textarea id="rt-tsal" style="width:100%;min-height:60px;font-family:inherit;font-size:12px;border:1px solid var(--line,#e8e8ea);border-radius:8px;padding:8px" placeholder="ASSIR DE OLIVEIRA	4.462,15"></textarea>
         <div style="margin-top:8px"><button class="sec mini" id="rt-bsal">Aplicar salários colados</button> <span class="hint">${pesAtivas().filter(p => +p.sal > 0).length} de ${pesAtivas().length} com salário</span></div></div>
@@ -1199,7 +1430,7 @@
   function janelaFicha(pid){
     const p = pessoa(pid); if(!p) return;
     const ref = hoje(), c = colabDe(p), cs = colaboradores();
-    const pers = (p.per || []).slice().sort((a, b) => b.ini.localeCompare(a.ini)).map(y => calcPer(p, y, ref));
+    const pers = periodos(p).slice().sort((a, b) => b.ini.localeCompare(a.ini)).map(y => calcPer(p, y, ref));
     const tlp = x => {
       const a = x.per.ini, b = x.fimConc, tot = dif(a, b) + 1, X = d => Math.max(0, Math.min(100, dif(a, d) / tot * 100));
       let s = `<div class="aq" style="left:0;width:${X(addD(x.per.fim, 1))}%" title="Aquisitivo"></div><div class="co" style="left:${X(x.iniConc)}%;width:${100 - X(x.iniConc)}%" title="Concessivo"></div>`;
@@ -1209,24 +1440,104 @@
       s += `<div class="lb" style="left:0;transform:none">${brc(a)}</div><div class="lb" style="left:${X(x.iniConc)}%">${brc(x.iniConc)}</div><div class="lb" style="left:100%;transform:translateX(-100%)">${brc(b)}</div>`;
       return `<div class="rh-tlp">${s}</div>`;
     };
-    modal(`<div class="mh"><div><h2>${h(titulo(p.nome))}</h2><small>${p.cod ? 'Código ' + h(p.cod) + ' · ' : ''}admissão ${br(p.adm)}${p.adm ? ' · ' + fmtN(dif(p.adm, ref) / 365, 1) + ' anos de casa' : ''}</small></div><div class="esp"></div><button class="x" data-x>×</button></div>
-      <div class="f3">
-        <label>Ligado a (aba Colaboradores)<select id="fi-cid"><option value="">${c && !p.cid ? 'Automático: ' + h(titulo(c.nome)) : 'Automático (pelo nome)'}</option>${cs.map(x => `<option value="${h(x.id)}"${String(p.cid) === String(x.id) ? ' selected' : ''}>${h(titulo(x.nome))} · ${h(cod(x.obra))}</option>`).join('')}<option value="nenhum"${p.cid === 'nenhum' ? ' selected' : ''}>Não está na aba Colaboradores</option></select></label>
-        <label>Obra<select id="fi-obra"><option value="">${obraDe(p) && !p.obra ? 'Da aba Colaboradores: ' + h(obraDe(p)) : 'Da aba Colaboradores'}</option>${locais().map(l => `<option value="${h(l.cod)}"${p.obra === l.cod ? ' selected' : ''}>${h(l.nome)}</option>`).join('')}</select></label>
-        <label>Salário mensal (R$)<input id="fi-sal" inputmode="decimal" value="${p.sal ? fmtN(p.sal, 2) : ''}" placeholder="0,00"></label>
-      </div>
-      <div class="hint" style="margin-top:4px">Função: <b>${h(funcaoDe(p).toLowerCase() || 'não informada')}</b>. Obra e função vêm da aba Colaboradores; escolha acima só se precisar corrigir.</div>
-      ${pers.length ? pers.map(x => `<div class="rh-per"><div class="ph"><b>Aquisitivo ${br(x.per.ini)} a ${br(x.per.fim)}</b>${badge(x.niv)}${x.perdeDireito ? '<span class="rh-bd" style="background:#1f1f1f;color:#fff">afastamento &gt; 6 meses</span>' : ''}<span class="esp" style="flex:1"></span>${x.saldo > 0 && !x.aberto ? `<button class="mini" data-prog="${h(p.id)}|${h(x.per.ini)}">Programar</button>` : ''}</div>
+    const des = desligado(p);
+    const pend = [];
+    if(!p.adm) pend.push('Sem data de admissão.');
+    if(des && !p.dem) pend.push('Desligado sem data de desligamento' + (p.mesDem ? ' (só o mês: ' + mesTxt(p.mesDem + '-01') + ')' : '') + '.');
+    if(p.sit === 'conferir') pend.push(p.obs || 'Veio da contabilidade e não estava no cadastro: confirme se é colaborador ativo.');
+    modal(`<div class="mh"><div><h2>${h(titulo(p.nome))} ${sitPes(p)}</h2><small>${h(funcaoDe(p).toLowerCase() || 'função não informada')}${obraDe(p) ? ' · ' + h(nomeLocal(obraDe(p))) : ''}${p.cod ? ' · código ' + h(p.cod) : ''}${p.adm ? ' · admissão ' + br(p.adm) + ' · ' + (casaDias(p, ref) >= 365 ? fmtN(casaDias(p, ref) / 365, 1) + ' anos de casa' : casaDias(p, ref) + ' dias de casa') : ''}</small></div><div class="esp"></div><button class="x" data-x>×</button></div>
+      ${pend.length ? `<ul class="rh-msg">${pend.map(t => `<li class="alerta">${h(t)}</li>`).join('')}</ul>` : ''}
+      <div class="rs" style="grid-template-columns:repeat(4,1fr)"><div><small>Setor</small><b>${h(p.setor ? (p.setor === 'SEDE' ? 'Sede' : 'Obra') : '—')}</b></div><div><small>Registrado</small><b>${h(p.reg || '—')}</b></div><div><small>Salário</small><b>${p.sal ? R$(p.sal) : '—'}</b></div><div><small>${des ? 'Desligamento' : 'Ligado à aba Colaboradores'}</small><b>${des ? br(p.dem) : c ? h(titulo(c.nome).split(' ')[0]) + ' · ' + h(cod(c.obra)) : 'não'}</b></div></div>
+      ${des ? `<div class="rs" style="grid-template-columns:2fr 1fr 1fr"><div><small>Tipo</small><b>${h(titulo(p.tipoDem || 'não informado'))}</b></div><div><small>Iniciativa</small><b>${h(titulo(iniciativa(p.tipoDem)))}</b></div><div><small>Tempo até sair</small><b>${p.adm && p.dem ? dif(p.adm, p.dem) + ' dias' : '—'}</b></div></div>${p.obsDem || p.obs ? `<div class="hint" style="margin-top:6px">${h(p.obsDem || p.obs)}</div>` : ''}` : ''}
+      <div class="mf" style="justify-content:flex-start;margin-top:12px"><button class="sec" id="fi-ed">Editar cadastro</button>${des ? '<button class="sec" id="fi-re">Readmitir</button>' : `<button class="sec" id="fi-de">Desligar</button><button id="fi-lf">+ Lançar férias</button>`}</div>
+      ${des ? '' : `<h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3,#8e8e8e);margin:18px 0 0">Férias</h3>
+      ${pers.length ? pers.map(x => `<div class="rh-per"><div class="ph"><b>Aquisitivo ${br(x.per.ini)} a ${br(x.per.fim)}</b>${badge(x.niv)}${x.perdeDireito ? '<span class="rh-bd" style="background:#1f1f1f;color:#fff">afastamento &gt; 6 meses</span>' : ''}<span class="mut" style="font-size:11px">${x.per.gerado ? 'calculado pela admissão' : 'contabilidade em ' + br(x.per.base)}</span><span class="esp" style="flex:1"></span>${x.saldo > 0 && !x.aberto ? `<button class="mini" data-prog="${h(p.id)}|${h(x.per.ini)}">Lançar férias</button>` : ''}</div>
         ${tlp(x)}
-        <div class="nums"><div><small>Direito</small><b>${fmtN(x.per.dir)} d</b></div><div><small>Gozados (contab.)</small><b>${fmtN(x.per.goz)} d</b></div><div><small>Programados</small><b>${fmtN(x.progConf)} d</b></div><div><small>Saldo a programar</small><b>${fmtN(x.saldo)} d</b></div>
-          <div><small>Concessivo até</small><b>${br(x.fimConc)}</b></div><div><small>Limite p/ iniciar</small><b>${x.lim ? br(x.lim) : '—'}</b></div><div><small>Faltas · afast.</small><b>${fmtN(x.per.faltas)} · ${fmtN(x.per.afast)}</b></div><div><small>Custo do saldo</small><b>${p.sal ? R$(x.custoSaldo) : '—'}</b></div></div>
-        ${x.aberto ? `<div class="hint" style="margin-top:8px">Período ainda em aquisição: o direito é de 30 dias ao completar (hoje são ${fmtN(x.per.dir)} dias proporcionais${+x.per.faltas > 5 ? ', reduzido por faltas' : ''}).</div>` : ''}
-        ${x.gs.length || gozosDe(p.id).some(g => g.per === x.per.ini) ? `<div style="margin-top:8px">${chipsGozos(p, x.per)}</div>` : ''}</div>`).join('') : '<div class="mut" style="margin-top:12px">Sem períodos importados.</div>'}
-      <div class="mf"><button class="sec" data-x>Fechar</button><button id="fi-ok">Salvar ficha</button></div>`, true);
-    $('fi-ok').onclick = () => { p.cid = $('fi-cid').value; p.obra = $('fi-obra').value; p.sal = num($('fi-sal').value); p.upd = agora(); vincCache = ''; salvar(); fecharModal(); };
+        <div class="nums"><div><small>Direito</small><b>${fmtN(x.aberto ? 30 : x.per.dir)} d</b></div><div><small>Gozados antes</small><b>${fmtN(x.per.goz)} d</b></div><div><small>Lançados aqui</small><b>${fmtN(x.progConf)} d</b></div><div><small>Saldo a lançar</small><b>${fmtN(x.saldo)} d</b></div>
+          <div><small>Concessivo até</small><b>${br(x.fimConc)}</b></div><div><small>Limite p/ iniciar</small><b>${x.lim ? br(x.lim) : '—'}</b></div>
+          ${x.per.gerado ? `<div><small>Faltas no período</small><input type="number" min="0" class="fi-falt" data-ini="${h(x.per.ini)}" value="${+x.per.faltas || 0}" style="width:100%;padding:3px 6px;margin-top:2px" title="Faltas injustificadas (CLT art. 130): acima de 5 reduzem o direito"></div>` : `<div><small>Faltas · afast.</small><b>${fmtN(x.per.faltas)} · ${fmtN(x.per.afast)}</b></div>`}
+          <div><small>Custo do saldo</small><b>${p.sal ? R$(x.custoSaldo) : '—'}</b></div></div>
+        ${x.aberto ? `<div class="hint" style="margin-top:8px">Período em andamento: o direito a ${fmtN(x.per.gerado ? x.per.dir : 30)} dias se completa em ${br(addD(x.per.fim, 1))}.</div>` : ''}
+        ${gozosDe(p.id).some(g => g.per === x.per.ini) ? `<div style="margin-top:8px">${chipsGozos(p, x.per)}</div>` : ''}</div>`).join('') : '<div class="mut" style="margin-top:8px">Sem data de admissão: informe no cadastro para calcular as férias.</div>'}`}
+      <div class="mf"><button class="sec" data-x>Fechar</button></div>`, true);
     const mw = $('rh-modal');
+    $('fi-ed').onclick = () => janelaCadastro(p.id);
+    if($('fi-de')) $('fi-de').onclick = () => janelaDesligar(p.id);
+    if($('fi-re')) $('fi-re').onclick = () => reativar(p.id);
+    if($('fi-lf')) $('fi-lf').onclick = () => janelaProgramar({pid: p.id});
+    mw.querySelectorAll('.fi-falt').forEach(i => i.onchange = () => { p.perAj = p.perAj || {}; p.perAj[i.dataset.ini] = Object.assign({}, p.perAj[i.dataset.ini], {faltas: Math.max(0, Math.round(num(i.value)))}); p.upd = agora(); salvar(); janelaFicha(p.id); });
     mw.querySelectorAll('[data-prog]').forEach(b => b.onclick = () => { const [a, per] = b.dataset.prog.split('|'); janelaProgramar({pid: a, per}); });
     mw.querySelectorAll('[data-gz]').forEach(b => b.onclick = () => { const g = D.gozos.find(x => x.id === b.dataset.gz); if(g) janelaProgramar(g); });
+  }
+
+  // ---------- cadastro: admitir / editar ----------
+  function janelaCadastro(pid, pre){
+    const p = pid ? pessoa(pid) : null, v = Object.assign({nome: '', funcao: '', setor: 'OBRA', aloc: '', reg: 'SIM', sit: 'ativo', adm: hoje(), sal: 0, cod: '', obs: '', cid: ''}, pre || {}, p || {});
+    const c = p ? colabDe(p) : null, cs = colaboradores(), des = p && desligado(p);
+    const fns = Array.from(new Set(vivos(D.pes).map(x => String(x.funcao || '').toUpperCase()).concat(cs.map(x => String(x.funcao || '').toUpperCase())).filter(Boolean))).sort();
+    modal(`<div class="mh"><div><h2>${p ? 'Editar cadastro' : pre ? 'Readmitir colaborador' : 'Admitir colaborador'}</h2><small>${p ? h(titulo(p.nome)) : 'Entra no quadro, no turnover e no controle de férias (a partir da admissão).'}</small></div><div class="esp"></div><button class="x" data-x>×</button></div>
+      <label>Nome completo<input id="ca-n" value="${h(v.nome)}" autocomplete="off"></label>
+      <div class="f3"><label>Função<input id="ca-f" list="ca-fl" value="${h(v.funcao)}"><datalist id="ca-fl">${fns.map(f => `<option value="${h(f)}">`).join('')}</datalist></label>
+        <label>Setor<select id="ca-s"><option value="OBRA"${v.setor !== 'SEDE' ? ' selected' : ''}>Obra</option><option value="SEDE"${v.setor === 'SEDE' ? ' selected' : ''}>Sede</option></select></label>
+        <label>Alocação<select id="ca-a"${c ? ' disabled' : ''}><option value="">Sem alocação</option>${locais().map(l => `<option value="${h(l.cod)}"${(c ? cod(c.obra) : v.aloc) === l.cod ? ' selected' : ''}>${h(l.nome)}</option>`).join('')}</select></label></div>
+      ${c ? `<div class="hint">A obra vem da aba Colaboradores (${h(cod(c.obra))}). Para mudar de obra, use aquela aba.</div>` : ''}
+      <div class="f3"><label>Data de admissão<input type="date" id="ca-ad" value="${h(v.adm || '')}"></label><label>Registrado em carteira<select id="ca-r"><option${v.reg !== 'NÃO' ? ' selected' : ''}>SIM</option><option${v.reg === 'NÃO' ? ' selected' : ''}>NÃO</option></select></label>
+        <label>Salário mensal (R$)<input id="ca-sal" inputmode="decimal" value="${v.sal ? fmtN(v.sal, 2) : ''}" placeholder="0,00"></label></div>
+      <div class="f3"><label>Situação<select id="ca-st">${['ativo', 'afastado', 'conferir'].concat(des ? ['desligado'] : []).map(k => `<option value="${k}"${(des ? 'desligado' : v.sit) === k ? ' selected' : ''}>${SITP[k]}</option>`).join('')}</select></label>
+        <label>Código na contabilidade<input id="ca-cod" value="${h(v.cod || '')}"></label>
+        <label>Ligado à aba Colaboradores<select id="ca-cid"><option value="">${c && !v.cid ? 'Automático: ' + h(titulo(c.nome).split(' ').slice(0, 2).join(' ')) : 'Automático (pelo nome)'}</option>${cs.map(x => `<option value="${h(x.id)}"${String(v.cid) === String(x.id) ? ' selected' : ''}>${h(titulo(x.nome))} · ${h(cod(x.obra))}</option>`).join('')}<option value="nenhum"${v.cid === 'nenhum' ? ' selected' : ''}>Não está na aba</option></select></label></div>
+      ${des ? `<div class="f3"><label>Data de desligamento<input type="date" id="ca-dm" value="${h(v.dem || '')}"></label><label style="grid-column:span 2">Tipo de desligamento<select id="ca-tp"><option value="">Não informado</option>${TIPOS.map(t => `<option${v.tipoDem === t ? ' selected' : ''}>${h(t)}</option>`).join('')}</select></label></div>` : ''}
+      <label>Observação<input id="ca-o" value="${h((des ? v.obsDem || v.obs : v.obs) || '')}"></label>
+      <ul class="rh-msg" id="ca-msg"></ul>
+      <div class="mf">${p ? '<button class="sec" id="ca-del" style="color:#b42318">Excluir cadastro</button>' : ''}<span class="esp"></span><button class="sec" data-x>Cancelar</button><button id="ca-ok">${p ? 'Salvar' : 'Admitir'}</button></div>`);
+    $('ca-ok').onclick = () => {
+      const nome = $('ca-n').value.trim().toUpperCase(), adm = $('ca-ad').value, msg = [];
+      if(!nome) msg.push('Informe o nome.');
+      if(!adm) msg.push('Informe a data de admissão.');
+      const dup = !p && vivos(D.pes).find(x => !desligado(x) && semelhanca(x.nome, nome) >= 1);
+      if(dup) msg.push(titulo(dup.nome) + ' já está no quadro.');
+      if(des && $('ca-dm').value && adm && $('ca-dm').value < adm) msg.push('O desligamento não pode ser antes da admissão.');
+      if(msg.length){ $('ca-msg').innerHTML = msg.map(t => `<li class="erro">${h(t)}</li>`).join(''); return; }
+      const alvo = p || {id: 'r' + uid(), desde: adm < hoje() ? hoje() : adm, per: []};
+      Object.assign(alvo, {nome, funcao: $('ca-f').value.trim().toUpperCase(), setor: $('ca-s').value, reg: $('ca-r').value, adm, sal: num($('ca-sal').value), cod: $('ca-cod').value.trim(), cid: $('ca-cid').value, upd: agora(), u: usuario()});
+      if(!c) alvo.aloc = $('ca-a').value;
+      const st = $('ca-st').value;
+      if(des){ alvo.dem = $('ca-dm').value; alvo.tipoDem = $('ca-tp').value; alvo.obsDem = $('ca-o').value.trim(); }
+      else { alvo.sit = st; alvo.obs = $('ca-o').value.trim(); }
+      if(!p){ alvo.sit = 'ativo'; D.pes.push(alvo); }
+      vincCache = ''; salvar(); fecharModal();
+      toast(p ? 'Cadastro atualizado.' : titulo(nome) + ' admitido(a) em ' + br(adm) + '.' + (!colabDe(alvo) ? ' Lembre de colocá-lo(a) na obra pela aba Colaboradores.' : ''));
+      if(!p) janelaFicha(alvo.id);
+    };
+    if($('ca-del')) $('ca-del').onclick = () => {
+      if(!confirm('Excluir o cadastro de ' + titulo(p.nome) + '? Use só para cadastro feito por engano. Para quem saiu da empresa, use Desligar (fica no histórico e no turnover).')) return;
+      p.del = true; p.upd = agora(); D.gozos.forEach(g => { if(g.pid === p.id && !g.del){ g.del = true; g.upd = agora(); } }); salvar(); fecharModal();
+    };
+  }
+  function janelaDesligar(pid){
+    const p = pessoa(pid); if(!p) return;
+    const fut = gozosDe(p.id).filter(g => g.st !== 'sug' && fimG(g) >= hoje());
+    modal(`<div class="mh"><div><h2>Desligar colaborador</h2><small>${h(titulo(p.nome))}${p.adm ? ' · admissão ' + br(p.adm) : ''}</small></div><div class="esp"></div><button class="x" data-x>×</button></div>
+      <div class="f2"><label>Data do desligamento<input type="date" id="de-d" value="${hoje()}"></label><label>Tipo<select id="de-t">${TIPOS.map(t => `<option>${h(t)}</option>`).join('')}</select></label></div>
+      <label>Observação<input id="de-o" placeholder="Ex.: cumpriu aviso de 30 dias"></label>
+      <div class="rs" id="de-rs"></div>
+      <ul class="rh-msg">${fut.length ? `<li class="alerta">Tem ${fut.length} férias lançada(s) a partir de hoje: serão canceladas.</li>` : ''}${colabDe(p) ? '<li class="alerta">Lembre de tirá-lo(a) também da aba Colaboradores (alocação nas obras).</li>' : ''}<li class="ok">Continua no histórico de ex-colaboradores e entra no turnover do mês do desligamento.</li></ul>
+      <div class="mf"><button class="sec" data-x>Cancelar</button><button id="de-ok">Desligar</button></div>`);
+    const upd = () => { const d = $('de-d').value, t = $('de-t').value, dias = p.adm && d ? dif(p.adm, d) : null;
+      $('de-rs').innerHTML = `<div><small>Tempo de casa</small><b>${dias == null ? '—' : dias + ' dias'}</b></div><div><small>Na experiência?</small><b>${dias == null ? '—' : dias <= 90 ? 'Sim' : 'Não'}</b></div><div style="grid-column:span 2"><small>Iniciativa</small><b>${h(titulo(iniciativa(t)))}</b></div>`; };
+    $('de-d').oninput = upd; $('de-t').onchange = upd; upd();
+    $('de-ok').onclick = () => {
+      const d = $('de-d').value; if(!d) return;
+      if(p.adm && d < p.adm) return toast('O desligamento não pode ser antes da admissão.', true);
+      Object.assign(p, {sit: 'desligado', dem: d, mesDem: d.slice(0, 7), tipoDem: $('de-t').value, obsDem: $('de-o').value.trim(), upd: agora(), u: usuario()});
+      gozosDe(p.id).forEach(g => { if(g.ini >= d || g.st === 'sug'){ g.st = 'canc'; g.upd = agora(); } });
+      salvar(); fecharModal(); toast(titulo(p.nome) + ' desligado(a) em ' + br(d) + '.');
+    };
+  }
+  function csvCadastro(rows, ref){
+    const l = [['Nome', 'Função', 'Setor', 'Obra', 'Registrado', 'Situação', 'Admissão', 'Desligamento', 'Tipo de desligamento', 'Iniciativa', 'Tempo de casa (dias)', 'Código contab.', 'Observação']];
+    rows.forEach(p => l.push([p.nome, funcaoDe(p), p.setor, obraDe(p), p.reg, SITP[desligado(p) ? 'desligado' : p.sit] || p.sit, br(p.adm), p.dem ? br(p.dem) : '', p.tipoDem || '', desligado(p) ? iniciativa(p.tipoDem) : '', casaDias(p, ref) == null ? '' : casaDias(p, ref), p.cod || '', p.obsDem || p.obs || '']));
+    baixar('rh-colaboradores-' + ref + '.csv', '﻿' + l.map(csvL).join('\n'), 'text/csv');
   }
 
   // ---------- programar férias (janela) ----------
@@ -1236,12 +1547,12 @@
     const g = Object.assign({id: '', pid: '', per: '', ini: '', dias: 30, abono: 0, adi13: false, st: 'prog', obs: ''}, existente || base);
     if(g.pid && !g.per){ const pr = principal(pessoa(g.pid), ref); if(pr && pr.saldo > 0 && !pr.aberto) g.per = pr.per.ini; }
     if(!existente && g.pid && g.per){
-      const c = calcPer(pessoa(g.pid), pessoa(g.pid).per.find(y => y.ini === g.per), ref);
+      const c = calcPer(pessoa(g.pid), periodos(pessoa(g.pid)).find(y => y.ini === g.per) || periodos(pessoa(g.pid))[0], ref);
       g.dias = Math.min(30, Math.max(5, c.saldo)) || 30;
       if(!g.ini){ let s = addD(ref, D.cfg.aviso); if(s <= c.per.fim) s = addD(c.per.fim, 1); g.ini = proxSegunda(s); while(!inicioValido(g.ini, obraDe(pessoa(g.pid)))) g.ini = addD(g.ini, 1); }
     }
     const ps = pesAtivas().slice().sort((a, b) => a.nome.localeCompare(b.nome));
-    modal(`<div class="mh"><div><h2>${existente ? 'Editar férias' : 'Programar férias'}</h2><small>${existente ? SIT[situacao(existente, ref)].t + (existente.u ? ' · por ' + h(existente.u) : '') : 'A ferramenta confere as regras da CLT e a cobertura da equipe.'}</small></div><div class="esp"></div><button class="x" data-x>×</button></div>
+    modal(`<div class="mh"><div><h2>${existente ? 'Editar férias' : 'Lançar férias'}</h2><small>${existente ? SIT[situacao(existente, ref)].t + (existente.u ? ' · por ' + h(existente.u) : '') : 'Férias já tiradas ou futuras. O saldo do período se atualiza sozinho; para datas futuras, confere as regras da CLT e a cobertura da equipe.'}</small></div><div class="esp"></div><button class="x" data-x>×</button></div>
       <div class="f2"><label>Colaborador<select id="pg-p"><option value="">Escolha…</option>${ps.map(p => `<option value="${h(p.id)}"${p.id === g.pid ? ' selected' : ''}>${h(titulo(p.nome))}${obraDe(p) ? ' · ' + h(obraDe(p)) : ''}</option>`).join('')}</select></label>
         <label>Período aquisitivo<select id="pg-per"></select></label></div>
       <div class="f3"><label>Início<input type="date" id="pg-ini" value="${h(g.ini)}"></label><label>Dias de férias<input type="number" id="pg-d" min="5" max="30" value="${g.dias}"></label><label>Abono (dias vendidos)<input type="number" id="pg-ab" min="0" max="10" value="${+g.abono || 0}"></label></div>
@@ -1256,7 +1567,7 @@
     function opcoesPer(){
       const p = pessoa($('pg-p').value), s = $('pg-per');
       if(!p){ s.innerHTML = '<option value="">—</option>'; return; }
-      const l = (p.per || []).map(y => calcPer(p, y, ref, g.id));
+      const l = periodos(p).map(y => calcPer(p, y, ref, g.id));
       s.innerHTML = l.map(x => `<option value="${h(x.per.ini)}"${x.per.ini === g.per ? ' selected' : ''}>${brc(x.per.ini)} a ${brc(x.per.fim)} · saldo ${fmtN(x.rest - x.progConf)}d${x.aberto ? ' (em aquisição)' : ''}</option>`).join('') || '<option value="">Sem períodos</option>';
       if(!l.some(x => x.per.ini === g.per)){ const pr = l.filter(x => !x.aberto && x.rest - x.progConf > 0)[0] || l[0]; if(pr) s.value = pr.per.ini; }
     }
@@ -1273,10 +1584,10 @@
       if($('pg-av')) $('pg-av').disabled = $('pg-ok').disabled;
     }
     opcoesPer(); atualizar();
-    $('pg-p').onchange = () => { g.per = ''; opcoesPer(); const p = pessoa($('pg-p').value); if(p && !$('pg-ini').value){ const c = calcPer(p, p.per.find(y => y.ini === $('pg-per').value), ref); $('pg-d').value = Math.min(30, Math.max(5, c.saldo)); } atualizar(); };
+    $('pg-p').onchange = () => { g.per = ''; opcoesPer(); const p = pessoa($('pg-p').value); if(p && !$('pg-ini').value){ const c = calcPer(p, periodos(p).find(y => y.ini === $('pg-per').value) || periodos(p)[0], ref); $('pg-d').value = Math.min(30, Math.max(5, c.saldo)); } atualizar(); };
     ['pg-per', 'pg-ini', 'pg-d', 'pg-ab', 'pg-13'].forEach(id => { $(id).oninput = atualizar; $(id).onchange = atualizar; });
     $('rh-modal').querySelectorAll('[data-q]').forEach(b => b.onclick = () => {
-      if(b.dataset.q === 'saldo'){ const p = pessoa($('pg-p').value); if(!p) return; const per = p.per.find(y => y.ini === $('pg-per').value); if(!per) return; const c = calcPer(p, per, ref, g.id); $('pg-d').value = Math.max(0, c.rest - c.progConf); $('pg-ab').value = 0; }
+      if(b.dataset.q === 'saldo'){ const p = pessoa($('pg-p').value); if(!p) return; const per = periodos(p).find(y => y.ini === $('pg-per').value); if(!per) return; const c = calcPer(p, per, ref, g.id); $('pg-d').value = Math.max(0, c.rest - c.progConf); $('pg-ab').value = 0; }
       else { const [d, a] = b.dataset.q.split('|'); $('pg-d').value = d; $('pg-ab').value = a; }
       atualizar();
     });
@@ -1291,7 +1602,7 @@
       salvar();
       return alvo;
     };
-    $('pg-ok').onclick = () => { const a = gravar(); if(a){ fecharModal(); toast('Férias de ' + titulo(pessoa(a.pid).nome.split(' ')[0]) + ' programadas: ' + br(a.ini) + ' a ' + br(fimG(a)) + '.'); } };
+    $('pg-ok').onclick = () => { const a = gravar(); if(a){ fecharModal(); toast('Férias de ' + titulo(pessoa(a.pid).nome.split(' ')[0]) + ' lançadas: ' + br(a.ini) + ' a ' + br(fimG(a)) + '.'); } };
     if($('pg-av')) $('pg-av').onclick = () => { const a = gravar(); if(a){ fecharModal(); emitirAviso(a); } };
     if($('pg-canc')) $('pg-canc').onclick = () => {
       if(existente.st === 'sug'){ existente.del = true; existente.upd = agora(); salvar(); fecharModal(); return; }
@@ -1313,7 +1624,7 @@
   // ---------- aviso de férias (impressão) ----------
   function emitirAviso(g){
     if(!g) return;
-    const p = pessoa(g.pid), per = (p.per || []).find(y => y.ini === g.per) || {}, fim = fimG(g), ret = addD(fim, 1);
+    const p = pessoa(g.pid), per = periodos(p).find(y => y.ini === g.per) || {}, fim = fimG(g), ret = addD(fim, 1);
     const logo = new URL('logo-bkp.png', location.href).href;
     const hojeTxt = (d => d.getDate() + ' de ' + MESL[d.getMonth()] + ' de ' + d.getFullYear())(new Date());
     const via = nome => `<section><div class="cb"><img src="${logo}"><div><b>${EMPRESA.nome}</b><br>CNPJ ${EMPRESA.cnpj}<br>${h(EMPRESA.end)}</div><div class="via">${nome}</div></div>
@@ -1347,7 +1658,7 @@
   const nBR = v => (+v || 0).toFixed(2).replace('.', ',');
   function csvColab(rows, ref){
     const l = [['Código', 'Nome', 'Função', 'Obra', 'Admissão', 'Início aquisitivo', 'Fim aquisitivo', 'Fim concessivo', 'Direito', 'Gozados', 'Programados', 'Saldo', 'Limite p/ iniciar', 'Dias até o limite', 'Nível', 'Salário', 'Custo do saldo']];
-    rows.forEach(({p}) => (p.per || []).forEach(y => { const x = calcPer(p, y, ref); l.push([p.cod, p.nome, funcaoDe(p), obraDe(p), br(p.adm), br(y.ini), br(y.fim), br(x.fimConc), nBR(y.dir), nBR(y.goz), nBR(x.progConf), nBR(x.saldo), x.lim ? br(x.lim) : '', x.dias == null ? '' : x.dias, NIV[x.niv].t, nBR(p.sal), nBR(x.custoSaldo)]); }));
+    rows.forEach(({p}) => periodos(p).forEach(y => { const x = calcPer(p, y, ref); l.push([p.cod, p.nome, funcaoDe(p), obraDe(p), br(p.adm), br(y.ini), br(y.fim), br(x.fimConc), nBR(y.dir), nBR(y.goz), nBR(x.progConf), nBR(x.saldo), x.lim ? br(x.lim) : '', x.dias == null ? '' : x.dias, NIV[x.niv].t, nBR(p.sal), nBR(x.custoSaldo)]); }));
     baixar('ferias-colaboradores-' + ref + '.csv', '﻿' + l.map(csvL).join('\n'), 'text/csv');
   }
   function csvProg(gs, ref){
@@ -1390,5 +1701,5 @@
   acesso();
   receber();
   try{ if(ls.get('aba') === 'rh' && liberado()) trocarAba('rh'); }catch(e){}
-  window.G360RH = {dados: () => D, abrir: abrirTela, receber, enviar, _lerProgramacao: lerProgramacao, _aplicar: aplicarProgramacao, _salarios: aplicarSalarios, _sugerir: sugerir, _validar: validar, _fila: fila};
+  window.G360RH = {dados: () => D, abrir: abrirTela, semear, _turnover: turnover, _periodos: periodos, receber, enviar, _lerProgramacao: lerProgramacao, _aplicar: aplicarProgramacao, _salarios: aplicarSalarios, _sugerir: sugerir, _validar: validar, _fila: fila};
 })();
