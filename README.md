@@ -10,6 +10,8 @@ Ferramenta interna de acesso restrito. Para entrar, você precisa de um usuário
 ## Usuários
 Dentro da ferramenta, clique em **Usuários** para criar um usuário, trocar a senha ou remover alguém. Depois clique em **Baixar usuarios.json** e substitua o arquivo no GitHub.
 
+**Aviso de usuário não publicado** (`usuarios-pend.js`): ao criar, trocar senha ou remover alguém, o `usuarios.json` já é baixado na hora e a lista nova fica guardada naquele aparelho. Até o arquivo do GitHub ficar igual a ela, aparece um ponto vermelho no botão **Usuários**, um aviso na janela (com o nome de quem falta publicar) e uma faixa no rodapé. Se a página for recarregada antes de publicar, nada se perde: a janela volta com a lista alterada e o botão **Baixar usuarios.json de novo** gera o arquivo outra vez. O aviso some sozinho uns minutos depois que o arquivo for trocado no GitHub (ou em **Já publiquei — verificar**). **Descartar alteração** volta para a lista publicada.
+
 Use senhas com pelo menos 10 caracteres. Como `usuarios.json` é público, uma senha fraca pode ser descoberta por tentativa.
 
 Remover um usuário impede que ele entre de novo. Quem já usou "Manter conectado" continua com a chave salva naquele navegador. Se for preciso cortar o acesso de vez, gere uma chave nova (`node tools/cripto.mjs iniciar`) e recadastre os usuários.
