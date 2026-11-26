@@ -105,7 +105,10 @@
   //    todas disputam o mesmo item e só uma entra na conta. Preço da linha k fica em f.p[id + '~' + k].
   //  - Escolha: c.esc[necessidade] = {i, f, k} (célula travada pelo lápis ou por uma predefinição) ou {nao: 1}
   //    (desaprovado: não será comprado). Sem nada travado vale a recomendação automática: a combinação mais
-  //    barata já com o frete, que inclui comprar tudo de um fornecedor só. Opção alternativa só entra travada.
+  //    barata já com o frete, que inclui comprar tudo de um fornecedor só.
+  //  - Opção que conta para cada fornecedor: c.opf[fornecedor][necessidade] = id do item (original ou alternativa),
+  //    escolhida clicando em "usar no total" na célula. Sem escolha vale o item original; se o fornecedor só cotou
+  //    uma alternativa, ela entra no lugar. É essa opção que soma no total dele e na recomendação automática.
   const TAXA_MES = 0.015; // custo do dinheiro para trazer compras a prazo a valor presente
   const chP = (id, k) => k ? id + '~' + k : id;
   const slots = i => Math.max(1, +i.sl || 1);
@@ -151,6 +154,17 @@
     return e;
   }
 
+  // opção do item (original ou alternativa) que entra no total de um fornecedor
+  function opcaoForn(c, n, f){
+    const cot = i => { for(let k = 0; k < slots(i); k++) if(isFinite(precoN(f, i, k))) return true; return false; };
+    const ch = c.opf && c.opf[f.id] && c.opf[f.id][n.id], it = ch && n.itens.find(i => i.id === ch);
+    if(it && cot(it)) return it;
+    if(n.itens.includes(n.orig) && cot(n.orig)) return n.orig;
+    return n.itens.find(cot) || null;
+  }
+  // quantas opções do mesmo item o fornecedor cotou
+  const opcoesCotadas = (n, f) => n.itens.filter(i => { for(let k = 0; k < slots(i); k++) if(isFinite(precoN(f, i, k))) return true; return false; }).length;
+
   function calc(c){
     const fs = c.fs, nf = fs.length, E0 = escolhas(c), fidx = {};
     fs.forEach((f, k) => fidx[f.id] = k);
@@ -162,8 +176,10 @@
     const NN = [], idx = {};
     todos.forEach(i => { const r = raizId(c, i); if(!(r in idx)){ idx[r] = NN.length; NN.push({id: r, orig: c.itens.find(x => x.id === r), itens: []}); } NN[idx[r]].itens.push(i); });
     NN.forEach(n => {
-      n.auto = n.itens.includes(n.orig) ? ofertas(n.orig) : [];      // a recomendação automática usa só o item original
       n.todas = [].concat(...n.itens.map(ofertas));
+      // em cada fornecedor conta uma opção só (ver opcaoForn); a recomendação automática usa essas
+      n.opc = {}; fs.forEach(f => { const it = opcaoForn(c, n, f); if(it) n.opc[f.id] = it.id; });
+      n.auto = n.todas.filter(x => n.opc[x.fid] === x.i.id);
       const e = E0[n.id]; n.nao = !!(e && e.nao); n.trava = null;
       if(e && !e.nao) n.trava = n.todas.find(x => x.i.id === e.i && x.fid === e.f && x.k === (+e.k || 0)) || null;
     });
@@ -321,17 +337,19 @@
   #cot-mapa .cv-t th:last-child{border-right:0}
   #cot-mapa .cv-t th,#cot-mapa .cv-t td{text-align:left}
   #cot-mapa .cv-t th.c,#cot-mapa .cv-t td.c{text-align:center} #cot-mapa .cv-t th.n,#cot-mapa .cv-t td.n{text-align:right}
-  #cot-mapa .cv-t th.fh{min-width:140px;text-transform:uppercase;line-height:1.25}
+  #cot-mapa .cv-t col.cf{width:180px}
+  #cot-mapa .cv-t th.fh,#cot-mapa .cv-t td.pc,#cot-mapa .cv-t th.add{width:180px;min-width:180px}
+  #cot-mapa .cv-t th.fh{text-transform:uppercase;line-height:1.25}
   #cot-mapa .cv-t th.fh small{display:block;font-weight:400;font-size:10.5px;opacity:.8;margin-top:6px}
   #cot-mapa .cv-t th.fh .x{float:right;background:none;border:0;color:#fff;opacity:0;padding:0 0 0 6px;font-size:16px;line-height:1;cursor:pointer}
   #cot-mapa .cv-t th.fh:hover .x{opacity:.85}
-  #cot-mapa .cv-t th.add{background:var(--head,#f6f6f7);color:var(--cv);font-weight:600;min-width:160px;vertical-align:bottom}
+  #cot-mapa .cv-t th.add{background:var(--head,#f6f6f7);color:var(--cv);font-weight:600;vertical-align:bottom}
   #cot-mapa .cv-t th.add input{display:block;width:100%;border:0;background:transparent;padding:6px 0 0;font-size:11.5px;color:var(--ink,#232323);font-weight:400;box-shadow:none}
   #cot-mapa .cv-t th.add input::placeholder{color:var(--ink3,#8e8e8e)}
   #cot-mapa .cv-t .fix{position:sticky;left:0;z-index:1}
   #cot-mapa .cv-t thead .fix{z-index:3}
   #cot-mapa .cv-t td{padding:8px 10px;border-bottom:1px solid var(--line2,#f0f0f2);border-right:1px solid var(--line2,#f0f0f2);vertical-align:top;background:var(--card,#fff)}
-  #cot-mapa .cv-t td.it{min-width:250px;width:300px}
+  #cot-mapa .cv-t td.it{min-width:250px}
   #cot-mapa .cv-t td.it textarea{display:block;width:100%;resize:none;overflow:hidden;border:1px solid transparent;background:transparent;padding:1px 3px;font:inherit;font-size:12.5px;line-height:1.45;color:var(--ink,#232323);border-radius:4px;min-height:0}
   #cot-mapa .cv-t td.it textarea:hover:not(:disabled){border-color:var(--line,#e8e8ea)}
   #cot-mapa .cv-t td.it textarea:focus{outline:none;border-color:var(--cv);background:var(--card,#fff);box-shadow:0 0 0 2px rgba(15,124,134,.15)}
@@ -341,7 +359,7 @@
   #cot-mapa .cv-t td input:hover:not(:disabled),#cot-mapa .cv-t td select:hover:not(:disabled){border-color:var(--line,#e8e8ea)}
   #cot-mapa .cv-t td input:focus,#cot-mapa .cv-t td select:focus{border-color:var(--cv);background:var(--card,#fff);box-shadow:0 0 0 2px rgba(15,124,134,.15)}
   #cot-mapa .cv-t td input:disabled,#cot-mapa .cv-t td select:disabled{opacity:1;color:var(--ink,#232323)}
-  #cot-mapa .cv-t td.pc{text-align:right;white-space:nowrap;min-width:140px;font-variant-numeric:tabular-nums}
+  #cot-mapa .cv-t td.pc{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
   #cot-mapa .cv-t td.pc .pw{display:flex;align-items:center;justify-content:flex-end;gap:3px}
   #cot-mapa .cv-t td.pc .rs{color:var(--ink3,#8e8e8e)}
   #cot-mapa .cv-t td.pc input{text-align:right;width:9ch;font-variant-numeric:tabular-nums;max-width:150px;box-sizing:content-box}
@@ -416,6 +434,11 @@
   #cot-mapa .cv-t td.pc input.mke{display:none;width:100%;text-align:right;font-size:10.5px;text-transform:uppercase;color:var(--ink2,#5c5c5c);font-weight:400;padding:0 3px}
   #cot-mapa .cv-t td.pc input.mke.on,#cot-mapa .cv-t td.pc input.mke:focus{display:block}
   #cot-mapa .cv-t td.pc .mkl:has(.mke.on) .tagb,#cot-mapa .cv-t td.pc .mkl:has(.mke:focus) .tagb{display:none}
+  #cot-mapa .cv-t td.pc.nc .pw,#cot-mapa .cv-t td.pc.nc .tv,#cot-mapa .cv-t td.pc.nc input,#cot-mapa .cv-t td.pc.nc .mk{color:var(--ink3,#9aa3ab)}
+  #cot-mapa .cv-t td.pc .opb{display:inline-block;margin:3px 0 0;border:1px solid var(--line,#e4e4e7);background:var(--card,#fff);color:var(--ink2,#5c5c5c);border-radius:10px;padding:1px 8px;font-size:10.5px;font-weight:600;line-height:16px;cursor:pointer}
+  #cot-mapa .cv-t td.pc .opb[hidden]{display:none}
+  #cot-mapa .cv-t td.pc .opb:hover{border-color:var(--cv);color:var(--cv);filter:none}
+  #cot-mapa .cv-t td.pc .opb.on{background:var(--cv);border-color:var(--cv);color:#fff;cursor:default}
   #cot-mapa .cv-t td.pc .mkt{font-size:10.5px;color:var(--ink2,#5c5c5c);text-transform:uppercase}
   #cot-mapa .cv-t td.pc.esc.trv{box-shadow:inset 0 0 0 2px var(--cv)}
   #cot-mapa .cv-t td.dim>*{opacity:.4}
@@ -1201,6 +1224,7 @@
         <datalist id="cot-sols">${[...new Set(vivos(D.cot).map(x => x.sol).filter(Boolean))].map(x => '<option value="' + h(x) + '">').join('')}</datalist>
         <input class="cv-tit" data-k="tit" value="${h(c.tit)}" placeholder="Título do mapa — o que está sendo comprado (ex.: filtros e óleo para revisão dos caminhões)"${dis}>
         <div class="wrap"><table class="cv-t" id="cm-t">
+          <colgroup><col><col style="width:64px"><col style="width:86px">${fs.map(() => '<col class="cf">').join('')}${tr ? '' : '<col class="cf">'}</colgroup>
           <thead><tr>
             <th class="it fix">Item</th><th class="c" style="width:64px">Und</th><th class="n" style="width:86px">Qtd</th>
             ${fs.map(f => '<th class="fh">' + (tr ? '' : '<button class="x" data-rf="' + f.id + '" title="Tirar da cotação">×</button>') + h(f.nome)
@@ -1212,7 +1236,7 @@
           <tfoot id="cm-f"></tfoot>
         </table></div>
         ${tr ? '' : '<div class="hint cv-dica">Clique no valor para lançar o preço unitário (em branco = não cotou); Enter desce, e dá para colar uma coluna de preços do Excel. Verde = menor preço do item · vermelho = o mais caro · fundo verde-petróleo = compra escolhida. Passe o mouse no item: '
-          + '<b>' + ICO.tag + ' outra marca</b> (cada fornecedor lança a marca dele, só uma entra na conta) e <b>' + ICO.alt + ' opção alternativa</b> (outro produto no lugar deste; entra se você escolher pelo lápis).</div>'}
+          + '<b>' + ICO.tag + ' outra marca</b> (cada fornecedor lança a marca dele, só uma entra na conta) e <b>' + ICO.alt + ' opção alternativa</b> (outro produto no lugar deste). Se o fornecedor cotou mais de uma opção do mesmo item, clique em <b>usar no total</b> na célula para escolher qual entra no total dele.</div>'}
       </div>
 
       <div class="cv-folha" id="cm-res"></div>
@@ -1292,7 +1316,8 @@
       + (edita ? '<div class="pw"><span class="rs">R$</span><input class="pr" data-p="' + f.id + '" data-k="' + k + '" inputmode="decimal" value="' + h(isFinite(p) ? f2(p) : '') + '" placeholder="–"></div>' : '<span class="tv"></span>')
       + '<div class="mkl">' + (edita ? '<button class="tagb" data-tg tabindex="-1" title="Escrever a marca">' + ICO.eti + '</button><input class="mke' + (mk ? ' on' : '') + '" data-mk="' + f.id + '" data-k="' + k + '" value="' + h(mk) + '" placeholder="marca" tabindex="-1">'
         : (mk ? '<span class="mkt">' + h(mk) + '</span>' : '')) + '</div>'
-      + '<span class="mk"></span></td>';
+      + '<span class="mk"></span>'
+      + (tr ? '' : '<button class="opb" data-op tabindex="-1" hidden></button>') + '</td>';
   }
   const prIn = v => ok(num(v)) ? f2(num(v)) : '';
   const fqIn = v => ok(num(v)) ? fq(num(v)) : String(v || '');
@@ -1346,6 +1371,15 @@
     const e = garantirEsc(c), n = raizId(c, i), at = e[n];
     if(at && at.i === iid && at.f === fid && (+at.k || 0) === k) delete e[n]; else e[n] = {i: iid, f: fid, k};
     c.preset = ''; mexeu(c);
+  }
+  // "usar no total": define qual opção do item (original ou alternativa) conta no total daquele fornecedor
+  function usarNoTotal(c, key){
+    const [iid, fid] = key.split('|'), i = c.itens.find(x => x.id === iid), f = c.fs.find(x => x.id === fid);
+    if(!i || !f) return;
+    const n = raizId(c, i); c.opf = c.opf || {}; c.opf[fid] = c.opf[fid] || {};
+    if(c.opf[fid][n] === iid) return;
+    c.opf[fid][n] = iid;
+    registrar(c, f.nome + ': "' + (i.desc || 'item sem descrição') + '" passa a contar no total'); mexeu(c);
   }
   function alternarNao(c, need){
     const e = garantirEsc(c), it = c.itens.find(x => x.id === need);
@@ -1426,6 +1460,7 @@
       if(NAO){ if(tb && !e.target.closest('.gut')){ e.preventDefault(); alternarNao(c, tb.dataset.need); } return; }
       const td = e.target.closest('td.pc'); if(!td) { if(ESC && tb) e.preventDefault(); return; }
       if(e.target.closest('.tagb') || e.target.closest('.mke')) return;
+      if(e.target.closest('.opb')){ e.preventDefault(); if(!tr && !ESC) usarNoTotal(c, td.dataset.cell); return; }
       if(ESC){ e.preventDefault(); escolherCelula(c, td.dataset.cell); return; }
       if(tr) return;
       if(MOS === 't'){ e.preventDefault(); MOS = 'u'; try{ localStorage.setItem('dmtbkp_cotMostra', MOS); }catch(x){} redesenhar(c, '[data-cell="' + td.dataset.cell + '"] input.pr'); return; }
@@ -1462,21 +1497,31 @@
     if(!M || aberta !== c.id) return;
     const R = calc(c), tr = travada(c), E = R.E;
     estadoSalvo();
-    const pickItem = {}, naoN = {}, escCel = {};
-    R.NN.forEach(n => { if(n.nao) naoN[n.id] = 1; if(n.trava) pickItem[n.id] = n.trava.i.id; });
+    const pickItem = {}, naoN = {}, escCel = {}, ndPor = {};
+    R.NN.forEach(n => { ndPor[n.id] = n; if(n.nao) naoN[n.id] = 1; if(n.trava) pickItem[n.id] = n.trava.i.id; });
     Object.values(E.asg).forEach(x => escCel[x.i.id + '|' + x.fid + '|' + x.k] = 1);
     $('cm-t').querySelectorAll('tbody.it').forEach(tb => {
       const i = c.itens.find(x => x.id === tb.dataset.i); if(!i) return;
       const need = tb.dataset.need, nao = !!naoN[need], pk = pickItem[need];
-      const fora = nao || !!(pk && pk !== i.id), altoff = !!(i.alt && !pk && !nao);
+      const nd = ndPor[need], opc = (nd && nd.opc) || {};
+      const contam = c.fs.filter(f => opc[f.id] === i.id);
+      const fora = nao || !!(pk && pk !== i.id), altoff = !!(i.alt && !pk && !nao && !contam.length);
       tb.classList.toggle('naob', fora); tb.classList.toggle('altoff', altoff);
-      const tg = tb.querySelector('.naotag'); if(tg) tg.textContent = nao ? 'não será comprado' : fora ? 'fora da compra — outra opção escolhida' : altoff ? 'fora da conta — escolha pelo lápis para comprar esta opção' : '';
+      const tg = tb.querySelector('.naotag'); if(tg) tg.textContent = nao ? 'não será comprado' : fora ? 'fora da compra — outra opção escolhida'
+        : altoff ? 'fora da conta — clique em "usar no total" na célula do fornecedor'
+        : (i.alt && !pk) ? 'conta no total de: ' + contam.map(f => f.nome).join(', ') : '';
       const r = R.it[i.id];
       tb.querySelectorAll('td[data-cell]').forEach(td => {
         const [, fid, ks] = td.dataset.cell.split('|'), k = +ks, f = c.fs.find(x => x.id === fid); if(!f) return;
         const p = precoN(f, i, k), v = R.ef(f, i, k), esc = !!escCel[td.dataset.cell] && !fora;
-        const conta = !fora && !altoff;
+        const desta = opc[f.id] === i.id, conta = !fora && (pk ? true : desta);
+        const varias = !!(nd && !pk && !nao && isFinite(p) && opcoesCotadas(nd, f) > 1);
         td.classList.toggle('vz', !isFinite(p));
+        td.classList.toggle('nc', !!nd && !fora && !pk && isFinite(p) && !desta);
+        const ob = td.querySelector('.opb');
+        if(ob){ ob.hidden = !varias || ESC || NAO; ob.classList.toggle('on', desta);
+          ob.textContent = desta ? '✓ no total' : 'usar no total';
+          ob.title = desta ? 'Esta opção é a que conta no total de ' + f.nome : 'Usar esta opção no total de ' + f.nome + ' (no lugar da outra que ele cotou)'; }
         td.classList.toggle('min', !!(conta && r && v != null && r.n > 1 && Math.abs(v - r.min) < 1e-6));
         td.classList.toggle('alto', !!(conta && r && v != null && r.n > 2 && r.max > r.min && v - r.max > -1e-6));
         td.classList.toggle('esc', esc);
@@ -1544,7 +1589,9 @@
       const x = R.f[f.id], put = (a, v) => { const el = foot.querySelector('[' + a + '="' + f.id + '"]'); if(el) el.innerHTML = v; return el; };
       put('data-s', x.n ? R$(x.sub) + (x.dv > 0.005 ? '<small>com desconto: ' + R$(x.liq) + '</small>' : '') : '—');
       const best = !!(R.unico && R.unico.f.id === f.id && fs.length > 1);
-      const t = put('data-tot', x.n ? R$(x.tot) + '<small' + (x.n < n ? ' style="color:#b26a00"' : '') + '>' + (best ? 'menor proposta completa' : x.n < n ? 'cotação parcial · ' + x.n + ' de ' + n : ' ') + '</small>' : '—<small>não cotou</small>');
+      const nAlt = Object.values(x.asg).filter(y => y.i.alt).length;
+      const t = put('data-tot', x.n ? R$(x.tot) + '<small' + (x.n < n ? ' style="color:#b26a00"' : '') + '>' + (best ? 'menor proposta completa' : x.n < n ? 'cotação parcial · ' + x.n + ' de ' + n : ' ') + '</small>'
+        + (nAlt ? '<small style="color:var(--cvt)">com ' + nAlt + (nAlt === 1 ? ' opção alternativa' : ' opções alternativas') + '</small>' : '') : '—<small>não cotou</small>');
       if(t) t.classList.toggle('best', best);
       if(x.n && !x.pag.avista) algumPrazo = true;
       put('data-pv', !x.n ? '—' : x.pag.avista ? '<span class="hint">à vista</span>' : R$(x.pv));
@@ -2018,7 +2065,9 @@
         + fs.map(f => {
           let o = x && x.fid === f.id ? x : null;
           if(!o) for(let s = 0; s < slots(i); s++){ const p = R.ef(f, i, s); if(p != null && (!o || p < o.p)) o = {p, k: s}; }
-          if(!o) return '<td class="c" colspan="2" style="color:#aaa">não cotou</td>';
+          if(!o){ const y = R.f[f.id].asg[nd.id];
+            if(y) return '<td class="n">' + f2(y.p) + '<br><small style="color:#0b5d65">' + h(y.i.desc || '') + '</small></td><td class="n">' + f2(y.custo) + '</td>';
+            return '<td class="c" colspan="2" style="color:#aaa">não cotou</td>'; }
           const mk = marcaDe(f, i, o.k), min = r.n > 1 && Math.abs(o.p - r.min) < 1e-6, e = !!(x && x.fid === f.id && x.k === o.k);
           const cl = (min ? 'min ' : '') + (e ? 'esc' : '');
           return '<td class="n ' + cl + '">' + f2(o.p) + (mk ? '<br><small>' + h(mk) + '</small>' : '') + '</td><td class="n ' + cl + '">' + f2(o.p * (num(i.q) || 0)) + '</td>';
