@@ -41,9 +41,9 @@
   const UNID = ['un', 'pç', 'cj', 'kg', 't', 'm', 'm²', 'm³', 'L', 'cx', 'sc', 'rolo', 'gl', 'balde', 'tambor', 'par', 'vb', 'h', 'dia', 'mês', 'km', 'viagem'];
 
   const SIT = {
-    aberta:    {n: 'Em cotação', c: '#b26a00'},
-    aprovacao: {n: 'Aguardando aprovação', c: '#6941c6'},
-    aprovada:  {n: 'Aprovada', c: '#1f7a3d'},
+    aberta:    {n: 'Em cotação', c: '#0f7c86'},
+    aprovacao: {n: 'Aguardando aprovação', c: '#e08a00'},
+    aprovada:  {n: 'Aprovada', c: '#6aa84f'},
     pedido:    {n: 'Pedido emitido', c: '#175cd3'},
     cancelada: {n: 'Cancelada', c: '#8e8e8e'}
   };
@@ -181,60 +181,161 @@
   #aba-cot .aviso{color:#b42318;font-size:11.5px}
 
   #cot-mapa *,#cot-modal *{box-sizing:border-box}
+  #cot-mapa{--cv:#0f7c86;--cv2:#e3f1f2;--cvt:#0b5d65;position:fixed;inset:0;z-index:4000;background:#f3f4f5;color:var(--ink,#232323);display:flex;flex-direction:column}
+  html.tema-escuro #cot-mapa{background:var(--bg);--cv2:#173b3f;--cvt:#7fd3da}
   #cot-mapa input,#cot-mapa select{min-width:0}
-  #cot-mapa{position:fixed;inset:0;z-index:4000;background:var(--bg,#FBFBFC);color:var(--ink,#232323);display:flex;flex-direction:column}
-  #cot-mapa .topo{display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--line,#e8e8ea);background:var(--card,#fff);flex-wrap:wrap}
-  #cot-mapa .topo h2{margin:0;font-size:17px;white-space:nowrap}
-  #cot-mapa .topo .esp{flex:1}
-  #cot-mapa .topo .btns{display:flex;gap:6px;flex-wrap:wrap}
-  #cot-mapa .corpo{flex:1;overflow:auto;padding:14px 18px 40px}
-  #cot-mapa .card{max-width:none}
-  #cot-mapa .cab{display:grid;grid-template-columns:2.2fr 1.3fr 1fr .8fr .8fr;gap:0 10px}
-  #cot-mapa .cab input,#cot-mapa .cab select{width:100%}
-  #cot-mapa .wrap{overflow:auto;border:1px solid var(--line,#e8e8ea);border-radius:10px;background:var(--card,#fff)}
-  #cot-mapa table.m{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%}
-  #cot-mapa table.m th,#cot-mapa table.m td{padding:4px 6px;border-bottom:1px solid var(--line2,#f2f2f3);border-right:1px solid var(--line2,#f2f2f3);vertical-align:middle;background:var(--card,#fff)}
-  #cot-mapa table.m thead th{position:sticky;top:0;z-index:2;background:var(--head,#f6f6f7);font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink3,#8e8e8e);text-align:center}
-  #cot-mapa table.m thead tr:nth-child(2) th{top:var(--cot-h1,38px)}
-  #cot-mapa table.m .fix{position:sticky;left:0;z-index:1}
-  #cot-mapa table.m thead .fix{z-index:3}
-  #cot-mapa table.m td input,#cot-mapa table.m td select{width:100%;padding:5px 7px;font-size:12.5px;border-radius:6px}
-  #cot-mapa table.m td input.pr{text-align:right;font-variant-numeric:tabular-nums;min-width:92px}
-  #cot-mapa table.m td.tt{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ink2,#5c5c5c);min-width:96px}
-  #cot-mapa table.m td.min{background:#e8f5ec}
-  #cot-mapa table.m td.min input{border-color:#5fb37b;background:#f4fbf6;font-weight:700;color:#14532d}
-  #cot-mapa table.m td.min.tt{color:#14532d;font-weight:700}
-  #cot-mapa table.m td.esc{box-shadow:inset 0 -3px 0 #1f7a3d}
-  #cot-mapa table.m td.alto input{color:#b42318}
-  #cot-mapa table.m th.fh{min-width:200px;color:var(--ink,#232323);font-size:12px;text-transform:none;letter-spacing:0}
-  #cot-mapa table.m th.fh .x{background:none;border:0;color:#b42318;padding:0 4px;font-size:14px;cursor:pointer;float:right}
-  #cot-mapa table.m th.fh small{display:block;font-weight:400;color:var(--ink3,#8e8e8e);font-size:10.5px}
-  #cot-mapa table.m tfoot td,#cot-mapa table.m tfoot th{background:var(--head,#f6f6f7);font-size:12px}
-  #cot-mapa table.m tfoot th{text-align:right;color:var(--ink2,#5c5c5c);font-weight:600;white-space:nowrap}
-  #cot-mapa table.m tfoot tr.tot td{font-weight:700;font-size:13.5px}
-  #cot-mapa table.m tfoot tr.tot td.best{color:#14532d;background:#e8f5ec}
-  #cot-mapa table.m td.num-i{color:var(--ink3,#8e8e8e);text-align:center;width:28px}
-  #cot-mapa table.m td .x{background:none;border:0;color:#b42318;padding:2px 5px;font-size:14px;cursor:pointer}
+  #cot-mapa .cv-top{display:flex;align-items:center;gap:8px;padding:10px 18px;flex-wrap:wrap;border-bottom:1px solid var(--line,#e8e8ea);background:var(--card,#fff)}
+  #cot-mapa .cv-top .esp{flex:1}
+  #cot-mapa .cv-bk{background:var(--card,#fff);color:var(--ink,#232323);border:1px solid var(--line,#e8e8ea);font-weight:600}
+  #cot-mapa .cv-bk:hover{background:var(--head,#f6f6f7);filter:none}
+  #cot-mapa .cv-est{font-size:12px;color:var(--ink2,#5c5c5c);display:inline-flex;align-items:center;gap:6px}
+  #cot-mapa .cv-est:before{content:'';width:7px;height:7px;border-radius:50%;background:#3aa655;flex:none}
+  #cot-mapa .cv-est.pend:before{background:#e08a00}
+  #cot-mapa .cv-est.err{color:#b42318} #cot-mapa .cv-est.err:before{background:#b42318}
+  #cot-mapa .ic{background:var(--card,#fff);border:1px solid var(--line,#e8e8ea);color:var(--ink2,#5c5c5c);padding:8px 10px;line-height:0}
+  #cot-mapa .ic svg{width:16px;height:16px}
+  #cot-mapa .ic:hover:not(:disabled){background:var(--head,#f6f6f7);color:var(--ink,#232323);filter:none}
+  #cot-mapa .ic.dg:hover:not(:disabled){color:#b42318}
+  #cot-mapa .ic.sm{padding:5px 6px;border-color:transparent;background:transparent}
+  #cot-mapa .ic.sm svg{width:15px;height:15px}
+  #cot-mapa .cv-stw{position:relative}
+  #cot-mapa .cv-st{background:var(--card,#fff);color:var(--ink,#232323);border:1px solid var(--line,#e8e8ea);display:inline-flex;align-items:center;gap:8px}
+  #cot-mapa .cv-st:hover{background:var(--head,#f6f6f7);filter:none}
+  #cot-mapa .cv-st i,#cot-mapa .cv-pill i{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+  #cot-mapa .cv-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:10;background:var(--card,#fff);border:1px solid var(--line,#e8e8ea);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14);padding:4px;min-width:220px}
+  #cot-mapa .cv-menu button{display:block;width:100%;text-align:left;background:transparent;color:var(--ink,#232323);border:0;font-weight:500;padding:8px 10px}
+  #cot-mapa .cv-menu button:hover{background:var(--head,#f6f6f7);filter:none}
+  #cot-mapa .cv-menu .hint{padding:6px 10px}
+  #cot-mapa .cv-mos{display:inline-flex;align-items:stretch;border:1px solid var(--line,#e8e8ea);border-radius:8px;overflow:hidden;background:var(--card,#fff)}
+  #cot-mapa .cv-mos span{font-size:11.5px;color:var(--ink3,#8e8e8e);padding:8px 10px;display:flex;align-items:center}
+  #cot-mapa .cv-mos button{background:transparent;color:var(--ink2,#5c5c5c);border:0;border-left:1px solid var(--line,#e8e8ea);border-radius:0;font-weight:500;padding:7px 12px}
+  #cot-mapa .cv-mos button.on{background:var(--head,#f6f6f7);color:var(--ink,#232323);font-weight:700}
+  #cot-mapa .cv-mos button:hover{filter:none;color:var(--ink,#232323)}
+  #cot-mapa .corpo{flex:1;overflow:auto;padding:18px 18px 40px}
+  #cot-mapa .cv-folha{background:var(--card,#fff);border:1px solid var(--line2,#eeeef0);border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.05);padding:26px 30px 30px;margin:0 auto 16px;max-width:1500px}
+  #cot-mapa .cv-folha>h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--cv);margin:0 0 12px}
+  #cot-mapa .cv-doc{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;margin-bottom:24px;flex-wrap:wrap}
+  #cot-mapa .cv-marca{display:flex;align-items:center;gap:14px}
+  #cot-mapa .cv-marca img{height:44px;width:auto;display:block}
+  #cot-mapa .cv-marca b{display:block;font-size:22px;line-height:1.1}
+  #cot-mapa .cv-marca span{display:block;font-size:10.5px;letter-spacing:.2em;color:var(--ink3,#8e8e8e);font-weight:700;margin-top:3px}
+  #cot-mapa .cv-meta{text-align:right;font-size:12px;color:var(--ink2,#5c5c5c);line-height:1.5;display:grid;gap:3px;justify-items:end}
+  #cot-mapa .cv-meta b{color:var(--ink,#232323)}
+  #cot-mapa .cv-meta input,#cot-mapa .cv-meta select,#cot-mapa .cv-tit{border:0;border-bottom:1px dashed transparent;border-radius:0;background:transparent;color:var(--ink,#232323);font-weight:700;font-size:12px;padding:0 2px;box-shadow:none}
+  #cot-mapa .cv-meta input:hover,#cot-mapa .cv-meta select:hover,#cot-mapa .cv-tit:hover,#cot-mapa .cv-meta input:focus,#cot-mapa .cv-meta select:focus,#cot-mapa .cv-tit:focus{border-bottom-color:var(--cv);box-shadow:none}
+  #cot-mapa .cv-meta select{text-align:right;cursor:pointer;max-width:260px}
+  #cot-mapa .cv-meta input[type=date]{width:118px}
+  #cot-mapa .cv-tit{display:block;width:100%;font-size:16px;text-transform:uppercase;padding:2px 0;margin:0 0 12px;letter-spacing:.01em}
+  #cot-mapa .cv-tit::placeholder{text-transform:none;font-weight:400;color:var(--ink3,#8e8e8e)}
+  #cot-mapa .wrap{overflow:auto}
+  #cot-mapa table.cv-t{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
+  #cot-mapa .cv-t th{background:var(--cv);color:#fff;text-transform:none;font-size:12px;font-weight:700;letter-spacing:0;text-align:left;vertical-align:bottom;padding:12px 10px;border:0;border-right:1px solid rgba(255,255,255,.14);position:sticky;top:0;z-index:2}
+  #cot-mapa .cv-t th:last-child{border-right:0}
+  #cot-mapa .cv-t th.c,#cot-mapa .cv-t td.c{text-align:center} #cot-mapa .cv-t th.n,#cot-mapa .cv-t td.n{text-align:right}
+  #cot-mapa .cv-t th.fh{min-width:140px;text-transform:uppercase;line-height:1.25}
+  #cot-mapa .cv-t th.fh small{display:block;font-weight:400;font-size:10.5px;opacity:.8;margin-top:6px}
+  #cot-mapa .cv-t th.fh .x{float:right;background:none;border:0;color:#fff;opacity:0;padding:0 0 0 6px;font-size:16px;line-height:1;cursor:pointer}
+  #cot-mapa .cv-t th.fh:hover .x{opacity:.85}
+  #cot-mapa .cv-t th.add{background:var(--head,#f6f6f7);color:var(--cv);font-weight:600;min-width:160px;vertical-align:bottom}
+  #cot-mapa .cv-t th.add input{display:block;width:100%;border:0;background:transparent;padding:6px 0 0;font-size:11.5px;color:var(--ink,#232323);font-weight:400;box-shadow:none}
+  #cot-mapa .cv-t th.add input::placeholder{color:var(--ink3,#8e8e8e)}
+  #cot-mapa .cv-t .fix{position:sticky;left:0;z-index:1}
+  #cot-mapa .cv-t thead .fix{z-index:3}
+  #cot-mapa .cv-t td{padding:8px 10px;border-bottom:1px solid var(--line2,#f0f0f2);border-right:1px solid var(--line2,#f0f0f2);vertical-align:top;background:var(--card,#fff)}
+  #cot-mapa .cv-t td.it{min-width:250px;width:300px}
+  #cot-mapa .cv-t td.it textarea{display:block;width:100%;resize:none;overflow:hidden;border:1px solid transparent;background:transparent;padding:1px 3px;font:inherit;font-size:12.5px;line-height:1.45;color:var(--ink,#232323);border-radius:4px;min-height:0}
+  #cot-mapa .cv-t td.it textarea:hover:not(:disabled){border-color:var(--line,#e8e8ea)}
+  #cot-mapa .cv-t td.it textarea:focus{outline:none;border-color:var(--cv);background:var(--card,#fff);box-shadow:0 0 0 2px rgba(15,124,134,.15)}
+  #cot-mapa .cv-t td.it textarea:disabled{opacity:1}
+  #cot-mapa .cv-t td.u{min-width:74px} #cot-mapa .cv-t td.q{min-width:86px}
+  #cot-mapa .cv-t td input,#cot-mapa .cv-t td select{border:1px solid transparent;background:transparent;padding:1px 3px;font-size:12.5px;width:100%;border-radius:4px;color:var(--ink,#232323);box-shadow:none;font-weight:500}
+  #cot-mapa .cv-t td input:hover:not(:disabled),#cot-mapa .cv-t td select:hover:not(:disabled){border-color:var(--line,#e8e8ea)}
+  #cot-mapa .cv-t td input:focus,#cot-mapa .cv-t td select:focus{border-color:var(--cv);background:var(--card,#fff);box-shadow:0 0 0 2px rgba(15,124,134,.15)}
+  #cot-mapa .cv-t td input:disabled,#cot-mapa .cv-t td select:disabled{opacity:1;color:var(--ink,#232323)}
+  #cot-mapa .cv-t td.pc{text-align:right;white-space:nowrap;min-width:140px;font-variant-numeric:tabular-nums}
+  #cot-mapa .cv-t td.pc .pw{display:flex;align-items:center;justify-content:flex-end;gap:3px}
+  #cot-mapa .cv-t td.pc .rs{color:var(--ink3,#8e8e8e)}
+  #cot-mapa .cv-t td.pc input{text-align:right;width:9ch;font-variant-numeric:tabular-nums;max-width:150px;box-sizing:content-box}
+  #cot-mapa .cv-t td.pc .tv{display:block;padding:1px 3px}
+  #cot-mapa .cv-t td.pc .mk{display:block;font-size:10.5px;color:var(--ink3,#8e8e8e);padding:1px 3px 0;min-height:14px}
+  #cot-mapa .cv-t td.pc.vz .tv,#cot-mapa .cv-t td.pc.vz .rs{color:var(--ink3,#b0b0b0)}
+  #cot-mapa .cv-t td.min input,#cot-mapa .cv-t td.min .tv{color:#1f7a3d;font-weight:700}
+  #cot-mapa .cv-t td.alto input,#cot-mapa .cv-t td.alto .tv{color:#b42318}
+  #cot-mapa .cv-t td.esc{background:var(--cv2)}
+  #cot-mapa .cv-t td.esc input,#cot-mapa .cv-t td.esc .tv,#cot-mapa .cv-t td.esc .rs{color:var(--cvt);font-weight:700}
+  #cot-mapa .cv-t td.cd select{min-width:140px;font-size:12px}
+  #cot-mapa .cv-t td.ac{width:40px;text-align:center;background:var(--card,#fff)}
+  #cot-mapa .cv-t td.ac .x{background:none;border:0;color:#b42318;padding:0 4px;font-size:15px;cursor:pointer;opacity:0}
+  #cot-mapa .cv-t tr:hover td.ac .x{opacity:.8}
+  #cot-mapa .cv-t .ult{display:block;font-size:10.5px;color:var(--ink3,#8e8e8e);margin-top:2px;padding:0 3px}
+  #cot-mapa .cv-t tbody.nv td{padding:9px 10px}
+  #cot-mapa .cv-t tbody.nv a{color:var(--cv);font-weight:600;cursor:pointer;text-decoration:none;margin-right:16px}
+  #cot-mapa .cv-t tbody.nv a:hover{text-decoration:underline}
+  #cot-mapa .cv-t tfoot th{position:static;background:var(--card,#fff);color:var(--ink,#232323);font-weight:700;vertical-align:middle;border-bottom:1px solid var(--line2,#f0f0f2);border-right:1px solid var(--line2,#f0f0f2);padding:9px 10px}
+  #cot-mapa .cv-t tfoot th.fix{z-index:1}
+  #cot-mapa .cv-t tfoot td{text-align:right;vertical-align:middle;font-variant-numeric:tabular-nums}
+  #cot-mapa .cv-t tfoot tr.tot th,#cot-mapa .cv-t tfoot tr.tot td{font-weight:700;font-size:13.5px;border-top:1px solid var(--line,#e8e8ea);border-bottom:1px solid var(--line,#e8e8ea)}
+  #cot-mapa .cv-t tfoot small{display:block;font-weight:400;font-size:10.5px;color:var(--ink3,#8e8e8e)}
+  #cot-mapa .cv-t tfoot td.best{color:#14532d} #cot-mapa .cv-t tfoot td.best small{color:#1f7a3d}
+  #cot-mapa .cv-t tfoot tr.cd th{font-weight:600;color:var(--ink2,#5c5c5c);font-size:11.5px}
+  #cot-mapa .cv-t tfoot tr.cd td{font-size:12px}
+  #cot-mapa .cv-t tfoot input,#cot-mapa .cv-t tfoot select{text-align:right}
+  #cot-mapa .cv-t tfoot tr.cd input{text-align:left}
+  #cot-mapa .cv-dica{margin-top:10px}
+  #cot-mapa .cv-folha.foto th.add,#cot-mapa .cv-folha.foto td.ac,#cot-mapa .cv-folha.foto .cv-dica,#cot-mapa .cv-folha.foto tbody.nv,#cot-mapa .cv-folha.foto .trava{display:none}
+  #cot-mapa .cv-folha.foto .wrap{overflow:visible}
   #cot-mapa .linhab{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
   #cot-mapa .res{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-  #cot-mapa .res .bx{background:var(--card,#fff);border:1px solid var(--line,#e8e8ea);border-radius:10px;padding:10px 12px}
+  #cot-mapa .res .bx{background:var(--card,#fff);border:1px solid var(--line,#e8e8ea);border-radius:8px;padding:10px 12px}
   #cot-mapa .res .bx span{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3,#8e8e8e)}
   #cot-mapa .res .bx b{display:block;font-size:20px;font-variant-numeric:tabular-nums;margin-top:2px}
   #cot-mapa .res .bx small{display:block;color:var(--ink2,#5c5c5c);font-size:11px}
-  #cot-mapa .res .bx.ver{border-color:#1f7a3d;box-shadow:0 0 0 2px rgba(31,122,61,.15)}
-  #cot-mapa .res .bx.ver b{color:#14532d}
-  #cot-mapa .sug{margin-top:10px;padding:9px 12px;border-radius:9px;background:#e8f5ec;color:#14532d;font-size:12.5px}
+  #cot-mapa .res .bx.ver{border-color:var(--cv);background:var(--cv2)}
+  #cot-mapa .res .bx.ver b{color:var(--cvt)}
+  #cot-mapa .sug{margin-top:10px;padding:9px 12px;border-radius:8px;background:#e8f5ec;color:#14532d;font-size:12.5px}
+  #cot-mapa .sug{box-shadow:none;border:0}
   #cot-mapa .sug.al{background:#fdf0e8;color:#8a3a12}
-  #cot-mapa .duas{display:grid;grid-template-columns:1.2fr 1fr;gap:14px}
-  #cot-mapa .ped{border:1px solid var(--line,#e8e8ea);border-radius:9px;padding:8px 10px;margin-top:8px;font-size:12.5px}
+  #cot-mapa .duas{display:grid;grid-template-columns:1.2fr 1fr;gap:16px;max-width:1500px;margin:0 auto}
+  #cot-mapa .duas .cv-folha{margin:0 0 16px;max-width:none}
+  #cot-mapa .ped{border:1px solid var(--line,#e8e8ea);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12.5px}
   #cot-mapa .ped b.t{float:right;font-variant-numeric:tabular-nums}
   #cot-mapa .ped ul{margin:4px 0 6px;padding-left:18px;color:var(--ink2,#5c5c5c);font-size:11.5px}
   #cot-mapa textarea{width:100%;min-height:62px;font-family:inherit;font-size:12.5px;border:1px solid var(--line,#e8e8ea);border-radius:8px;padding:8px 11px;background:var(--card,#fff);color:var(--ink,#232323)}
   #cot-mapa .modos{display:flex;gap:4px;flex-wrap:wrap}
+  #cot-mapa .seg button.on{color:var(--cv)}
   #cot-mapa .hist{font-size:11.5px;color:var(--ink2,#5c5c5c);max-height:160px;overflow:auto}
-  #cot-mapa .trava{padding:8px 12px;border-radius:9px;background:#eef4ff;color:#1d3d7a;font-size:12.5px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  #cot-mapa .ult{display:block;font-size:10.5px;color:var(--ink3,#8e8e8e);margin-top:2px;white-space:nowrap}
-  @media (max-width:900px){ #cot-mapa .cab{grid-template-columns:1fr 1fr} #cot-mapa .res{grid-template-columns:1fr 1fr} #cot-mapa .duas{grid-template-columns:1fr} #cot-mapa .corpo{padding:10px} }
+  #cot-mapa .trava{padding:8px 12px;border-radius:8px;background:#eef4ff;color:#1d3d7a;font-size:12.5px;margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #cot-mapa .cv-lis{padding:22px 24px 26px}
+  #cot-mapa .cv-kp{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}
+  #cot-mapa .cv-kp div{border:1px solid var(--line,#e8e8ea);border-radius:8px;padding:9px 12px}
+  #cot-mapa .cv-kp span{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3,#8e8e8e)}
+  #cot-mapa .cv-kp b{font-size:19px;font-variant-numeric:tabular-nums}
+  #cot-mapa .cv-bus{display:flex;gap:8px;margin-bottom:14px}
+  #cot-mapa .cv-in{flex:1;display:flex;align-items:center;gap:8px;border:1px solid var(--line,#e8e8ea);border-radius:8px;padding:0 12px;margin:0;background:var(--card,#fff);color:var(--ink3,#8e8e8e);text-transform:none;letter-spacing:0;font-weight:400;font-size:12.5px}
+  #cot-mapa .cv-in:focus-within{border-color:var(--cv);box-shadow:0 0 0 2px rgba(15,124,134,.15)}
+  #cot-mapa .cv-in svg{width:16px;height:16px;flex:none}
+  #cot-mapa .cv-in input{flex:1;border:0;padding:11px 0;background:transparent;box-shadow:none;font-size:13px}
+  #cot-mapa .ic.on{border-color:var(--cv);color:var(--cv)}
+  #cot-mapa .cv-fil{display:flex;gap:10px;margin:-4px 0 14px;flex-wrap:wrap}
+  #cot-mapa .cv-fil div{min-width:220px}
+  #cot-mapa .cv-fil select{width:100%}
+  #cot-mapa .cv-lt td{vertical-align:middle;padding:10px}
+  #cot-mapa .cv-lt th{padding:9px 10px;vertical-align:middle}
+  #cot-mapa .cv-lt tbody tr{cursor:pointer}
+  #cot-mapa .cv-lt tbody tr:hover td{background:var(--head,#f8f8f9)}
+  #cot-mapa .cv-lt td.nr{white-space:nowrap;width:110px}
+  #cot-mapa .cv-lt td.mp b{display:block;font-weight:600;text-transform:uppercase}
+  #cot-mapa .cv-lt td small{display:block;font-size:11px;color:var(--ink3,#8e8e8e);margin-top:2px}
+  #cot-mapa .cv-lt td.cp b{font-weight:600;white-space:nowrap}
+  #cot-mapa .cv-lt td.cp small{text-transform:uppercase;font-size:10.5px}
+  #cot-mapa .cv-lt td.cp small.eco{text-transform:none;color:#1f7a3d}
+  #cot-mapa .cv-lt td.op{white-space:nowrap;width:86px}
+  #cot-mapa .cv-pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line,#e8e8ea);border-radius:999px;padding:3px 11px;font-size:11.5px;white-space:nowrap;background:var(--card,#fff)}
+  #cot-mapa .cv-vazio{padding:26px 10px;text-align:center;color:var(--ink3,#8e8e8e)}
+  @media (max-width:900px){ #cot-mapa .res{grid-template-columns:1fr 1fr} #cot-mapa .duas{grid-template-columns:1fr} #cot-mapa .corpo{padding:10px} #cot-mapa .cv-folha{padding:16px} #cot-mapa .cv-meta{text-align:left;justify-items:start} #cot-mapa .cv-kp{grid-template-columns:1fr} #cot-mapa .cv-lt td.op,#cot-mapa .cv-lt th.op{display:none} }
+  #aba-cot .cv-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line,#e8e8ea);border-radius:999px;padding:0 9px;font-size:10.5px;line-height:18px;white-space:nowrap;color:var(--ink,#232323);font-weight:600}
+  #aba-cot .cv-pill i{width:7px;height:7px;border-radius:50%;display:inline-block}
+  #aba-cot .li .nm b{text-transform:uppercase}
   #cot-modal{position:fixed;inset:0;background:rgba(0,0,0,.32);display:flex;align-items:center;justify-content:center;z-index:5000}
   #cot-modal form{background:var(--card,#fff);color:var(--ink,#232323);border-radius:12px;padding:18px;width:460px;max-width:94vw;max-height:90vh;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.14)}
   #cot-modal input,#cot-modal select,#cot-modal textarea{width:100%}
@@ -271,7 +372,7 @@
         <div class="kpis"><div class="kpi"><span>Em andamento</span><b id="cot-k1">0</b></div>
           <div class="kpi"><span>Aguardando aprovação</span><b id="cot-k2">0</b></div>
           <div class="kpi"><span>Economia no ano</span><b id="cot-k3">R$ 0</b></div></div>
-        <div class="btns" style="margin-bottom:8px"><button id="cot-nova">+ Nova cotação</button></div>
+        <div class="btns" style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap"><button id="cot-tela">▦ Abrir mapas de cotação</button><button class="sec" id="cot-nova">+ Nova cotação</button></div>
         <div class="row3">
           <div><label for="cot-busca">Buscar</label><input id="cot-busca" placeholder="Nº, título, item, fornecedor…" style="width:100%"></div>
           <div><label for="cot-fs">Situação</label><select id="cot-fs" style="width:100%"><option value="">Todas (sem canceladas)</option>
@@ -315,6 +416,7 @@
     return {R, tot: R.final.tot, eco: R.ecoMed, forn: R.final.usados.map(id => (c.fs.find(f => f.id === id) || {}).nome).filter(Boolean)};
   }
   function render(){
+    if(tela === 'lista') preencherLista();
     if(aba.style.display === 'none') return;
     const s = sub();
     if(s === 'lis') renderLista(); else if(s === 'for') renderForn(); else renderPrecos();
@@ -336,13 +438,14 @@
       return '<li class="li" data-id="' + c.id + '"><span class="nm"><b>' + numCot(c) + ' · ' + h(c.tit || 'Sem título') + '</b><small>'
         + h(c.o ? nomeLocal(c.o) : 'Sem obra') + ' · ' + dataBR(c.d) + ' · ' + c.itens.length + ' ite' + (c.itens.length === 1 ? 'm' : 'ns') + ' · ' + c.fs.length + ' fornecedor' + (c.fs.length === 1 ? '' : 'es')
         + (venc ? ' · <span style="color:#b42318">prazo vencido</span>' : '') + '</small>'
-        + '<small><span class="cot-tag" style="color:' + si.c + '">' + si.n + '</span>' + (r.forn.length ? ' ' + h(r.forn.join(', ')) : '') + '</small></span>'
+        + '<small><span class="cv-pill"><i style="background:' + si.c + '"></i>' + si.n + '</span>' + (r.forn.length ? ' ' + h(r.forn.join(', ')) : '') + '</small></span>'
         + '<span class="vl">' + (r.tot > 0 ? R$(r.tot) : '—') + (r.eco > 0.005 ? '<small>economia ' + R$(r.eco) + '</small>' : '') + '</span></li>';
     }).join('') || '<li class="hint" style="padding:10px 0;cursor:default">Nenhuma cotação' + (b || fs || v ? ' com esse filtro.' : ' ainda. Clique em <b>+ Nova cotação</b>.') + '</li>';
     $('cot-lista').querySelectorAll('li[data-id]').forEach(li => li.onclick = () => abrirMapa(li.dataset.id));
   }
   $('cot-busca').oninput = render; $('cot-fs').onchange = render; $('cot-fo').onchange = render;
   $('cot-nova').onclick = () => { const c = novaCotacao(); salvar(true); abrirMapa(c.id, true); };
+  $('cot-tela').onclick = () => abrirLista();
 
   $('cot-csv').onclick = () => {
     const lin = [['Nº', 'Data', 'Título', 'Obra', 'Solicitante', 'Comprador', 'Situação', 'Item', 'Un', 'Qtd', 'Fornecedor', 'Preço unit.', 'Total', 'Menor preço', 'Escolhido']];
@@ -674,98 +777,209 @@
   }
   const zap = tel => { let d = String(tel || '').replace(/\D/g, ''); if(d.length === 10 || d.length === 11) d = '55' + d; return d.length >= 12 ? d : ''; };
 
-  // ---------- mapa (tela cheia) ----------
-  let M = null; // elemento do mapa aberto
+  // ---------- tela cheia: lista de mapas e mapa de cotação ----------
+  // Visual de "documento": lista em tabela (Nº · Mapa · Data · Compra escolhida · Status · Opções)
+  // e o mapa com cabeçalho da BKP, tabela com cabeçalho verde-petróleo e um valor por fornecedor
+  // (Mostrar: Unitário ou Total). Os cálculos e o fluxo continuam os mesmos.
+  let M = null;      // elemento da tela cheia
+  let tela = '';     // 'lista' | 'mapa' | ''
+  let ultErro = '';  // último aviso de erro da planilha (para o indicador "Salvo na planilha")
+  let MOS = 'u';     // mapa mostra preço unitário ('u') ou total ('t')
+  try{ MOS = localStorage.getItem('dmtbkp_cotMostra') === 't' ? 't' : 'u'; }catch(e){}
+  const LF = {q: '', st: '', o: '', fil: false}; // filtros da lista em tela cheia
+  const svg = d => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  const ICO = {
+    dup: svg('<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16V5a2 2 0 0 1 2-2h11"/><path d="M14.5 12v6M11.5 15h6"/>'),
+    del: svg('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>'),
+    cam: svg('<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>'),
+    imp: svg('<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>'),
+    env: svg('<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M22 6l-10 7L2 6"/>'),
+    fil: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/></svg>',
+    bus: svg('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>')
+  };
+  const pill = si => '<span class="cv-pill"><i style="background:' + si.c + '"></i>' + h(si.n) + '</span>';
+
+  function garantirM(){
+    if(M) return;
+    M = document.createElement('div'); M.id = 'cot-mapa'; M.style.display = 'none';
+    document.body.appendChild(M);
+    document.addEventListener('keydown', e => {
+      if(e.key !== 'Escape' || !M || M.style.display === 'none' || $('cot-modal') || $('cot-sug')) return;
+      const mn = M.querySelector('.cv-menu:not([hidden])'); if(mn){ mn.hidden = true; return; }
+      if(tela === 'mapa') voltarLista(); else fecharTela();
+    });
+    document.addEventListener('mousedown', e => { if(!M) return; const mn = M.querySelector('.cv-menu:not([hidden])'); if(mn && !mn.parentElement.contains(e.target)) mn.hidden = true; });
+  }
+  function mostrarM(){ garantirM(); M.style.display = ''; document.documentElement.style.overflow = 'hidden'; }
+  function fecharTela(){
+    if(!M) return; M.style.display = 'none'; tela = ''; aberta = null;
+    document.documentElement.style.overflow = '';
+    render();
+  }
+  // cotação criada e deixada em branco some ao sair dela
+  function limparEmBranco(id){
+    const c = D.cot.find(x => x.id === id && !x.del && !String(x.tit || '').trim() && !x.itens.length && !x.fs.length && x.hist && x.hist.length === 1);
+    if(c){ c.del = true; c.upd = agora(); }
+  }
+  function voltarLista(){ const id = aberta; aberta = null; limparEmBranco(id); salvar(true); abrirLista(); }
+  function fecharMapa(){ const id = aberta; aberta = null; limparEmBranco(id); salvar(true); fecharTela(); } // usado por quem abre só o mapa
+
+  // indicador "● Salvo na planilha" no topo da tela cheia
+  function estadoSalvo(){
+    const el = M && M.querySelector('#cv-salvo'); if(!el) return;
+    const pend = !!localStorage.getItem(PEND);
+    el.className = 'cv-est' + (ultErro ? ' err' : pend ? ' pend' : '');
+    el.textContent = ultErro ? 'Não salvo na planilha' : pend ? 'Salvando…' : (ultSalvo || 'Salvo na planilha');
+    el.title = ultErro || '';
+  }
+  let ultSalvo = '';
+
+  // ----- lista em tela cheia -----
+  function abrirLista(){
+    mostrarM(); tela = 'lista'; aberta = null;
+    M.innerHTML = `
+    <div class="cv-top">
+      <button class="cv-bk" data-l="sair" title="Voltar ao painel (Esc)">← Gestão 360º</button>
+      <span class="cv-est" id="cv-salvo"></span>
+      <span class="esp"></span>
+      <button class="sec" data-l="csv">Baixar planilha (CSV)</button>
+      <button data-l="nova">+ Nova cotação</button>
+    </div>
+    <div class="corpo"><div class="cv-folha cv-lis">
+      <div class="cv-kp"><div><span>Em cotação</span><b id="cv-k1">0</b></div><div><span>Aguardando aprovação</span><b id="cv-k2">0</b></div><div><span>Economia no ano</span><b id="cv-k3">R$ 0</b></div></div>
+      <div class="cv-bus">
+        <label class="cv-in">${ICO.bus}<input id="cv-q" placeholder="Buscar por título, número, centro de custo, item, solicitante ou fornecedor…" value="${h(LF.q)}"></label>
+        <button class="ic${LF.fil || LF.st || LF.o ? ' on' : ''}" data-l="fil" title="Filtrar por situação e obra">${ICO.fil}</button>
+      </div>
+      <div class="cv-fil"${LF.fil ? '' : ' hidden'}>
+        <div><label for="cv-fs">Situação</label><select id="cv-fs"><option value="">Todas (sem canceladas)</option>
+          ${Object.entries(SIT).map(([k, s]) => '<option value="' + k + '"' + (LF.st === k ? ' selected' : '') + '>' + s.n + '</option>').join('')}<option value="*"${LF.st === '*' ? ' selected' : ''}>Todas</option></select></div>
+        <div><label for="cv-fo">Obra / centro de custo</label><select id="cv-fo">${optLocais(LF.o, 'Todas as obras')}</select></div>
+      </div>
+      <div class="wrap"><table class="cv-t cv-lt"><thead><tr><th>Nº</th><th>Mapa</th><th>Data</th><th>Compra escolhida</th><th class="c">Status</th><th class="c op">Opções</th></tr></thead>
+        <tbody id="cv-lb"></tbody></table></div>
+    </div></div>`;
+    const q = $('cv-q');
+    q.oninput = () => { LF.q = q.value; preencherLista(); };
+    $('cv-fs').onchange = e => { LF.st = e.target.value; preencherLista(); };
+    $('cv-fo').onchange = e => { LF.o = e.target.value; preencherLista(); };
+    M.querySelectorAll('[data-l]').forEach(b => b.onclick = () => {
+      const a = b.dataset.l;
+      if(a === 'sair') return fecharTela();
+      if(a === 'csv') return $('cot-csv').click();
+      if(a === 'nova'){ const c = novaCotacao(); salvar(true); return abrirMapa(c.id, true); }
+      if(a === 'fil'){ LF.fil = !LF.fil; M.querySelector('.cv-fil').hidden = !LF.fil; b.classList.toggle('on', LF.fil || !!LF.st || !!LF.o); }
+    });
+    preencherLista();
+    setTimeout(() => q.focus(), 30);
+  }
+  function preencherLista(){
+    if(!M || tela !== 'lista') return;
+    const cs = vivos(D.cot), ano = hoje().slice(0, 4);
+    $('cv-k1').textContent = cs.filter(c => c.st === 'aberta').length;
+    $('cv-k2').textContent = cs.filter(c => c.st === 'aprovacao').length;
+    $('cv-k3').textContent = R$(cs.filter(c => (c.st === 'aprovada' || c.st === 'pedido') && String(c.ano) === ano).reduce((s, c) => s + Math.max(0, resumo(c).eco), 0)).replace(/,\d\d$/, '');
+    const b = LF.q.trim().toLowerCase();
+    const l = cs.filter(c => (LF.st === '*' ? true : LF.st ? c.st === LF.st : c.st !== 'cancelada') && (!LF.o || c.o === LF.o) && (!b ||
+      (numCot(c) + ' ' + c.tit + ' ' + c.sol + ' ' + c.u + ' ' + c.o + ' ' + c.itens.map(i => i.desc).join(' ') + ' ' + c.fs.map(f => f.nome).join(' ')).toLowerCase().includes(b)))
+      .sort((a, b2) => String(b2.d).localeCompare(String(a.d)) || (b2.n || 0) - (a.n || 0));
+    const tb = $('cv-lb');
+    tb.innerHTML = l.map(c => {
+      const r = resumo(c), si = SIT[c.st] || SIT.aberta, venc = c.prazo && c.st === 'aberta' && c.prazo < hoje();
+      const sub = [c.o || 'Sem obra', c.u, c.itens.length + ' ite' + (c.itens.length === 1 ? 'm' : 'ns'), c.fs.length + ' fornecedor' + (c.fs.length === 1 ? '' : 'es')].filter(Boolean).map(h).join(' · ');
+      return '<tr data-id="' + c.id + '"><td class="nr">' + numCot(c) + '</td>'
+        + '<td class="mp"><b>' + h(c.tit || '(sem título)') + '</b><small>' + sub + (c.sol ? ' · solicitante: ' + h(c.sol) : '') + (venc ? ' · <span style="color:#b42318">prazo vencido</span>' : '') + '</small></td>'
+        + '<td>' + dataBR(c.d) + '</td>'
+        + '<td class="cp"><b>' + (r.tot > 0 ? R$(r.tot) : '—') + '</b>' + (r.forn.length ? '<small>' + h(r.forn.join(' + ')) + '</small>' : '')
+        + (r.eco > 0.005 ? '<small class="eco">economia ' + R$(r.eco) + '</small>' : '') + '</td>'
+        + '<td class="c">' + pill(si) + '</td>'
+        + '<td class="c op"><button class="ic sm" data-o="dup" title="Duplicar">' + ICO.dup + '</button><button class="ic sm dg" data-o="del" title="Excluir">' + ICO.del + '</button></td></tr>';
+    }).join('') || '<tr><td colspan="6" class="cv-vazio">Nenhuma cotação' + (b || LF.st || LF.o ? ' com esse filtro.' : ' ainda. Clique em <b>+ Nova cotação</b>.') + '</td></tr>';
+    tb.querySelectorAll('tr[data-id]').forEach(tr => tr.onclick = e => {
+      const c = achaCot(tr.dataset.id); if(!c) return;
+      const o = e.target.closest('[data-o]');
+      if(!o) return abrirMapa(c.id);
+      e.stopPropagation();
+      if(o.dataset.o === 'dup'){ const n = novaCotacao(c); salvar(true); abrirMapa(n.id); }
+      else if(confirm('Excluir a ' + numCot(c) + (c.tit ? ' (' + c.tit + ')' : '') + '? Ela some da lista e do histórico de preços.')){ c.del = true; c.upd = agora(); salvar(); preencherLista(); }
+    });
+    estadoSalvo();
+  }
+
+  // ----- mapa -----
   function abrirMapa(id, novo){
     const c = achaCot(id); if(!c) return;
-    aberta = id;
-    if(!M){
-      M = document.createElement('div'); M.id = 'cot-mapa';
-      document.body.appendChild(M);
-      document.addEventListener('keydown', e => { if(e.key === 'Escape' && M && M.style.display !== 'none' && !$('cot-modal')) fecharMapa(); });
-    }
-    M.style.display = '';
-    document.documentElement.style.overflow = 'hidden';
+    mostrarM(); tela = 'mapa'; aberta = id;
     montarMapa(c);
+    M.querySelector('.corpo').scrollTop = 0;
     if(novo) setTimeout(() => { const t = M.querySelector('[data-k=tit]'); if(t) t.focus(); }, 50);
-  }
-  function fecharMapa(){
-    if(!M) return; const id = aberta; M.style.display = 'none'; aberta = null;
-    document.documentElement.style.overflow = '';
-    const c = D.cot.find(x => x.id === id && !x.del && !String(x.tit || '').trim() && !x.itens.length && !x.fs.length && x.hist && x.hist.length === 1);
-    if(c){ c.del = true; c.upd = agora(); } // cotação criada e deixada em branco
-    salvar();
   }
   function mexeu(c, semMapa){ c.upd = agora(); salvar(true); if(!semMapa) atualizar(c); }
 
+  // situações para onde a cotação pode ir agora: [situação, texto, principal, perigo]
+  function transicoes(c){
+    const bts = [];
+    if(c.st === 'aberta') bts.push(['aprovacao', 'Enviar para aprovação', 1]);
+    if(c.st === 'aberta' || c.st === 'aprovacao') bts.push(['aprovada', '✓ Aprovar compra', c.st === 'aprovacao' ? 1 : 0]);
+    if(c.st === 'aprovacao') bts.push(['aberta', 'Voltar para cotação', 0]);
+    if(c.st === 'aprovada') bts.push(['pedido', 'Marcar pedido emitido', 1]);
+    if(c.st !== 'cancelada' && c.st !== 'pedido') bts.push(['cancelada', 'Cancelar cotação', 0, 1]);
+    if(c.st === 'cancelada') bts.push(['aberta', 'Reativar cotação', 0]);
+    return bts;
+  }
+
   function montarMapa(c){
     const tr = travada(c), dis = tr ? ' disabled' : '', si = SIT[c.st] || SIT.aberta;
-    const fs = c.fs;
+    const fs = c.fs, fc = id => achaForn(id) || {};
     M.innerHTML = `
-    <div class="topo">
-      <h2>${numCot(c)}</h2><span class="cot-tag" style="color:${si.c}">${si.n}</span>
-      <span class="hint" id="cm-salvo"></span>
+    <div class="cv-top">
+      <button class="cv-bk" data-a="fechar" title="Voltar para a lista (Esc)">← Mapas</button>
+      <span class="cv-est" id="cv-salvo"></span>
       <span class="esp"></span>
-      <div class="btns">
-        <button class="sec" data-a="pedir">✉ Pedir cotação</button>
-        <button class="sec" data-a="imp">🖨 Imprimir mapa</button>
-        <button class="sec" data-a="dup">Duplicar</button>
-        <button class="sec" data-a="del" style="color:#b42318">Excluir</button>
-        <button data-a="fechar">Fechar ✕</button>
-      </div>
+      <div class="cv-stw"><button class="cv-st" data-a="st" title="Mudar a situação">${si.n} <i style="background:${si.c}"></i></button><div class="cv-menu" hidden></div></div>
+      <button class="ic" data-a="pedir" title="Pedir cotação aos fornecedores (WhatsApp / e-mail)">${ICO.env}</button>
+      <button class="ic" data-a="foto" title="Copiar imagem do mapa">${ICO.cam}</button>
+      <button class="ic" data-a="imp" title="Imprimir mapa (A4 paisagem)">${ICO.imp}</button>
+      <button class="ic" data-a="dup" title="Duplicar cotação">${ICO.dup}</button>
+      <button class="ic dg" data-a="del" title="Excluir cotação">${ICO.del}</button>
+      <div class="cv-mos"><span>Mostrar</span><button data-mo="u"${MOS === 'u' ? ' class="on"' : ''}>Unitário</button><button data-mo="t"${MOS === 't' ? ' class="on"' : ''}>Total</button></div>
     </div>
     <div class="corpo">
-      ${tr ? '<div class="trava">🔒 ' + (c.st === 'cancelada' ? 'Cotação cancelada.' : 'Cotação ' + si.n.toLowerCase() + (c.apr ? ' por ' + h(c.apr) + ' em ' + dataBR(c.aprd) : '') + '. O mapa está travado para edição.')
-        + ' <button class="sec mini" data-a="reabrir">Reabrir para edição</button></div>' : ''}
-      <div class="card">
-        <h2>Dados da cotação</h2>
-        <div class="cab">
-          <div><label>Título / o que está sendo comprado</label><input data-k="tit" value="${h(c.tit)}" placeholder="Ex.: Filtros e óleo para revisão dos caminhões"${dis}></div>
-          <div><label>Obra / centro de custo</label><select data-k="o"${dis}>${optLocais(c.o, '— escolha —')}</select></div>
-          <div><label>Solicitante</label><input data-k="sol" value="${h(c.sol)}" placeholder="Quem pediu" list="cot-sols"${dis}></div>
-          <div><label>Data</label><input type="date" data-k="d" value="${h(c.d)}"${dis}></div>
-          <div><label>Responder até</label><input type="date" data-k="prazo" value="${h(c.prazo)}"${dis}></div>
+      <div class="cv-folha" id="cv-folha">
+        ${tr ? '<div class="trava">🔒 ' + (c.st === 'cancelada' ? 'Cotação cancelada.' : 'Cotação ' + si.n.toLowerCase() + (c.apr ? ' por ' + h(c.apr) + ' em ' + dataBR(c.aprd) : '') + '. O mapa está travado para edição.')
+          + ' <button class="sec mini" data-a="reabrir">Reabrir para edição</button></div>' : ''}
+        <div class="cv-doc">
+          <div class="cv-marca"><img src="logo-bkp.png" alt="BKP"><div><b>Mapa de Cotação</b><span>BKP CONSTRUTORA</span></div></div>
+          <div class="cv-meta">
+            <div>Mapa nº <b>${numCot(c)}</b> · <input type="date" data-k="d" value="${h(c.d)}" title="Data da cotação"${dis}></div>
+            <div>Comprador: <b>${h(c.u || '—')}</b></div>
+            <div>Centro de Custo: <select data-k="o"${dis}>${optLocais(c.o, '— escolha —')}</select></div>
+            <div>Solicitante: <input data-k="sol" value="${h(c.sol)}" placeholder="quem pediu" list="cot-sols" style="width:160px;field-sizing:content;min-width:90px;text-align:right"${dis}></div>
+            <div>Responder até: <input type="date" data-k="prazo" value="${h(c.prazo)}" title="Prazo para os fornecedores responderem"${dis}></div>
+          </div>
         </div>
         <datalist id="cot-sols">${[...new Set(vivos(D.cot).map(x => x.sol).filter(Boolean))].map(x => '<option value="' + h(x) + '">').join('')}</datalist>
-        <div class="hint" style="margin-top:6px">Comprador: <b>${h(c.u || '—')}</b></div>
-      </div>
-
-      <div class="card">
-        <h2>Mapa de cotação</h2>
-        <div class="wrap"><table class="m" id="cm-t">
-          <thead>
-            <tr><th class="fix" rowspan="2" style="left:0">#</th><th rowspan="2" style="min-width:240px;text-align:left">Item / descrição</th><th rowspan="2">Un</th><th rowspan="2">Qtd</th>
-              ${fs.map(f => '<th class="fh" colspan="2">' + h(f.nome) + (tr ? '' : '<button class="x" data-rf="' + f.id + '" title="Tirar da cotação">×</button>')
-                + '<small>' + h([(achaForn(f.id) || {}).cidade, (achaForn(f.id) || {}).tel].filter(Boolean).join(' · ')) + '&nbsp;</small></th>').join('')}
-              ${fs.length > 1 ? '<th rowspan="2" style="min-width:150px">Comprar de</th>' : ''}
-              ${tr ? '' : '<th rowspan="2" style="width:30px"></th>'}</tr>
-            <tr>${fs.map(() => '<th>Preço unit.</th><th>Total</th>').join('')}</tr>
-          </thead>
-          <tbody id="cm-b">
-            ${c.itens.map((i, k) => linhaItem(c, i, k, tr)).join('')}
-          </tbody>
+        <input class="cv-tit" data-k="tit" value="${h(c.tit)}" placeholder="Título do mapa — o que está sendo comprado (ex.: filtros e óleo para revisão dos caminhões)"${dis}>
+        <div class="wrap"><table class="cv-t" id="cm-t">
+          <thead><tr>
+            <th class="it fix">Item</th><th class="c" style="width:64px">Und</th><th class="n" style="width:86px">Qtd</th>
+            ${fs.map(f => '<th class="fh">' + (tr ? '' : '<button class="x" data-rf="' + f.id + '" title="Tirar da cotação">×</button>') + h(f.nome)
+              + '<small>' + h([fc(f.id).cidade, fc(f.id).tel].filter(Boolean).join(' · ').toUpperCase() || ' ') + '</small></th>').join('')}
+            ${fs.length > 1 ? '<th style="min-width:150px">Comprar de</th>' : ''}
+            ${tr ? '' : '<th class="add">+ Fornecedor<input id="cm-addf" placeholder="digite o nome"></th>'}
+          </tr></thead>
+          <tbody id="cm-b">${c.itens.map((i, k) => linhaItem(c, i, k, tr)).join('')}</tbody>
+          ${tr ? '' : '<tbody class="nv"><tr><td class="fix" colspan="3"><a data-a="item">+ novo item</a><a data-a="colar">📋 colar do Excel</a></td>' + '<td colspan="' + (fs.length + (fs.length > 1 ? 1 : 0) + 1) + '"></td></tr></tbody>'}
           <tfoot id="cm-f"></tfoot>
         </table></div>
-        ${tr ? '' : `<div class="linhab">
-          <button class="sec mini" data-a="item">+ Item</button>
-          <button class="sec mini" data-a="colar">📋 Colar itens do Excel</button>
-          <span style="width:12px"></span>
-          <input id="cm-addf" style="width:280px;max-width:100%" placeholder="+ Adicionar fornecedor (digite o nome)…">
-          <span class="hint">Deixe o preço em branco quando o fornecedor não cotou o item. Enter desce para o próximo item.</span>
-        </div>`}
+        ${tr ? '' : '<div class="hint cv-dica">Clique no valor para lançar o preço unitário; em branco = o fornecedor não cotou. Enter desce para o próximo item. Verde = menor preço do item (já com desconto) · vermelho = o mais caro · fundo verde-petróleo = compra escolhida.</div>'}
       </div>
 
-      <div class="card">
-        <h2>Resultado</h2>
-        <div id="cm-res"></div>
-      </div>
+      <div class="cv-folha"><h2>Resultado</h2><div id="cm-res"></div></div>
 
       <div class="duas">
-        <div class="card">
-          <h2>Pedido por fornecedor</h2>
-          <div id="cm-ped"></div>
-        </div>
-        <div class="card">
+        <div class="cv-folha"><h2>Pedido por fornecedor</h2><div id="cm-ped"></div></div>
+        <div class="cv-folha">
           <h2>Justificativa e aprovação</h2>
           <label>Justificativa da escolha</label>
           <textarea data-k="just" placeholder="Ex.: menor preço global; fornecedor B tem entrega em 2 dias na obra; fornecedor C não cotou todos os itens"${dis}>${h(c.just)}</textarea>
@@ -778,9 +992,6 @@
       </div>
     </div>`;
 
-    // cabeçalho fixo da 2ª linha do thead
-    const h1 = M.querySelector('#cm-t thead tr'); if(h1) M.querySelector('#cm-t').style.setProperty('--cot-h1', h1.getBoundingClientRect().height + 'px');
-
     // campos do cabeçalho e textos
     M.querySelectorAll('[data-k]').forEach(el => {
       const k = el.dataset.k;
@@ -789,7 +1000,12 @@
     // itens e preços
     ligarCorpo(c);
     // botões
-    M.querySelectorAll('[data-a]').forEach(b => b.onclick = () => acao(c, b.dataset.a));
+    M.querySelectorAll('[data-a]').forEach(b => b.onclick = () => acao(c, b.dataset.a, b));
+    M.querySelectorAll('[data-mo]').forEach(b => b.onclick = () => {
+      if(MOS === b.dataset.mo) return; MOS = b.dataset.mo;
+      try{ localStorage.setItem('dmtbkp_cotMostra', MOS); }catch(e){}
+      const y = M.querySelector('.corpo').scrollTop; montarMapa(c); M.querySelector('.corpo').scrollTop = y;
+    });
     M.querySelectorAll('[data-rf]').forEach(b => b.onclick = () => {
       const f = c.fs.find(x => x.id === b.dataset.rf); if(!f) return;
       const n = Object.values(f.p || {}).filter(v => ok(num(v))).length;
@@ -813,14 +1029,17 @@
   function linhaItem(c, i, k, tr){
     const dis = tr ? ' disabled' : '';
     const ult = ultimoPreco(i.desc, c.id);
-    return '<tr data-i="' + i.id + '"><td class="num-i fix">' + (k + 1) + '</td>'
-      + '<td><input data-ik="desc" value="' + h(i.desc) + '" placeholder="Descrição do item"' + dis + '>'
+    const edita = !tr && MOS === 'u';
+    return '<tr data-i="' + i.id + '">'
+      + '<td class="it fix"><textarea data-ik="desc" rows="1" placeholder="descrição do item"' + dis + '>' + h(i.desc) + '</textarea>'
       + (ult ? '<span class="ult">último preço: ' + R$(ult.p) + ' · ' + h(ult.f) + ' · ' + dataBR(ult.d) + '</span>' : '') + '</td>'
-      + '<td><input data-ik="un" value="' + h(i.un) + '" list="cot-un" style="width:62px"' + dis + '></td>'
-      + '<td><input data-ik="q" value="' + h(i.q == null ? '' : fqIn(i.q)) + '" style="width:76px;text-align:right"' + dis + '></td>'
-      + c.fs.map(f => '<td data-c="' + f.id + '"><input class="pr" data-p="' + f.id + '" inputmode="decimal" value="' + h(prIn(f.p[i.id])) + '" placeholder="—"' + dis + '></td><td class="tt" data-t="' + f.id + '"></td>').join('')
-      + (c.fs.length > 1 ? '<td><select data-v' + dis + ' style="min-width:140px"></select></td>' : '')
-      + (tr ? '' : '<td><button class="x" data-ri title="Excluir item">×</button></td>') + '</tr>';
+      + '<td class="c u"><input data-ik="un" value="' + h(i.un) + '" list="cot-un" style="text-align:center"' + dis + '></td>'
+      + '<td class="n q"><input data-ik="q" value="' + h(i.q == null ? '' : fqIn(i.q)) + '" inputmode="decimal" style="text-align:right"' + dis + '></td>'
+      + c.fs.map(f => '<td class="pc" data-c="' + f.id + '">'
+        + (edita ? '<div class="pw"><span class="rs">R$</span><input class="pr" data-p="' + f.id + '" inputmode="decimal" value="' + h(prIn(f.p[i.id])) + '" placeholder="–"></div>' : '<span class="tv"></span>')
+        + '<span class="mk"></span></td>').join('')
+      + (c.fs.length > 1 ? '<td class="cd"><select data-v' + dis + '></select></td>' : '')
+      + (tr ? '' : '<td class="ac"><button class="x" data-ri title="Excluir item">×</button></td>') + '</tr>';
   }
   const prIn = v => ok(num(v)) ? f2(num(v)) : '';
   const fqIn = v => ok(num(v)) ? fq(num(v)) : String(v || '');
@@ -830,6 +1049,8 @@
       const dl = document.createElement('datalist'); dl.id = 'cot-un'; dl.innerHTML = UNID.map(u => '<option value="' + u + '">').join(''); document.body.appendChild(dl);
     }
     const tb = $('cm-b');
+    const alt = ta => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+    tb.querySelectorAll('textarea[data-ik=desc]').forEach(ta => { requestAnimationFrame(() => alt(ta)); ta.addEventListener('input', () => alt(ta)); });
     tb.querySelectorAll('tr[data-i]').forEach(tr => {
       const i = c.itens.find(x => x.id === tr.dataset.i); if(!i) return;
       tr.querySelectorAll('[data-ik]').forEach(el => {
@@ -838,10 +1059,13 @@
       });
       tr.querySelectorAll('input[data-p]').forEach(el => {
         const f = c.fs.find(x => x.id === el.dataset.p);
-        el.addEventListener('input', () => { const v = num(el.value); if(ok(v)) f.p[i.id] = v; else delete f.p[i.id]; mexeu(c); });
-        el.addEventListener('blur', () => { el.value = prIn(f.p[i.id]); });
+        const larg = () => { el.style.width = Math.max(4, el.value.length + 1) + 'ch'; }; larg(); // "R$" colado no valor
+        el.addEventListener('input', () => { larg(); const v = num(el.value); if(ok(v)) f.p[i.id] = v; else delete f.p[i.id]; mexeu(c); });
+        el.addEventListener('blur', () => { el.value = prIn(f.p[i.id]); larg(); });
         el.addEventListener('focus', () => el.select());
       });
+      // clicar em qualquer ponto da célula do preço leva ao campo
+      tr.querySelectorAll('td.pc').forEach(td => td.addEventListener('mousedown', e => { const inp = td.querySelector('input'); if(inp && e.target !== inp){ e.preventDefault(); inp.focus(); } }));
       const sv = tr.querySelector('select[data-v]');
       if(sv) sv.onchange = () => {
         c.venc = c.venc || {};
@@ -856,11 +1080,11 @@
     });
     // Enter desce na mesma coluna; na última linha cria um item novo (coluna descrição)
     tb.addEventListener('keydown', e => {
-      if(e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+      if(e.key !== 'Enter' || (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA')) return;
       e.preventDefault();
       const td = e.target.closest('td'), tr = td.parentElement, col = [...tr.children].indexOf(td);
       const prox = tr.nextElementSibling;
-      if(prox){ const inp = prox.children[col] && prox.children[col].querySelector('input'); if(inp) inp.focus(); }
+      if(prox){ const inp = prox.children[col] && prox.children[col].querySelector('input,textarea'); if(inp) inp.focus(); }
       else if(e.target.dataset.ik === 'desc' && !travada(c)){ acao(c, 'item'); }
     });
   }
@@ -869,17 +1093,21 @@
   function atualizar(c){
     if(!M || aberta !== c.id) return;
     const R = calc(c), tr = travada(c);
-    const cs = $('cm-salvo'); if(cs) cs.textContent = localStorage.getItem(PEND) ? 'salvando…' : '';
+    estadoSalvo();
     $('cm-b').querySelectorAll('tr[data-i]').forEach(row => {
       const i = c.itens.find(x => x.id === row.dataset.i), r = R.it[i.id];
       c.fs.forEach(f => {
-        const p = num(f.p[i.id]), td = row.querySelector('td[data-c="' + f.id + '"]'), tt = row.querySelector('td[data-t="' + f.id + '"]');
+        const p = num(f.p[i.id]), td = row.querySelector('td[data-c="' + f.id + '"]'); if(!td) return;
         const v = R.ef(f, i), min = r && v != null && r.n > 1 && r.melhores.includes(f.id), esc = r && R.esc[i.id] === f.id && c.fs.length > 1;
-        td.classList.toggle('min', !!min); tt.classList.toggle('min', !!min);
-        td.classList.toggle('esc', !!esc); tt.classList.toggle('esc', !!esc);
+        td.classList.toggle('min', !!min);
+        td.classList.toggle('esc', !!esc);
         td.classList.toggle('alto', !!(r && v != null && r.n > 2 && v - r.max > -0.000001 && r.max > r.min));
-        tt.textContent = ok(p) && r ? f2(p * r.q) : '';
-        tt.title = r && v != null && r.min != null && v > r.min ? '+' + pct((v / r.min - 1) * 100) + ' sobre o menor' : '';
+        td.classList.toggle('vz', !ok(p));
+        const q = r ? r.q : (num(i.q) || 0);
+        const tv = td.querySelector('.tv'); if(tv) tv.textContent = ok(p) ? R$(MOS === 't' ? p * q : p) : 'R$ –';
+        const mk = td.querySelector('.mk');
+        if(mk) mk.textContent = !ok(p) ? '' : MOS === 't' ? 'unit. ' + R$(p) : (q ? '= ' + R$(p * q) : '');
+        td.title = r && v != null && r.min != null && v > r.min ? '+' + pct((v / r.min - 1) * 100) + ' sobre o menor' : (min ? 'Menor preço do item' : '');
       });
       const sv = row.querySelector('select[data-v]');
       if(sv){
@@ -891,25 +1119,24 @@
     // rodapé: totais e condições comerciais
     const n = R.itens.length;
     const melhorTot = Math.min(...c.fs.filter(f => R.f[f.id].completo).map(f => R.f[f.id].tot), Infinity);
-    const span = '<th colspan="4" class="fix" style="left:0">';
+    const span = '<th colspan="3" class="fix">';
     const ultCol = (c.fs.length > 1 ? '<td></td>' : '') + (tr ? '' : '<td></td>');
-    const campo = (f, k, ph, tipo) => '<td colspan="2"><input data-fk="' + k + '" data-f="' + f.id + '" value="' + h(k === 'frete' ? prIn(f.frete) : f[k] || '') + '" placeholder="' + ph + '"' + (tipo ? ' type="' + tipo + '"' : '') + (k === 'frete' || k === 'desc' ? ' inputmode="decimal" style="text-align:right"' : '') + (tr ? ' disabled' : '') + '></td>';
+    const campo = (f, k, ph, tipo) => '<td><input data-fk="' + k + '" data-f="' + f.id + '" value="' + h(k === 'frete' ? prIn(f.frete) : f[k] || '') + '" placeholder="' + ph + '"' + (tipo ? ' type="' + tipo + '"' : '') + (k === 'frete' || k === 'desc' ? ' inputmode="decimal" style="text-align:right"' : '') + (tr ? ' disabled' : '') + '></td>';
     const foot = $('cm-f');
     const focado = document.activeElement && foot.contains(document.activeElement) ? document.activeElement : null;
     if(!focado || foot.dataset.n !== c.fs.map(f => f.id).join()){
       foot.dataset.n = c.fs.map(f => f.id).join();
-      foot.innerHTML = !c.fs.length ? '<tr><td colspan="6" class="hint" style="padding:12px">Adicione os fornecedores pelo seletor "+ Adicionar fornecedor" abaixo do mapa.</td></tr>' :
-        '<tr data-r="sub">' + span + 'Subtotal</th>' + c.fs.map(f => '<td colspan="2" class="tt" data-s="' + f.id + '"></td>').join('') + ultCol + '</tr>'
+      foot.innerHTML = !c.fs.length ? '<tr><td colspan="' + (3 + (tr ? 0 : 1)) + '" class="hint" style="padding:14px;text-align:left">Adicione os fornecedores digitando o nome em "+ Fornecedor", no cabeçalho do mapa.</td></tr>' :
+        '<tr data-r="sub">' + span + 'Subtotal</th>' + c.fs.map(f => '<td data-s="' + f.id + '"></td>').join('') + ultCol + '</tr>'
         + '<tr>' + span + 'Desconto (%)</th>' + c.fs.map(f => campo(f, 'desc', '0')).join('') + ultCol + '</tr>'
-        + '<tr>' + span + 'Frete</th>' + c.fs.map(f => '<td colspan="2"><div style="display:flex;gap:4px"><select data-fk="tf" data-f="' + f.id + '" style="width:auto"' + (tr ? ' disabled' : '') + '>'
+        + '<tr>' + span + 'Frete</th>' + c.fs.map(f => '<td><div style="display:flex;gap:4px;justify-content:flex-end"><select data-fk="tf" data-f="' + f.id + '" style="width:auto"' + (tr ? ' disabled' : '') + '>'
           + ['CIF', 'FOB'].map(t => '<option' + (f.tf === t ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>'
-          + '<input data-fk="frete" data-f="' + f.id + '" value="' + h(prIn(f.frete)) + '" placeholder="R$ 0,00" inputmode="decimal" style="text-align:right"' + (tr ? ' disabled' : '') + '></div></td>').join('') + ultCol + '</tr>'
-        + '<tr class="tot">' + span + 'Total da proposta</th>' + c.fs.map(f => '<td colspan="2" class="tt" data-tot="' + f.id + '"></td>').join('') + ultCol + '</tr>'
-        + '<tr>' + span + 'Itens cotados</th>' + c.fs.map(f => '<td colspan="2" style="text-align:center" data-n="' + f.id + '"></td>').join('') + ultCol + '</tr>'
-        + '<tr>' + span + 'Prazo de entrega</th>' + c.fs.map(f => campo(f, 'prazo', 'Ex.: 3 dias úteis')).join('') + ultCol + '</tr>'
-        + '<tr>' + span + 'Condição de pagamento</th>' + c.fs.map(f => '<td colspan="2"><input data-fk="pag" data-f="' + f.id + '" value="' + h(f.pag || '') + '" list="cot-pag" placeholder="Ex.: 28 dias"' + (tr ? ' disabled' : '') + '></td>').join('') + ultCol + '</tr>'
-        + '<tr>' + span + 'Validade da proposta</th>' + c.fs.map(f => campo(f, 'val', '', 'date')).join('') + ultCol + '</tr>'
-        + '<tr>' + span + 'Observação / marca</th>' + c.fs.map(f => campo(f, 'obs', 'Ex.: marca, nº do orçamento')).join('') + ultCol + '</tr>';
+          + '<input data-fk="frete" data-f="' + f.id + '" value="' + h(prIn(f.frete)) + '" placeholder="R$ –" inputmode="decimal" style="text-align:right;width:110px"' + (tr ? ' disabled' : '') + '></div></td>').join('') + ultCol + '</tr>'
+        + '<tr class="tot">' + span + 'Total<small id="cm-nit"></small></th>' + c.fs.map(f => '<td data-tot="' + f.id + '"></td>').join('') + ultCol + '</tr>'
+        + '<tr class="cd">' + span + 'Prazo de entrega</th>' + c.fs.map(f => campo(f, 'prazo', 'Ex.: 3 dias úteis')).join('') + ultCol + '</tr>'
+        + '<tr class="cd">' + span + 'Condição de pagamento</th>' + c.fs.map(f => '<td><input data-fk="pag" data-f="' + f.id + '" value="' + h(f.pag || '') + '" list="cot-pag" placeholder="Ex.: 28 dias"' + (tr ? ' disabled' : '') + '></td>').join('') + ultCol + '</tr>'
+        + '<tr class="cd">' + span + 'Validade da proposta</th>' + c.fs.map(f => campo(f, 'val', '', 'date')).join('') + ultCol + '</tr>'
+        + '<tr class="cd">' + span + 'Observação / marca</th>' + c.fs.map(f => campo(f, 'obs', 'Ex.: marca, nº do orçamento')).join('') + ultCol + '</tr>';
       if(!$('cot-pag')){ const dl = document.createElement('datalist'); dl.id = 'cot-pag'; dl.innerHTML = PAG.map(u => '<option value="' + u + '">').join(''); document.body.appendChild(dl); }
       foot.querySelectorAll('[data-fk]').forEach(el => {
         const f = c.fs.find(x => x.id === el.dataset.f), k = el.dataset.fk;
@@ -920,11 +1147,16 @@
         if(k === 'frete') el.addEventListener('blur', () => { el.value = prIn(f.frete); });
       });
     }
+    const nit = $('cm-nit'); if(nit) nit.textContent = n + ' ite' + (n === 1 ? 'm cotado' : 'ns cotados');
     c.fs.forEach(f => {
       const x = R.f[f.id];
       const s = foot.querySelector('[data-s="' + f.id + '"]'); if(s) s.textContent = R$(x.sub);
-      const t = foot.querySelector('[data-tot="' + f.id + '"]'); if(t){ t.textContent = x.n ? R$(x.tot) : '—'; t.classList.toggle('best', x.completo && Math.abs(x.tot - melhorTot) < 0.005 && c.fs.length > 1); }
-      const nn = foot.querySelector('[data-n="' + f.id + '"]'); if(nn){ nn.textContent = x.n + ' de ' + n; nn.style.color = x.n < n ? '#b26a00' : ''; }
+      const t = foot.querySelector('[data-tot="' + f.id + '"]');
+      if(t){
+        const best = x.completo && Math.abs(x.tot - melhorTot) < 0.005 && c.fs.length > 1;
+        t.innerHTML = (x.n ? R$(x.tot) : '—') + '<small' + (x.n < n ? ' style="color:#b26a00"' : '') + '>' + (best ? 'menor proposta completa' : x.n < n ? 'cotou ' + x.n + ' de ' + n : ' ') + '</small>';
+        t.classList.toggle('best', best);
+      }
     });
     renderResultado(c, R);
   }
@@ -1004,13 +1236,7 @@
     });
 
     // fluxo de aprovação
-    const fl = $('cm-fluxo'), bts = [];
-    if(c.st === 'aberta') bts.push(['aprovacao', 'Enviar para aprovação', 1]);
-    if(c.st === 'aberta' || c.st === 'aprovacao') bts.push(['aprovada', '✓ Aprovar compra', c.st === 'aprovacao' ? 1 : 0]);
-    if(c.st === 'aprovacao') bts.push(['aberta', 'Voltar para cotação', 0]);
-    if(c.st === 'aprovada') bts.push(['pedido', 'Marcar pedido emitido', 1]);
-    if(c.st !== 'cancelada' && c.st !== 'pedido') bts.push(['cancelada', 'Cancelar cotação', 0, 1]);
-    if(c.st === 'cancelada') bts.push(['aberta', 'Reativar cotação', 0]);
+    const fl = $('cm-fluxo'), bts = transicoes(c);
     fl.innerHTML = bts.map(b => '<button data-st="' + b[0] + '"' + (b[2] ? '' : ' class="sec"') + (b[3] ? ' style="color:#b42318"' : '') + '>' + b[1] + '</button>').join('');
     fl.querySelectorAll('[data-st]').forEach(b => b.onclick = () => mudarSit(c, b.dataset.st));
   }
@@ -1037,11 +1263,22 @@
     mexeu(c, true); montarMapa(c);
   }
 
-  function acao(c, a){
-    if(a === 'fechar') return fecharMapa();
+  function acao(c, a, el){
+    if(a === 'fechar') return voltarLista();
+    if(a === 'st'){
+      const mn = el.parentElement.querySelector('.cv-menu');
+      if(!mn.hidden){ mn.hidden = true; return; }
+      const bts = transicoes(c);
+      mn.innerHTML = (bts.length ? bts.map(b => '<button data-st="' + b[0] + '"' + (b[3] ? ' style="color:#b42318"' : '') + '>' + b[1] + '</button>').join('') : '<div class="hint">Sem mudança possível.</div>')
+        + (travada(c) && c.st !== 'cancelada' ? '<button data-re>Reabrir para edição</button>' : '');
+      mn.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { mn.hidden = true; mudarSit(c, b.dataset.st); });
+      const re = mn.querySelector('[data-re]'); if(re) re.onclick = () => { mn.hidden = true; acao(c, 'reabrir'); };
+      mn.hidden = false; return;
+    }
+    if(a === 'foto') return foto(c, el);
     if(a === 'item'){
       const i = {id: uid(), desc: '', un: 'un', q: 1, obs: ''}; c.itens.push(i); mexeu(c, true); montarMapa(c);
-      const ins = M.querySelectorAll('#cm-b tr:last-child input[data-ik=desc]'); if(ins[0]) ins[0].focus();
+      const ins = M.querySelectorAll('#cm-b tr:last-child [data-ik=desc]'); if(ins[0]) ins[0].focus();
       return;
     }
     if(a === 'colar') return modal('Colar itens do Excel',
@@ -1064,12 +1301,36 @@
     if(a === 'dup'){ const n = novaCotacao(c); salvar(true); abrirMapa(n.id); return; }
     if(a === 'del'){
       if(!confirm('Excluir a ' + numCot(c) + (c.tit ? ' (' + c.tit + ')' : '') + '? Ela some da lista e do histórico de preços.')) return;
-      c.del = true; c.upd = agora(); fecharMapa(); render(); return;
+      c.del = true; c.upd = agora(); aberta = null; salvar(true); abrirLista(); return;
     }
     if(a === 'reabrir'){
       if(!confirm('Reabrir a ' + numCot(c) + ' para edição? A situação volta para "Em cotação" e a aprovação é desfeita.')) return;
       c.st = 'aberta'; c.apr = ''; c.aprd = ''; registrar(c, 'Reaberta para edição'); mexeu(c, true); montarMapa(c);
     }
+  }
+
+  // ---------- imagem do mapa (botão da câmera) ----------
+  // Copia o mapa como imagem (para colar no WhatsApp/e-mail); se o navegador não deixar, baixa o PNG.
+  let h2c = null;
+  const carregarH2c = () => h2c || (h2c = new Promise((ok2, erro) => {
+    if(window.html2canvas) return ok2(window.html2canvas);
+    const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+    s.onload = () => ok2(window.html2canvas); s.onerror = () => { h2c = null; erro(new Error('sem internet')); }; document.head.appendChild(s);
+  }));
+  async function foto(c, b){
+    const el = $('cv-folha'); if(!el) return;
+    const ori = b.innerHTML; b.disabled = true;
+    const fim = t => { b.title = t; const e = $('cv-salvo'); if(e){ e.className = 'cv-est'; e.textContent = t; setTimeout(estadoSalvo, 3500); } b.innerHTML = ori; b.disabled = false; };
+    try{
+      const H = await carregarH2c();
+      el.classList.add('foto');
+      const cv = await H(el, {backgroundColor: getComputedStyle(el).backgroundColor || '#fff', scale: Math.min(2, window.devicePixelRatio > 1 ? 2 : 1.5), logging: false, useCORS: true,
+        windowWidth: Math.max(el.scrollWidth + 80, document.documentElement.clientWidth), width: el.scrollWidth, height: el.scrollHeight});
+      el.classList.remove('foto');
+      const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+      try{ await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]); fim('Imagem do mapa copiada — é só colar (Ctrl+V)'); }
+      catch(e){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'mapa-' + numCot(c) + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); fim('Imagem do mapa baixada'); }
+    }catch(e){ el.classList.remove('foto'); fim('Não deu para gerar a imagem agora (' + e.message + '). Use a impressora → Salvar como PDF.'); }
   }
 
   // ---------- pedir cotação ao fornecedor ----------
@@ -1109,21 +1370,21 @@
 <style>
  @page{size:A4 landscape;margin:10mm}
  body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#232323;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
- .cab{display:flex;align-items:center;gap:14px;border-bottom:2px solid #C05621;padding-bottom:7px;margin-bottom:8px}
+ .cab{display:flex;align-items:center;gap:14px;border-bottom:2px solid #0f7c86;padding-bottom:7px;margin-bottom:8px}
  .cab img{height:32px} .cab h1{font-size:16px;margin:0} .cab span{font-size:9.5px;color:#8e8e8e;letter-spacing:.1em;text-transform:uppercase}
  .cab .nr{margin-left:auto;text-align:right} .cab .nr b{font-size:15px;display:block}
  .info{display:grid;grid-template-columns:2fr 1.4fr 1fr 1fr 1fr;gap:4px 14px;margin-bottom:8px;border:1px solid #e3e3e5;border-radius:6px;padding:6px 9px}
  .info div span{display:block;font-size:8px;color:#8e8e8e;text-transform:uppercase;letter-spacing:.05em;font-weight:700} .info div b{font-size:11px}
  table{width:100%;border-collapse:collapse;${larg}} tr{page-break-inside:avoid}
- th{background:#f1f1f3;font-size:8.5px;text-transform:uppercase;padding:4px 5px;border:1px solid #d9d9dc;text-align:center}
- th.f{font-size:10px;text-transform:none;background:#e9e9ec}
+ th{background:#0f7c86;color:#fff;font-size:8.5px;text-transform:uppercase;padding:5px;border:1px solid #0d6c75;text-align:center}
+ th.f{font-size:9.5px}
  td{padding:3px 5px;border:1px solid #e3e3e5;vertical-align:middle} .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums} .c{text-align:center} .r{text-align:right;font-weight:700;color:#5c5c5c}
- td.min{background:#dcf1e3;font-weight:700;color:#14532d} td.esc{outline:2px solid #1f7a3d;outline-offset:-2px}
- tr.tot td{font-weight:700;font-size:11px;background:#f6f6f7} tr.tot td.best{background:#dcf1e3;color:#14532d}
+ td.min{font-weight:700;color:#1f7a3d} td.esc{background:#e3f1f2;font-weight:700;color:#0b5d65}
+ tr.tot td{font-weight:700;font-size:11px;background:#f6f6f7} tr.tot td.best{background:#e3f1f2;color:#0b5d65}
  tr.cond td{background:#fafafa}
  .bx{display:flex;gap:10px;margin-top:9px}
  .bx div{flex:1;border:1px solid #e3e3e5;border-radius:6px;padding:6px 9px} .bx span{display:block;font-size:8px;color:#8e8e8e;text-transform:uppercase;letter-spacing:.05em;font-weight:700} .bx b{font-size:13px}
- .bx .v{border-color:#1f7a3d;background:#f1faf4} .bx .v b{color:#14532d}
+ .bx .v{border-color:#0f7c86;background:#e3f1f2} .bx .v b{color:#0b5d65}
  .just{margin-top:8px;border:1px solid #e3e3e5;border-radius:6px;padding:6px 9px;min-height:28px} .just span{display:block;font-size:8px;color:#8e8e8e;text-transform:uppercase;font-weight:700}
  .ped{margin-top:6px;font-size:10px} .ped b{font-weight:700}
  .ass{display:flex;gap:40px;margin-top:34px} .ass div{flex:1;border-top:1px solid #999;padding-top:3px;text-align:center;font-size:9.5px}
@@ -1131,9 +1392,9 @@
  .leg{margin-top:6px;font-size:8.5px;color:#8e8e8e}
  .sit{display:inline-block;border:1px solid ${si.c};color:${si.c};border-radius:4px;padding:0 6px;font-weight:700;font-size:9.5px}
 </style></head><body>
-<div class="cab"><img src="${base}logo-bkp.png" alt=""><div><h1>Mapa de cotação de preços</h1><span>BKP Construtora</span></div>
+<div class="cab"><img src="${base}logo-bkp.png" alt=""><div><h1>Mapa de Cotação</h1><span>BKP Construtora</span></div>
  <div class="nr"><b>${numCot(c)}</b><span class="sit">${si.n}</span></div></div>
-<div class="info"><div><span>Objeto</span><b>${h(c.tit || '—')}</b></div><div><span>Obra / centro de custo</span><b>${h(c.o ? nomeLocal(c.o) : '—')}</b></div>
+<div class="info"><div><span>Objeto</span><b style="text-transform:uppercase">${h(c.tit || '—')}</b></div><div><span>Obra / centro de custo</span><b>${h(c.o ? nomeLocal(c.o) : '—')}</b></div>
  <div><span>Solicitante</span><b>${h(c.sol || '—')}</b></div><div><span>Comprador</span><b>${h(c.u || '—')}</b></div><div><span>Data</span><b>${dataBR(c.d)}</b></div></div>
 <table><thead><tr><th rowspan="2" style="width:22px">#</th><th rowspan="2" style="text-align:left">Item / descrição</th><th rowspan="2">Un</th><th rowspan="2">Qtd</th>
  ${fs.map(f => '<th colspan="2" class="f">' + h(f.nome) + '</th>').join('')}</tr>
@@ -1162,7 +1423,7 @@
   return '<b>' + h(f.nome) + ':</b> itens ' + its.map(i => R.itens.indexOf(i) + 1).join(', ') + ' — ' + R$(its.reduce((s, i) => s + R.ef(f, i) * R.it[i.id].q, 0) + R.f[fid].fr); }).join(' &nbsp;·&nbsp; ')}</div>
 <div class="just"><span>Justificativa da escolha</span>${h(c.just || '').replace(/\n/g, '<br>') || '&nbsp;'}</div>
 <div class="ass"><div>Comprador<small>${h(c.u || '')}</small></div><div>Solicitante<small>${h(c.sol || '')}</small></div><div>Aprovação${c.apr ? '<small>' + h(c.apr) + ' · ' + dataBR(c.aprd) + '</small>' : '<small>&nbsp;</small>'}</div></div>
-<div class="leg">Verde = menor preço do item (já com desconto). Contorno verde = proposta escolhida. Totais incluem desconto e frete. Gerado pelo Gestão 360º BKP em ${dataBR(hoje())}.</div>
+<div class="leg">Verde = menor preço do item (já com desconto). Fundo verde-petróleo = proposta escolhida. Totais incluem desconto e frete. Gerado pelo Gestão 360º BKP em ${dataBR(hoje())}.</div>
 </body></html>`;
     const fr = document.createElement('iframe');
     fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
@@ -1176,7 +1437,8 @@
 
   // ---------- planilha ----------
   function aviso(t, erro){ const el = $('cot-estado'); if(el){ el.textContent = t; el.style.color = erro ? '#b42318' : ''; }
-    const cs = $('cm-salvo'); if(cs){ cs.textContent = erro ? '⚠ ' + t : t; cs.style.color = erro ? '#b42318' : ''; } }
+    ultErro = erro ? t : ''; if(!erro && /^Salvo/.test(t)) ultSalvo = t.replace(/\.$/, '');
+    estadoSalvo(); }
 
   // junta duas versões (deste computador e da planilha): vale a alteração mais recente de cada cotação e fornecedor
   function juntar(a, b){
@@ -1256,5 +1518,5 @@
   try{ if(ls.get('aba') === 'cot') trocarAba('cot'); }catch(e){}
   // posição do fornecedor no mapa (arrastada em fornecedores-mapa.js)
   const posForn = (id, lat, lng) => { const f = achaForn(id); if(!f) return; f.geo = (+lat).toFixed(6) + ',' + (+lng).toFixed(6); f.upd = agora(); salvar(); };
-  window.G360Cotacoes = {render, receber, enviar, abrir: abrirMapa, calc, dados: () => D, numCot, nomeLocal, SIT, editarForn, posForn};
+  window.G360Cotacoes = {render, receber, enviar, abrir: abrirMapa, lista: abrirLista, calc, dados: () => D, numCot, nomeLocal, SIT, editarForn, posForn};
 })();
