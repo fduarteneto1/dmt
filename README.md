@@ -119,3 +119,13 @@ Mapa de cotação para o comprador: compara as propostas dos fornecedores, mostr
 - **Histórico de preços:** busca por item em todas as cotações (último preço escolhido, menor já cotado). **Baixar planilha (CSV)** exporta todos os preços.
 - **Onde ficam os dados:** na aba oculta **G360Cotacoes** da planilha (JSON em pedaços, como as diárias). A cada gravação, as abas **Cotações** (uma linha por cotação) e **Cotações – Preços** (uma linha por item × fornecedor) são refeitas só para consulta. Se dois computadores mexerem ao mesmo tempo, vale a alteração mais recente de cada cotação.
 - O Apps Script da planilha precisa ter as ações `lerCotacoes` e `gravarCotacoes` (já estão em `tools/planilha-emulsao.gs`). Depois de colar, publique em **Implantar → Gerenciar implantações → editar → Nova versão**. Até lá, as cotações ficam guardadas no computador e são enviadas assim que a planilha aceitar.
+
+## Busca de fornecedor (aba Cotações)
+Ao digitar o nome no cadastro de fornecedor, aparece uma lista suspensa com:
+- **Já cadastrados:** evita duplicar. Escolher um abre o cadastro dele (ou, dentro de uma cotação, inclui ele no mapa).
+- **No Google:** empresas do Google Maps, com Mato Grosso primeiro. Ao escolher, preenche nome, endereço, cidade, telefone e, quando dá, a categoria.
+- **CNPJ:** digitando o CNPJ (no campo CNPJ ou no nome), busca na Receita (BrasilAPI; reserva publica.cnpj.ws) e preenche razão social, endereço, telefone e e-mail. Mostra se o CNPJ não está ativo.
+
+No mapa de cotação, "+ Adicionar fornecedor" virou uma caixa de busca: digite parte do nome e escolha, ou cadastre um novo ali mesmo.
+
+**Chave do Google:** Fornecedores › ⚙ Busca no Google. A chave fica na planilha (aba G360Cotacoes) e vale para todos. No Google Cloud: ative **Places API (New)**, crie a chave e restrinja a `https://fduarteneto1.github.io/*` e à Places API (New). Sem chave, funcionam só os cadastrados e o CNPJ.

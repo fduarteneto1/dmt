@@ -51,7 +51,7 @@
   const PAG = ['À vista', 'Antecipado (PIX)', '7 dias', '14 dias', '21 dias', '28 dias', '30 dias', '30/60 dias', '30/60/90 dias', 'Boleto 28 dias', 'Cartão'];
 
   // ---------- dados ----------
-  const VAZIO = () => ({v: 1, forn: [], cot: []});
+  const VAZIO = () => ({v: 1, forn: [], cot: [], cfg: {}});
   let D = VAZIO();
   try{ const v = JSON.parse(localStorage.getItem(KEY) || 'null'); if(v && Array.isArray(v.cot)) D = Object.assign(VAZIO(), v); }catch(e){}
   let timer = null, ultimaLeitura = 0, aberta = null; // aberta = id da cotação no mapa
@@ -236,7 +236,18 @@
   #cot-modal input,#cot-modal select,#cot-modal textarea{width:100%}
   #cot-modal textarea{min-height:150px;font-family:inherit;font-size:12.5px;border:1px solid var(--line,#e8e8ea);border-radius:8px;padding:8px 11px}
   #cot-modal h2{margin:0 0 6px;font-size:15px}
-  #cot-modal .g2{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}`;
+  #cot-modal .g2{display:grid;grid-template-columns:1fr 1fr;gap:0 8px}
+  #cot-sug{position:fixed;z-index:6000;background:var(--card,#fff);color:var(--ink,#232323);border:1px solid var(--line,#e8e8ea);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.16);overflow:auto;padding:4px 0;font-size:12.5px}
+  #cot-sug .gt{padding:7px 12px 3px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink3,#8e8e8e);font-weight:600}
+  #cot-sug .op{padding:7px 12px;cursor:pointer;line-height:1.3}
+  #cot-sug .op b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #cot-sug .op small{display:block;color:var(--ink3,#8e8e8e);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #cot-sug .op:hover,#cot-sug .op.on{background:var(--head,#f6f6f7)}
+  #cot-sug .op.nv{border-top:1px solid var(--line2,#f2f2f3)}
+  #cot-sug .op.nv b{color:#175cd3}
+  #cot-sug .ms{padding:6px 12px 8px;color:var(--ink3,#8e8e8e);font-size:11.5px}
+  @keyframes cotPisca{from{background:#fff4c2}to{background:transparent}}
+  #cot-modal input.pisca{animation:cotPisca 1.6s ease-out}`;
   document.head.appendChild(css);
 
   const btn = document.createElement('button');
@@ -272,7 +283,7 @@
       <div class="card">
         <h2>Fornecedores</h2>
         <div style="display:flex;gap:8px;align-items:end"><div style="flex:1"><label for="for-busca">Buscar</label><input id="for-busca" placeholder="Nome, cidade, categoria…" style="width:100%"></div>
-          <button id="for-novo">+ Fornecedor</button></div>
+          <button id="for-novo">+ Fornecedor</button><button class="sec" id="for-gcfg" title="Configurar a busca de empresas no Google">⚙ Busca no Google</button></div>
         <ul id="for-lista"></ul>
       </div>
     </div>
@@ -343,7 +354,7 @@
   // ---------- fornecedores ----------
   function renderForn(){
     const b = $('for-busca').value.trim().toLowerCase();
-    const l = vivos(D.forn).filter(f => !b || [f.nome, f.cnpj, f.cidade, f.cat, f.contato].join(' ').toLowerCase().includes(b))
+    const l = vivos(D.forn).filter(f => !b || casa(Object.assign({}, f, {cat: [f.cat, f.contato, f.end].join(' ')}), b))
       .sort((a, b2) => String(a.nome).localeCompare(String(b2.nome), 'pt-BR'));
     const usos = id => vivos(D.cot).filter(c => c.fs.some(f => f.id === id));
     $('for-lista').innerHTML = l.map(f => { const u = usos(f.id), ganhou = u.filter(c => calc(c).final.usados.includes(f.id) && c.st !== 'aberta' && c.st !== 'cancelada').length;
@@ -355,12 +366,14 @@
   }
   $('for-busca').oninput = render;
   $('for-novo').onclick = () => editarForn();
+  $('for-gcfg').onclick = () => configGoogle();
 
-  function editarForn(id, depois){
+  function editarForn(id, depois, nomeIni){
     const f = id ? achaForn(id) : null;
-    const v = f || {};
-    modal(f ? 'Editar fornecedor' : 'Novo fornecedor',
-      '<label>Nome / razão social</label><input name="nome" required value="' + h(v.nome) + '">'
+    const v = f || {nome: nomeIni || ''};
+    const m = modal(f ? 'Editar fornecedor' : 'Novo fornecedor',
+      '<label>Nome do fornecedor</label><input name="nome" required value="' + h(v.nome) + '" placeholder="Digite o nome (busca nos cadastrados e no Google) ou o CNPJ">'
+      + '<input type="hidden" name="razao" value="' + h(v.razao) + '"><input type="hidden" name="gid" value="' + h(v.gid) + '"><input type="hidden" name="geo" value="' + h(v.geo) + '">'
       + '<div class="g2"><div><label>CNPJ</label><input name="cnpj" value="' + h(v.cnpj) + '" placeholder="00.000.000/0000-00"></div>'
       + '<div><label>Categoria</label><input name="cat" value="' + h(v.cat) + '" list="cot-cats" placeholder="Peças, emulsão, EPI…"></div></div>'
       + '<datalist id="cot-cats">' + [...new Set(vivos(D.forn).map(x => x.cat).filter(Boolean).concat(['Peças e filtros', 'Pneus', 'Lubrificantes', 'Combustível', 'Emulsão e CAP', 'Agregados', 'EPI', 'Material de construção', 'Ferramentas', 'Serviços', 'Locação de equipamentos', 'Escritório']))].map(x => '<option value="' + h(x) + '">').join('') + '</datalist>'
@@ -368,20 +381,223 @@
       + '<div><label>Telefone / WhatsApp</label><input name="tel" value="' + h(v.tel) + '" placeholder="(65) 99999-9999"></div></div>'
       + '<div class="g2"><div><label>E-mail</label><input name="email" type="email" value="' + h(v.email) + '"></div>'
       + '<div><label>Cidade</label><input name="cidade" value="' + h(v.cidade) + '" placeholder="Cuiabá-MT"></div></div>'
-      + '<label>Observação</label><input name="obs" value="' + h(v.obs) + '" placeholder="Ex.: entrega em obra só acima de R$ 2 mil">',
+      + '<label>Endereço</label><input name="end" value="' + h(v.end) + '" placeholder="Rua, número, bairro">'
+      + '<label>Observação</label><input name="obs" value="' + h(v.obs) + '" placeholder="Ex.: entrega em obra só acima de R$ 2 mil">'
+      + '<div class="hint" id="for-st" style="margin-top:8px;min-height:16px"></div>',
       d => {
         d.nome = String(d.nome || '').trim(); if(!d.nome) return false;
-        const dup = vivos(D.forn).find(x => x.id !== id && x.nome.trim().toLowerCase() === d.nome.toLowerCase());
+        const dc = String(d.cnpj || '').replace(/\D/g, '');
+        const dupC = dc.length === 14 && vivos(D.forn).find(x => x.id !== id && String(x.cnpj || '').replace(/\D/g, '') === dc);
+        if(dupC && !confirm('O CNPJ ' + fmtCnpj(dc) + ' já está cadastrado em "' + dupC.nome + '". Cadastrar de novo mesmo assim?')) return false;
+        const dup = !dupC && vivos(D.forn).find(x => x.id !== id && x.nome.trim().toLowerCase() === d.nome.toLowerCase());
         if(dup && !confirm('Já existe um fornecedor chamado "' + dup.nome + '". Cadastrar outro com o mesmo nome?')) return false;
         let o = f;
         if(!o){ o = {id: uid()}; D.forn.push(o); }
-        ['nome', 'cnpj', 'cat', 'contato', 'tel', 'email', 'cidade', 'obs'].forEach(k => o[k] = String(d[k] || '').trim());
+        ['nome', 'razao', 'cnpj', 'cat', 'contato', 'tel', 'email', 'cidade', 'end', 'obs', 'gid', 'geo'].forEach(k => o[k] = String(d[k] || '').trim());
+        o.cnpj = fmtCnpj(o.cnpj); o.tel = fmtTel(o.tel);
         o.upd = agora();
         // o nome também muda nas cotações em aberto
         vivos(D.cot).forEach(c => { if(travada(c)) return; c.fs.forEach(x => { if(x.id === o.id && x.nome !== o.nome){ x.nome = o.nome; c.upd = agora(); } }); });
         salvar(); if(depois) depois(o);
       },
       f ? ['Excluir', () => { if(!confirm('Excluir "' + f.nome + '" do cadastro? As cotações em que ele aparece não mudam.')) return false; f.del = true; f.upd = agora(); salvar(); }] : null);
+    ligarBuscaForn(m, id, depois);
+  }
+
+  // ---------- busca de fornecedor enquanto digita ----------
+  // Lista suspensa com três fontes: fornecedores já cadastrados (para não duplicar), Google
+  // (Places API, só quando a chave estiver configurada em Fornecedores › ⚙ Busca no Google)
+  // e a Receita Federal pelo CNPJ (BrasilAPI, gratuita, sem chave; reserva: publica.cnpj.ws).
+  const sem = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const casa = (f, q) => { const t = sem([f.nome, f.razao, f.cnpj, String(f.cnpj || '').replace(/\D/g, ''), f.cidade, f.cat].join(' ')); return sem(q).split(/\s+/).filter(Boolean).every(p => t.includes(p)); };
+  const MIN = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+  const tit = s => String(s || '').toLowerCase().replace(/(^|[\s\-\/(])([a-zà-ú])/g, (m, a, b) => a + b.toUpperCase()).split(' ').map((w, i) => i && MIN.has(w.toLowerCase()) ? w.toLowerCase() : w).join(' ');
+  const fmtTel = v => { const d = String(v || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''); return d.length === 11 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7) : d.length === 10 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6) : String(v || '').trim(); };
+  const fmtCnpj = v => { const d = String(v || '').replace(/\D/g, ''); return d.length === 14 ? d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') : String(v || '').trim(); };
+  const fmtCep = v => { const d = String(v || '').replace(/\D/g, ''); return d.length === 8 ? d.slice(0, 5) + '-' + d.slice(5) : ''; };
+  const CATS = [[/pneu/, 'Pneus'], [/lubrific|oleo/, 'Lubrificantes'], [/combust|posto|derivados de petroleo/, 'Combustível'], [/asfalt|betum|emuls/, 'Emulsão e CAP'],
+    [/pedra|brita|areia|cascalho|agregad|pedreira/, 'Agregados'], [/pecas|acessorios para veiculos|autopec|filtro|maquinas e equipamentos/, 'Peças e filtros'],
+    [/seguranca|epi|protecao/, 'EPI'], [/locacao|aluguel de maquinas/, 'Locação de equipamentos'], [/material de construcao|ferragens|cimento|madeira/, 'Material de construção'],
+    [/ferramenta/, 'Ferramentas'], [/papelaria|escritorio|informatica/, 'Escritório']];
+  const catDe = t => { t = sem(t); const c = CATS.find(x => x[0].test(t)); return c ? c[1] : ''; };
+
+  // caixa da lista (uma só, presa ao body, para não ser cortada pela rolagem do formulário)
+  let SUG = null, sugDona = null;
+  function caixa(){
+    if(SUG) return SUG;
+    SUG = document.createElement('div'); SUG.id = 'cot-sug'; SUG.hidden = true; document.body.appendChild(SUG);
+    const pos = () => { if(SUG.hidden || !sugDona) return; if(!sugDona.isConnected){ SUG.hidden = true; return; }
+      const r = sugDona.getBoundingClientRect(), baixo = innerHeight - r.bottom;
+      SUG.style.left = Math.max(4, r.left) + 'px'; SUG.style.width = Math.max(r.width, 280) + 'px';
+      if(baixo < 220 && r.top > baixo){ SUG.style.top = ''; SUG.style.bottom = (innerHeight - r.top + 2) + 'px'; SUG.style.maxHeight = Math.min(320, r.top - 8) + 'px'; }
+      else { SUG.style.bottom = ''; SUG.style.top = (r.bottom + 2) + 'px'; SUG.style.maxHeight = Math.min(320, baixo - 8) + 'px'; } };
+    SUG.pos = pos;
+    addEventListener('resize', pos); addEventListener('scroll', pos, true);
+    return SUG;
+  }
+  // fonte.local(q) → grupos na hora; fonte.remoto(q) → Promise de grupos (com espera de 350 ms)
+  // grupo = {tit, msg, itens: [{t, s, ac}]}
+  function sugerir(inp, fonte){
+    const box = caixa();
+    inp.setAttribute('autocomplete', 'off');
+    let itens = [], sel = -1, seq = 0, tmr = null, fechado = false;
+    const minha = () => sugDona === inp;
+    const fechar = () => { if(minha()){ box.hidden = true; } sel = -1; clearTimeout(tmr); seq++; };
+    const marcar = k => { sel = k; const ops = box.querySelectorAll('.op'); ops.forEach((el, i) => el.classList.toggle('on', i === k)); if(ops[k] && ops[k].scrollIntoView) ops[k].scrollIntoView({block: 'nearest'}); };
+    const escolher = k => { const it = itens[k]; if(!it) return; fechar(); fechado = true; it.ac(); };
+    function desenhar(grupos){
+      if(document.activeElement !== inp) return;
+      sugDona = inp; itens = []; let html = '';
+      grupos.filter(Boolean).forEach(g => {
+        if(!g.msg && !(g.itens || []).length) return;
+        if(g.tit) html += '<div class="gt">' + h(g.tit) + '</div>';
+        (g.itens || []).forEach(it => { html += '<div class="op' + (it.novo ? ' nv' : '') + '" data-k="' + itens.length + '"><b>' + h(it.t) + '</b>' + (it.s ? '<small>' + h(it.s) + '</small>' : '') + '</div>'; itens.push(it); });
+        if(g.msg) html += '<div class="ms">' + h(g.msg) + '</div>';
+      });
+      box.innerHTML = html; box.hidden = !html; sel = -1; box.pos();
+      box.querySelectorAll('.op').forEach(el => { el.onpointerdown = e => { e.preventDefault(); escolher(+el.dataset.k); }; });
+    }
+    function buscar(){
+      const q = inp.value.trim(), n = ++seq; fechado = false;
+      const loc = fonte.local(q) || [];
+      clearTimeout(tmr);
+      const rem = fonte.remoto && fonte.remoto(q);
+      if(!rem){ desenhar(loc); return; }
+      desenhar(loc.concat([{tit: rem.tit, msg: 'Buscando…'}]));
+      tmr = setTimeout(async () => {
+        let g; try{ g = await rem.fn(); }catch(e){ g = [{tit: rem.tit, msg: e.message}]; }
+        if(n === seq && !fechado) desenhar(loc.concat(g));
+      }, 350);
+    }
+    inp.addEventListener('input', buscar);
+    inp.addEventListener('focus', () => { if(!fechado) buscar(); });
+    inp.addEventListener('blur', () => setTimeout(() => { if(document.activeElement !== inp) fechar(); }, 120));
+    inp.addEventListener('keydown', e => {
+      if(box.hidden || !minha()){ if(e.key === 'ArrowDown'){ fechado = false; buscar(); e.preventDefault(); } return; }
+      if(e.key === 'ArrowDown'){ e.preventDefault(); marcar(Math.min(itens.length - 1, sel + 1)); }
+      else if(e.key === 'ArrowUp'){ e.preventDefault(); marcar(Math.max(-1, sel - 1)); }
+      else if(e.key === 'Enter' && sel >= 0){ e.preventDefault(); escolher(sel); }
+      else if(e.key === 'Tab') fechar();
+    });
+    // Esc fecha só a lista (sem fechar a janela do cadastro)
+    const esc = e => { if(!inp.isConnected){ removeEventListener('keydown', esc, true); return; }
+      if(e.key === 'Escape' && document.activeElement === inp && !box.hidden && minha()){ e.stopPropagation(); e.preventDefault(); fechar(); fechado = true; } };
+    addEventListener('keydown', esc, true);
+    return {buscar, fechar};
+  }
+
+  // Google Places (API nova). A chave fica na planilha (D.cfg.gkey) e vale para todos os usuários.
+  // Restrinja a chave no Google Cloud a "fduarteneto1.github.io/*" e à "Places API (New)".
+  const GURL = 'https://places.googleapis.com/v1/places';
+  const gkey = () => String((D.cfg && D.cfg.gkey) || '').trim();
+  let gTok = '';
+  const gToken = () => gTok || (gTok = (crypto.randomUUID ? crypto.randomUUID() : uid() + uid()));
+  const gErro = async r => { const j = await r.json().catch(() => ({})); const m = (j.error && j.error.message) || ('HTTP ' + r.status);
+    return new Error('Google: ' + (/not been used|disabled/i.test(m) ? 'ative a "Places API (New)" no Google Cloud.' : /referer|referrer|API key not valid|blocked/i.test(m) ? 'chave inválida ou sem permissão para este site.' : m)); };
+  async function gAuto(q){
+    const r = await fetch(GURL + ':autocomplete', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Goog-Api-Key': gkey()},
+      body: JSON.stringify({input: q, sessionToken: gToken(), languageCode: 'pt-BR', regionCode: 'br', includedRegionCodes: ['br'],
+        locationBias: {rectangle: {low: {latitude: -18.1, longitude: -61.7}, high: {latitude: -7.3, longitude: -50.1}}}})}); // Mato Grosso primeiro
+    if(!r.ok) throw await gErro(r);
+    const j = await r.json();
+    return (j.suggestions || []).map(s => s.placePrediction).filter(Boolean);
+  }
+  async function gDet(id){
+    const r = await fetch(GURL + '/' + encodeURIComponent(id) + '?languageCode=pt-BR&regionCode=br&sessionToken=' + encodeURIComponent(gToken()),
+      {headers: {'X-Goog-Api-Key': gkey(), 'X-Goog-FieldMask': 'id,displayName,formattedAddress,addressComponents,nationalPhoneNumber,location,primaryTypeDisplayName,types'}});
+    gTok = ''; // a sessão do Google termina ao abrir o detalhe
+    if(!r.ok) throw await gErro(r);
+    const p = await r.json(), comp = t => (p.addressComponents || []).find(c => (c.types || []).includes(t));
+    const cid = comp('administrative_area_level_2') || comp('locality'), uf = comp('administrative_area_level_1');
+    return {nome: p.displayName && p.displayName.text, end: String(p.formattedAddress || '').replace(/,\s*Brasil$/i, ''), tel: fmtTel(p.nationalPhoneNumber),
+      cidade: cid ? cid.longText + (uf ? '-' + uf.shortText : '') : '', gid: p.id, geo: p.location ? (+p.location.latitude).toFixed(6) + ',' + (+p.location.longitude).toFixed(6) : '',
+      cat: catDe([p.primaryTypeDisplayName && p.primaryTypeDisplayName.text, (p.types || []).join(' ').replace(/_/g, ' '), p.displayName && p.displayName.text].join(' '))};
+  }
+
+  // Receita Federal pelo CNPJ
+  async function buscaCnpj(v){
+    const c = String(v || '').replace(/\D/g, ''); if(c.length !== 14) return null;
+    const end = (tl, lg, nu, co, ba, cep) => [[tit(tl), tit(lg)].filter(Boolean).join(' ') + (nu ? ', ' + nu : ''), tit(co), tit(ba), fmtCep(cep)].filter(Boolean).join(' – ');
+    try{
+      const r = await fetch('https://brasilapi.com.br/api/cnpj/v1/' + c);
+      if(r.status === 404) return {nao: true};
+      if(r.ok){ const j = await r.json();
+        return {razao: j.razao_social, fant: tit(j.nome_fantasia), cidade: j.municipio ? tit(j.municipio) + '-' + j.uf : '', tel: fmtTel(j.ddd_telefone_1), email: String(j.email || '').toLowerCase(),
+          end: end(j.descricao_tipo_de_logradouro, j.logradouro, j.numero, j.complemento, j.bairro, j.cep), sit: j.descricao_situacao_cadastral, ativ: j.cnae_fiscal_descricao}; }
+    }catch(e){}
+    const r = await fetch('https://publica.cnpj.ws/cnpj/' + c); // reserva (até 3 consultas por minuto)
+    if(r.status === 404 || r.status === 400) return {nao: true};
+    if(!r.ok) throw new Error('Consulta de CNPJ indisponível agora (HTTP ' + r.status + ').');
+    const j = await r.json(), e = j.estabelecimento || {};
+    return {razao: j.razao_social, fant: tit(e.nome_fantasia), cidade: e.cidade ? tit(e.cidade.nome) + '-' + ((e.estado || {}).sigla || '') : '',
+      tel: fmtTel(String(e.ddd1 || '') + String(e.telefone1 || '')), email: String(e.email || '').toLowerCase(),
+      end: end(e.tipo_logradouro, e.logradouro, e.numero, e.complemento, e.bairro, e.cep), sit: e.situacao_cadastral, ativ: (e.atividade_principal || {}).descricao};
+  }
+
+  // liga a busca no formulário do cadastro
+  function ligarBuscaForn(m, id, depois){
+    const fm = m.querySelector('form'), cp = n => fm.querySelector('[name="' + n + '"]');
+    const stEl = m.querySelector('#for-st');
+    const msg = (t, erro) => { stEl.textContent = t || ''; stEl.style.color = erro ? '#b42318' : ''; };
+    const por = (n, v, forcar) => { const el = cp(n); if(!el || !v) return; if(forcar || !el.value.trim()){ if(el.value !== v){ el.value = v; el.classList.remove('pisca'); void el.offsetWidth; el.classList.add('pisca'); } } };
+    const usarCnpj = async v => {
+      msg('Consultando o CNPJ na Receita…');
+      try{
+        const r = await buscaCnpj(v);
+        if(!r) return msg('');
+        if(r.nao) return msg('CNPJ não encontrado na Receita.', true);
+        por('cnpj', fmtCnpj(v), true); por('razao', r.razao, true);
+        por('nome', r.fant || tit(r.razao)); por('cidade', r.cidade); por('end', r.end); por('tel', r.tel); por('email', r.email); por('cat', catDe(r.ativ));
+        msg('Receita: ' + [r.razao, r.sit, r.ativ].filter(Boolean).join(' · '), r.sit && !/ativa/i.test(r.sit));
+      }catch(e){ msg(e.message, true); }
+    };
+    sugerir(cp('nome'), {
+      local: q => {
+        const g = [];
+        if(q.replace(/\D/g, '').length === 14) g.push({tit: 'Receita Federal', itens: [{t: 'Buscar o CNPJ ' + fmtCnpj(q), s: 'Preenche razão social, endereço, telefone e e-mail', ac: () => { cp('nome').value = ''; usarCnpj(q); }}]});
+        if(q.length >= 2){
+          const l = vivos(D.forn).filter(x => x.id !== id && casa(x, q)).slice(0, 6);
+          if(l.length) g.push({tit: 'Já cadastrados', itens: l.map(x => ({t: x.nome, s: [x.cat, x.cidade, x.cnpj && 'CNPJ ' + x.cnpj].filter(Boolean).join(' · ') + (depois ? '' : ' — abrir cadastro'),
+            ac: () => { m.querySelector('[data-c]').click(); if(depois) depois(x); else editarForn(x.id); }}))});
+        }
+        return g;
+      },
+      remoto: q => q.length < 3 || /^\d[\d.\/-]*$/.test(q) ? null : !gkey()
+        ? {tit: 'Google', fn: async () => [{tit: 'Google', msg: 'Busca no Google desligada. Para ligar: Fornecedores › ⚙ Busca no Google.'}]}
+        : {tit: 'No Google', fn: async () => {
+            const l = await gAuto(q);
+            return [{tit: 'No Google', msg: l.length ? '' : 'Nada encontrado no Google.', itens: l.slice(0, 6).map(p => ({
+              t: (p.structuredFormat && p.structuredFormat.mainText && p.structuredFormat.mainText.text) || (p.text && p.text.text),
+              s: p.structuredFormat && p.structuredFormat.secondaryText && p.structuredFormat.secondaryText.text,
+              ac: async () => {
+                msg('Buscando os dados no Google…');
+                try{ const d = await gDet(p.placeId);
+                  por('nome', d.nome, true); por('end', d.end, true); por('cidade', d.cidade, true); por('tel', d.tel); por('cat', d.cat); por('gid', d.gid, true); por('geo', d.geo, true);
+                  msg('Dados do Google preenchidos. Confira e complete com CNPJ e contato.');
+                  const c = cp('cnpj'); if(!c.value.trim()) setTimeout(() => c.focus(), 30);
+                }catch(e){ msg(e.message, true); }
+              }}))}];
+          }}
+    });
+    let ultimo = String((cp('cnpj').value || '')).replace(/\D/g, '');
+    cp('cnpj').addEventListener('input', () => { const d = cp('cnpj').value.replace(/\D/g, ''); if(d.length === 14 && d !== ultimo){ ultimo = d; usarCnpj(d); } });
+    cp('cnpj').addEventListener('blur', () => { cp('cnpj').value = fmtCnpj(cp('cnpj').value); });
+    cp('tel').addEventListener('blur', () => { cp('tel').value = fmtTel(cp('tel').value); });
+  }
+
+  function configGoogle(){
+    const v = gkey();
+    modal('Busca no Google',
+      '<div class="hint" style="margin-bottom:8px">Com a chave, ao digitar o nome do fornecedor aparecem as empresas do Google Maps e, ao escolher uma, o endereço, a cidade e o telefone são preenchidos. A chave fica na planilha e vale para todos os usuários.</div>'
+      + '<label>Chave de API do Google (Places API New)</label><input name="gkey" value="' + h(v) + '" placeholder="AIza…" autocomplete="off" spellcheck="false">'
+      + '<div class="hint" style="margin-top:8px;line-height:1.5">Como criar: console.cloud.google.com › crie um projeto › ative <b>Places API (New)</b> › Credenciais › Criar chave de API.<br>'
+      + 'Depois, na chave: <b>Restrições de aplicativo</b> = Sites › <code>https://fduarteneto1.github.io/*</code>; <b>Restrições de API</b> = só Places API (New). Assim ninguém usa a chave fora do Gestão 360º.<br>'
+      + 'Sem chave, a busca continua funcionando nos fornecedores cadastrados e pelo CNPJ.</div>',
+      d => {
+        D.cfg = Object.assign({}, D.cfg, {gkey: String(d.gkey || '').trim(), upd: agora()}); salvar();
+        if(!gkey()) return;
+        gAuto('Disbral Cuiabá').then(l => alert('Busca do Google funcionando ✓ (' + l.length + ' resultado(s) no teste).'), e => alert(e.message + '\n\nA chave foi salva; confira as configurações no Google Cloud.'));
+      });
   }
 
   // ---------- histórico de preços ----------
@@ -513,9 +729,7 @@
           <button class="sec mini" data-a="item">+ Item</button>
           <button class="sec mini" data-a="colar">📋 Colar itens do Excel</button>
           <span style="width:12px"></span>
-          <select id="cm-addf" style="max-width:260px"><option value="">+ Adicionar fornecedor…</option>
-            ${vivos(D.forn).filter(f => !fs.some(x => x.id === f.id)).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')).map(f => '<option value="' + f.id + '">' + h(f.nome) + (f.cat ? ' · ' + h(f.cat) : '') + '</option>').join('')}
-            <option value="*">➕ Cadastrar fornecedor novo…</option></select>
+          <input id="cm-addf" style="width:280px;max-width:100%" placeholder="+ Adicionar fornecedor (digite o nome)…">
           <span class="hint">Deixe o preço em branco quando o fornecedor não cotou o item. Enter desce para o próximo item.</span>
         </div>`}
       </div>
@@ -563,11 +777,15 @@
       registrar(c, 'Fornecedor retirado: ' + f.nome); mexeu(c, true); montarMapa(c);
     });
     const af = $('cm-addf');
-    if(af) af.onchange = () => {
-      const v = af.value; af.value = '';
-      const add = f => { c.fs.push({id: f.id, nome: f.nome, frete: 0, tf: 'CIF', desc: 0, prazo: '', pag: '', val: '', obs: '', p: {}}); registrar(c, 'Fornecedor incluído: ' + f.nome); mexeu(c, true); montarMapa(c); };
-      if(v === '*') editarForn(null, add); else if(v){ const f = achaForn(v); if(f) add(f); }
-    };
+    if(af){
+      const add = f => { if(c.fs.some(x => x.id === f.id)) return; c.fs.push({id: f.id, nome: f.nome, frete: 0, tf: 'CIF', desc: 0, prazo: '', pag: '', val: '', obs: '', p: {}}); registrar(c, 'Fornecedor incluído: ' + f.nome); mexeu(c, true); montarMapa(c);
+        setTimeout(() => { const n = $('cm-addf'); if(n) n.focus(); }, 30); };
+      sugerir(af, {local: q => {
+        const l = vivos(D.forn).filter(f => !c.fs.some(x => x.id === f.id) && (!q || casa(f, q))).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')).slice(0, 40);
+        return [{tit: l.length ? 'Cadastrados' : '', msg: !l.length && q ? 'Nenhum cadastrado com esse nome.' : '', itens: l.map(f => ({t: f.nome, s: [f.cat, f.cidade].filter(Boolean).join(' · '), ac: () => { af.value = ''; add(f); }}))},
+          {itens: [{t: q ? '➕ Cadastrar "' + q + '" como fornecedor novo' : '➕ Cadastrar fornecedor novo…', s: 'Busca no Google e pelo CNPJ', novo: true, ac: () => { af.value = ''; af.blur(); editarForn(null, add, q); }}]}];
+      }});
+    }
     atualizar(c);
   }
 
@@ -945,6 +1163,7 @@
     const lista = (x, y) => { const m = new Map(); (x || []).concat(y || []).forEach(i => { const o = m.get(i.id); if(!o || (i.upd || 0) > (o.upd || 0)) m.set(i.id, i); }); return [...m.values()]; };
     const r = VAZIO();
     ['forn', 'cot'].forEach(k => r[k] = lista(a[k], b[k]));
+    r.cfg = ((b.cfg && (b.cfg.upd || 0) > ((a.cfg || {}).upd || 0)) ? b.cfg : a.cfg) || {};
     // dois computadores criaram cotação com o mesmo número: renumera a mais nova
     const vis = {};
     r.cot.filter(c => !c.del).sort((x, y) => (x.hist && x.hist[0] ? x.hist[0].q : '').localeCompare(y.hist && y.hist[0] ? y.hist[0].q : '') || String(x.id).localeCompare(String(y.id))).forEach(c => {
