@@ -223,7 +223,8 @@
   #cot-mapa .cv-meta b{color:var(--ink,#232323)}
   #cot-mapa .cv-meta input,#cot-mapa .cv-meta select,#cot-mapa .cv-tit{border:0;border-bottom:1px dashed transparent;border-radius:0;background:transparent;color:var(--ink,#232323);font-weight:700;font-size:12px;padding:0 2px;box-shadow:none}
   #cot-mapa .cv-meta input:hover,#cot-mapa .cv-meta select:hover,#cot-mapa .cv-tit:hover,#cot-mapa .cv-meta input:focus,#cot-mapa .cv-meta select:focus,#cot-mapa .cv-tit:focus{border-bottom-color:var(--cv);box-shadow:none}
-  #cot-mapa .cv-meta select{text-align:right;cursor:pointer;max-width:260px}
+  #cot-mapa .cv-meta>div{white-space:nowrap}
+  #cot-mapa .cv-meta select{text-align:right;cursor:pointer;width:auto;max-width:260px}
   #cot-mapa .cv-meta input[type=date]{width:118px}
   #cot-mapa .cv-tit{display:block;width:100%;font-size:16px;text-transform:uppercase;padding:2px 0;margin:0 0 12px;letter-spacing:.01em}
   #cot-mapa .cv-tit::placeholder{text-transform:none;font-weight:400;color:var(--ink3,#8e8e8e)}
@@ -231,6 +232,7 @@
   #cot-mapa table.cv-t{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
   #cot-mapa .cv-t th{background:var(--cv);color:#fff;text-transform:none;font-size:12px;font-weight:700;letter-spacing:0;text-align:left;vertical-align:bottom;padding:12px 10px;border:0;border-right:1px solid rgba(255,255,255,.14);position:sticky;top:0;z-index:2}
   #cot-mapa .cv-t th:last-child{border-right:0}
+  #cot-mapa .cv-t th,#cot-mapa .cv-t td{text-align:left}
   #cot-mapa .cv-t th.c,#cot-mapa .cv-t td.c{text-align:center} #cot-mapa .cv-t th.n,#cot-mapa .cv-t td.n{text-align:right}
   #cot-mapa .cv-t th.fh{min-width:140px;text-transform:uppercase;line-height:1.25}
   #cot-mapa .cv-t th.fh small{display:block;font-weight:400;font-size:10.5px;opacity:.8;margin-top:6px}
@@ -264,6 +266,7 @@
   #cot-mapa .cv-t td.esc{background:var(--cv2)}
   #cot-mapa .cv-t td.esc input,#cot-mapa .cv-t td.esc .tv,#cot-mapa .cv-t td.esc .rs{color:var(--cvt);font-weight:700}
   #cot-mapa .cv-t td.cd select{min-width:140px;font-size:12px}
+  #cot-mapa .cv-t td.pc,#cot-mapa .cv-t tfoot td{text-align:right}
   #cot-mapa .cv-t td.ac{width:40px;text-align:center;background:var(--card,#fff)}
   #cot-mapa .cv-t td.ac .x{background:none;border:0;color:#b42318;padding:0 4px;font-size:15px;cursor:pointer;opacity:0}
   #cot-mapa .cv-t tr:hover td.ac .x{opacity:.8}
@@ -1059,7 +1062,7 @@
       });
       tr.querySelectorAll('input[data-p]').forEach(el => {
         const f = c.fs.find(x => x.id === el.dataset.p);
-        const larg = () => { el.style.width = Math.max(4, el.value.length + 1) + 'ch'; }; larg(); // "R$" colado no valor
+        const larg = () => { el.style.width = Math.max(3.5, el.value.length * 0.92 + 0.6) + 'ch'; }; larg(); // "R$" colado no valor
         el.addEventListener('input', () => { larg(); const v = num(el.value); if(ok(v)) f.p[i.id] = v; else delete f.p[i.id]; mexeu(c); });
         el.addEventListener('blur', () => { el.value = prIn(f.p[i.id]); larg(); });
         el.addEventListener('focus', () => el.select());
