@@ -22,6 +22,10 @@
   btn.dataset.aba = 'rel'; btn.textContent = 'Relatórios';
   $('abas').appendChild(btn);
   btn.addEventListener('click', () => trocarAba('rel'));
+  // Relatórios fica sempre por último no menu, mesmo com módulos carregados depois (RH, novos módulos…)
+  const fimMenu = () => { const m = $('abas'); if(m && m.lastElementChild !== btn) m.appendChild(btn); };
+  try{ new MutationObserver(fimMenu).observe($('abas'), {childList: true}); }catch(e){}
+  document.addEventListener('DOMContentLoaded', fimMenu); window.addEventListener('load', fimMenu);
 
   const aba = document.createElement('div');
   aba.id = 'aba-rel'; aba.style.display = 'none';
