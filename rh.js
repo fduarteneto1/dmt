@@ -273,7 +273,8 @@
   const casaDias = (p, ref) => p.adm ? dif(p.adm, desligado(p) ? (p.dem || ref) : ref) : null;
   const FAIXAS = [['Até 45 dias', 0], ['46 a 90 dias', 46], ['3 a 6 meses', 91], ['6 a 12 meses', 181], ['1 a 2 anos', 366], ['Mais de 2 anos', 731]];
   const faixa = d => d == null || d < 0 ? 'Sem data' : FAIXAS.filter(f => d >= f[1]).pop()[0];
-  function turnover(ano, ref){
+  // mes (1–12) opcional: indicadores só daquele mês; sem mes, o ano inteiro
+  function turnover(ano, ref, mes){
     ref = ref || hoje();
     const ps = quadro().filter(p => saida(p)), ms = [];
     for(let m = 1; m <= 12; m++){
@@ -288,11 +289,13 @@
         emp: dem.filter(p => iniciativa(p.tipoDem) === 'EMPREGADO').length, emr: dem.filter(p => iniciativa(p.tipoDem) === 'EMPRESA').length,
         exp: dem.filter(p => p.adm && dif(p.adm, saida(p)) <= 90).length});
     }
-    const ok = ms.filter(m => !m.futuro), j1 = ano + '-01-01';
+    const okAno = ms.filter(m => !m.futuro);
+    const ok = mes ? okAno.filter(m => +m.d1.slice(5, 7) === mes) : okAno, j1 = mes ? ano + '-' + pad(mes) + '-01' : ano + '-01-01';
+    const fimP = mes ? (eom(j1) < ref ? eom(j1) : ref) : null;
     const admA = ok.reduce((s, m) => s.concat(m.adm), []), demA = ok.reduce((s, m) => s.concat(m.dem), []);
     const qm = ok.length ? ok.reduce((s, m) => s + (m.ini + m.fim) / 2, 0) / ok.length : 0;
     const ini01 = ps.filter(p => entrada(p) < j1 && saida(p) >= j1);
-    const ficaram = ini01.filter(p => !desligado(p));
+    const ficaram = mes ? ini01.filter(p => saida(p) > fimP) : ini01.filter(p => !desligado(p));
     const admFic = admA.filter(p => !desligado(p));
     const pico = ok.reduce((b, m) => m.dem.length > (b ? b.dem.length : -1) ? m : b, null);
     const atv = quadro().filter(p => !desligado(p));
@@ -300,7 +303,7 @@
     const tDes = quadro().filter(p => desligado(p) && p.adm && p.dem && p.dem >= p.adm).map(p => dif(p.adm, p.dem));
     const pend = vivos(D.pes).filter(p => p.sit === 'conferir' || !p.adm || (desligado(p) && !p.dem) || (p.dem && p.adm && p.dem < p.adm));
     const conta = (l, f) => { const o = {}; l.forEach(p => { const k = f(p); o[k] = (o[k] || 0) + 1; }); return o; };
-    return {ano, ref, ms, ok, admA, demA, qm, ini01, ficaram, admFic, pico, atv, pend,
+    return {ano, mes: mes || 0, ref, ms, ok, okAno, admA, demA, qm, ini01, ficaram, admFic, pico, atv, pend,
       afast: atv.filter(p => p.sit === 'afastado').length,
       to: qm ? (admA.length + demA.length) / 2 / qm : 0, toMes: ok.length ? ok.reduce((s, m) => s + m.to, 0) / ok.length : 0,
       tx: qm ? demA.length / qm : 0,
@@ -937,38 +940,44 @@
   }
 
   // ----- Visão geral (turnover) -----
-  let anoT = +hoje().slice(0, 4);
+  let anoT = +hoje().slice(0, 4), mesT = 0;   // mesT: 0 = ano inteiro, 1–12 = mês
+  const mesesAte = (ano, ref) => ano < +ref.slice(0, 4) ? 12 : ano > +ref.slice(0, 4) ? 0 : +ref.slice(5, 7);
+  const rotPer = () => mesT ? MES[mesT - 1] + '/' + anoT : String(anoT);
   function vGeral(el, ref){
     const anos = new Set([+ref.slice(0, 4)]); vivos(D.pes).forEach(p => { if(p.adm) anos.add(+p.adm.slice(0, 4)); if(p.dem) anos.add(+p.dem.slice(0, 4)); });
-    const T = turnover(anoT, ref), pct = v => fmtN(v * 100, 1) + '%';
-    const mesPico = T.pico && T.pico.dem.length ? MESL[+T.pico.d1.slice(5, 7) - 1].slice(0, 3) + '/' + T.pico.d1.slice(2, 4) : '—';
-    const fec = T.ok.length;
+    if(mesT > mesesAte(anoT, ref)) mesT = 0;
+    const TA = turnover(anoT, ref), T = mesT ? turnover(anoT, ref, mesT) : TA, pct = v => fmtN(v * 100, 1) + '%';
+    const M = mesT ? T.ok[0] : null, nomeMes = mesT ? MESL[mesT - 1] + ' de ' + anoT : '';
+    const mesPico = TA.pico && TA.pico.dem.length ? MESL[+TA.pico.d1.slice(5, 7) - 1].slice(0, 3) + '/' + TA.pico.d1.slice(2, 4) : '—';
+    const fec = TA.ok.length, sal = T.admA.length - T.demA.length, noP = mesT ? 'no mês' : 'no ano';
     el.innerHTML = `<div class="rt-fil"><label>Ano analisado <select id="rt-ano">${Array.from(anos).filter(a => a >= 2015).sort((a, b) => b - a).map(a => `<option${a === anoT ? ' selected' : ''}>${a}</option>`).join('')}</select></label>
+      <label>Mês <select id="rt-mes"><option value="0">Ano inteiro</option>${MESL.slice(0, mesesAte(anoT, ref)).map((m, i) => `<option value="${i + 1}"${i + 1 === mesT ? ' selected' : ''}>${titulo(m)}</option>`).join('')}</select></label>
       <span class="mut">Referência: <b>${br(ref)}</b> · calculado pelo cadastro de colaboradores (ativos e desligados)</span><div class="esp"></div>
       <button class="sec" id="rt-adm">+ Admitir</button></div>
       <div class="kpis k6">
-        ${kp('No quadro hoje', T.atv.length, T.afast ? 'dos quais ' + T.afast + ' afastado(s)' : 'ativos e afastados', '', 'colaboradores', '', 'ativos')}
-        ${kp('Admissões no ano', T.admA.length, 'acumulado ' + (fec ? 'jan–' + MES[fec - 1] : ''), '#2370cd', 'colaboradores', '', 'adm-ano')}
-        ${kp('Desligamentos no ano', T.demA.length, 'saldo do ano: ' + (T.admA.length - T.demA.length > 0 ? '+' : '') + (T.admA.length - T.demA.length), '#C05621', 'colaboradores', '', 'dem-ano')}
-        ${kp('Turnover acumulado', pct(T.to), '(admissões + desligamentos) ÷ 2 ÷ quadro médio', '', 'geral')}
-        ${kp('Turnover médio mensal', pct(T.toMes), 'média dos meses do ano até agora', '', 'geral')}
+        ${M ? kp('Quadro no fim do mês', M.fim, 'início do mês: ' + M.ini + (mesT === +ref.slice(5, 7) && anoT === +ref.slice(0, 4) ? ' · hoje' : ''), '', 'colaboradores', '', 'ativos')
+          : kp('No quadro hoje', T.atv.length, T.afast ? 'dos quais ' + T.afast + ' afastado(s)' : 'ativos e afastados', '', 'colaboradores', '', 'ativos')}
+        ${kp('Admissões ' + noP, T.admA.length, mesT ? nomeMes : 'acumulado ' + (fec ? 'jan–' + MES[fec - 1] : ''), '#2370cd', 'colaboradores', '', 'adm-ano')}
+        ${kp('Desligamentos ' + noP, T.demA.length, 'saldo ' + (mesT ? 'do mês' : 'do ano') + ': ' + (sal > 0 ? '+' : '') + sal, '#C05621', 'colaboradores', '', 'dem-ano')}
+        ${kp(mesT ? 'Turnover do mês' : 'Turnover acumulado', pct(T.to), '(admissões + desligamentos) ÷ 2 ÷ quadro médio', '', 'geral')}
+        ${kp('Turnover médio mensal', pct(TA.toMes), mesT ? 'média do ano ' + anoT + ', para comparar' : 'média dos meses do ano até agora', '', 'geral')}
         ${kp('Taxa de desligamento', pct(T.tx), 'desligamentos ÷ quadro médio (' + fmtN(T.qm, 1) + ')', '', 'geral')}
-        ${kp('Retenção no ano', pct(T.ret), T.ficaram.length + ' de ' + T.ini01.length + ' ativos em 01/01 seguem', '', 'geral')}
+        ${kp(mesT ? 'Retenção no mês' : 'Retenção no ano', pct(T.ret), T.ficaram.length + ' de ' + T.ini01.length + (mesT ? ' ativos em 01/' + pad(mesT) + ' ficaram até o fim do mês' : ' ativos em 01/01 seguem'), '', 'geral')}
         ${kp('Retenção dos admitidos', pct(T.retAdm), T.admFic.length + ' de ' + T.admA.length + ' admitidos seguem ativos', '', 'colaboradores', '', 'adm-ano')}
         ${kp('Desligados na experiência', T.demA.length ? pct(T.exp / T.demA.length) : '—', T.exp + ' de ' + T.demA.length + ' saíram com até 90 dias', NIV.venc.c, 'colaboradores', '', 'dem-ano')}
         ${kp('Pedidos de demissão', T.demA.length ? pct((T.porIni.EMPREGADO || 0) / T.demA.length) : '—', (T.porIni.EMPREGADO || 0) + ' desligamentos voluntários', '', 'geral')}
         ${kp('Tempo médio de casa', fmtN(T.tempoAtv, 1) + ' meses', 'entre os ativos', '', 'colaboradores', '', 'ativos')}
-        ${kp('Tempo até o desligamento', fmtN(T.tempoDes, 0) + ' dias', 'média dos desligados · pico de saídas: ' + mesPico, '', 'colaboradores', '', 'desligados')}
+        ${kp('Tempo até o desligamento', fmtN(T.tempoDes, 0) + ' dias', 'média dos desligados · pico de saídas em ' + anoT + ': ' + mesPico, '', 'colaboradores', '', 'desligados')}
       </div>
       ${T.pend.length ? `<div class="cd" style="border-color:#fbb315;background:rgba(251,179,21,.06);padding:12px 16px"><b>${T.pend.length} pendência(s) de cadastro.</b> <span class="mut">Sem admissão, desligado sem data, datas inconsistentes ou vindos só da contabilidade. Eles podem distorcer os indicadores.</span> <button class="sec mini" data-go="colaboradores" data-lista="pend">Ver pendências</button></div>` : ''}
       <div class="g2">
-        <div class="cd"><h3>Movimentação mensal do quadro</h3><p class="sub">Admissões e desligamentos em cada mês, e quantos ficaram ativos no fim do mês.</p>${grafMov(T)}</div>
-        <div class="cd"><h3>Turnover e taxa de desligamento por mês</h3><p class="sub">Quanto maior, mais a equipe está sendo trocada.</p>${grafTO(T)}</div>
+        <div class="cd"><h3>Movimentação mensal do quadro</h3><p class="sub">Admissões e desligamentos em cada mês, e quantos ficaram ativos no fim do mês.</p>${grafMov(TA, mesT)}</div>
+        <div class="cd"><h3>Turnover e taxa de desligamento por mês</h3><p class="sub">Quanto maior, mais a equipe está sendo trocada.</p>${grafTO(TA, mesT)}</div>
       </div>
-      <div class="cd" style="margin-top:14px"><h3>Evolução mês a mês — ${anoT}</h3>${tabMes(T)}</div>
+      <div class="cd" style="margin-top:14px"><h3>Evolução mês a mês — ${anoT}</h3>${tabMes(TA, mesT)}</div>
       <div class="g2">
-        <div class="cd"><h3>Desligamentos por tipo</h3><p class="sub">Desligamentos de ${anoT}.</p>${hbars(Object.entries(T.porTipo).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({r: titulo(k), v: [v]})), [{nome: 'Desligamentos', cor: '#C05621'}], T.demA.length)}</div>
-        <div class="cd"><h3>Tempo de casa</h3><p class="sub">Desligados no ano (tempo até sair) e ativos hoje.</p>${hbars(FAIXAS.map(f => f[0]).concat(['Sem data']).filter(k => T.fxDes[k] || T.fxAtv[k]).map(k => ({r: k, v: [T.fxDes[k] || 0, T.fxAtv[k] || 0]})), [{nome: 'Desligados', cor: '#C05621'}, {nome: 'Ativos', cor: '#2370cd'}])}</div>
+        <div class="cd"><h3>Desligamentos por tipo</h3><p class="sub">Desligamentos de ${mesT ? nomeMes : anoT}.</p>${hbars(Object.entries(T.porTipo).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({r: titulo(k), v: [v]})), [{nome: 'Desligamentos', cor: '#C05621'}], T.demA.length)}</div>
+        <div class="cd"><h3>Tempo de casa</h3><p class="sub">Desligados ${mesT ? 'no mês' : 'no ano'} (tempo até sair) e ativos hoje.</p>${hbars(FAIXAS.map(f => f[0]).concat(['Sem data']).filter(k => T.fxDes[k] || T.fxAtv[k]).map(k => ({r: k, v: [T.fxDes[k] || 0, T.fxAtv[k] || 0]})), [{nome: 'Desligados', cor: '#C05621'}, {nome: 'Ativos', cor: '#2370cd'}])}</div>
       </div>
       <div class="g2">
         <div class="cd"><h3>Ativos por alocação</h3><p class="sub">Pela aba Colaboradores (ou pelo cadastro do RH, quando não ligado).</p>${hbars(Object.entries(T.porObra).sort((a, b) => a[0] === 'ADM' ? -1 : b[0] === 'ADM' ? 1 : b[1] - a[1]).map(([k, v]) => ({r: k === 'ADM' ? 'Sede (ADM)' : k, v: [v]})), [{nome: 'Ativos', cor: '#2370cd'}], T.atv.length)}</div>
@@ -981,20 +990,21 @@
         <b>Experiência</b><span>Desligado na experiência = saiu com até 90 dias de casa. Ativos mês a mês são reconstruídos pelas datas do cadastro; quem não tem admissão é tratado como admitido antes do ano.</span>
         <b>Atualização</b><span>Tudo se recalcula sozinho: basta admitir e desligar pelo botão em Colaboradores.</span></div></div>`;
     $('rt-ano').onchange = e => { anoT = +e.target.value; renderTela(); };
+    $('rt-mes').onchange = e => { mesT = +e.target.value; renderTela(); };
     $('rt-adm').onclick = () => janelaCadastro(null);
     el.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { if(b.dataset.lista) filtro.lista = b.dataset.lista; if(b.dataset.go !== 'geral'){ sub = b.dataset.go; renderTela(); } });
   }
-  function tabMes(T){
+  function tabMes(T, sel){
     const pct = v => fmtN(v * 100, 1) + '%';
     const tot = {ini: T.ok.length ? T.ok[0].ini : 0, adm: T.admA.length, dem: T.demA.length, fim: T.ok.length ? T.ok[T.ok.length - 1].fim : 0, emp: T.ok.reduce((s, m) => s + m.emp, 0), emr: T.ok.reduce((s, m) => s + m.emr, 0), exp: T.ok.reduce((s, m) => s + m.exp, 0)};
     return `<div class="tw"><table><thead><tr><th>Mês</th><th class="n">Ativos no início</th><th class="n">Admissões</th><th class="n">Desligamentos</th><th class="n">Saldo</th><th class="n">Ativos no fim</th><th class="n">Turnover</th><th class="n">Taxa de deslig.</th><th class="n">Retenção</th><th class="n">Pedidos de demissão</th><th class="n">Iniciativa da empresa</th><th class="n">Na experiência</th></tr></thead><tbody>
-      ${T.ms.map(m => m.futuro ? `<tr><td class="mut">${MESL[+m.d1.slice(5, 7) - 1]}</td><td colspan="11"></td></tr>` : `<tr><td><b>${MESL[+m.d1.slice(5, 7) - 1]}</b></td><td class="n">${m.ini}</td><td class="n" data-tip="${h(m.adm.map(p => titulo(p.nome)).join('\n') || 'Nenhuma')}">${m.adm.length}</td><td class="n" data-tip="${h(m.dem.map(p => titulo(p.nome) + ' – ' + titulo(p.tipoDem || 'não informado')).join('\n') || 'Nenhum')}">${m.dem.length}</td>
+      ${T.ms.map((m, i) => m.futuro ? `<tr><td class="mut">${MESL[+m.d1.slice(5, 7) - 1]}</td><td colspan="11"></td></tr>` : `<tr${sel === i + 1 ? ' style="background:rgba(251,179,21,.16);box-shadow:inset 3px 0 0 #fbb315"' : ''}><td><b>${MESL[+m.d1.slice(5, 7) - 1]}</b></td><td class="n">${m.ini}</td><td class="n" data-tip="${h(m.adm.map(p => titulo(p.nome)).join('\n') || 'Nenhuma')}">${m.adm.length}</td><td class="n" data-tip="${h(m.dem.map(p => titulo(p.nome) + ' – ' + titulo(p.tipoDem || 'não informado')).join('\n') || 'Nenhum')}">${m.dem.length}</td>
         <td class="n" style="color:${m.saldo < 0 ? '#b42318' : m.saldo > 0 ? '#1f7a3d' : 'inherit'}">${m.saldo > 0 ? '+' : ''}${m.saldo}</td><td class="n"><b>${m.fim}</b></td><td class="n">${pct(m.to)}</td><td class="n">${pct(m.tx)}</td><td class="n">${pct(m.ret)}</td><td class="n">${m.emp}</td><td class="n">${m.emr}</td><td class="n">${m.exp}</td></tr>`).join('')}
       <tr style="font-weight:700;background:var(--head,#f6f6f7)"><td>Ano (acum.)</td><td class="n">${tot.ini}</td><td class="n">${tot.adm}</td><td class="n">${tot.dem}</td><td class="n">${tot.adm - tot.dem > 0 ? '+' : ''}${tot.adm - tot.dem}</td><td class="n">${tot.fim}</td><td class="n">${pct(T.to)}</td><td class="n">${pct(T.tx)}</td><td class="n">${pct(T.ret)}</td><td class="n">${tot.emp}</td><td class="n">${tot.emr}</td><td class="n">${tot.exp}</td></tr>
     </tbody></table></div>`;
   }
   // barras agrupadas (admissões × desligamentos) + linha de ativos no fim do mês, no mesmo eixo (pessoas)
-  function grafMov(T){
+  function grafMov(T, sel){
     const W = 640, H = 240, L = 34, B = 26, Tp = 18, ms = T.ms, cw = (W - L - 4) / ms.length, bw = Math.min(14, cw * 0.3);
     const max = Math.max(4, ...T.ok.map(m => Math.max(m.fim, m.ini, m.adm.length, m.dem.length)));
     const nice = Math.ceil(max / 10) * 10, y = v => Tp + (H - Tp - B) * (1 - v / nice);
@@ -1003,7 +1013,8 @@
     const pts = [];
     ms.forEach((m, i) => {
       const cx = L + cw * i + cw / 2;
-      s += `<text x="${cx}" y="${H - 8}" text-anchor="middle">${MES[i]}</text>`;
+      if(sel === i + 1) s += `<rect x="${L + cw * i + 1}" y="${Tp}" width="${cw - 2}" height="${H - Tp - B}" rx="4" fill="rgba(251,179,21,.16)"/>`;
+      s += `<text x="${cx}" y="${H - 8}" text-anchor="middle"${sel === i + 1 ? ' style="fill:#C05621;font-weight:700"' : ''}>${MES[i]}</text>`;
       if(m.futuro) return;
       [[m.adm.length, '#2370cd', -bw - 1], [m.dem.length, '#C05621', 1]].forEach(([v, c, dx]) => { if(v) s += `<path d="M${cx + dx},${y(0)} V${y(v) + 3} Q${cx + dx},${y(v)} ${cx + dx + 3},${y(v)} H${cx + dx + bw - 3} Q${cx + dx + bw},${y(v)} ${cx + dx + bw},${y(v) + 3} V${y(0)} Z" fill="${c}"/>`; });
       pts.push([cx, y(m.fim), m.fim]);
@@ -1012,14 +1023,15 @@
     if(pts.length) s += `<polyline points="${pts.map(p => p[0] + ',' + p[1]).join(' ')}" fill="none" stroke="#232323" stroke-width="2" style="pointer-events:none"/>` + pts.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#232323" stroke="var(--card,#fff)" stroke-width="2" style="pointer-events:none"/>${i === pts.length - 1 ? `<text class="val" x="${p[0]}" y="${p[1] - 9}" text-anchor="middle">${p[2]}</text>` : ''}`).join('');
     return `<div class="rh-lg"><span><i style="background:#2370cd"></i>Admissões</span><span><i style="background:#C05621"></i>Desligamentos</span><span><i style="background:#232323;height:3px;border-radius:2px"></i>Ativos no fim do mês</span></div><div class="rh-ch">${s}</svg></div>`;
   }
-  function grafTO(T){
+  function grafTO(T, sel){
     const W = 640, H = 240, L = 40, B = 26, Tp = 18, ms = T.ms, cw = (W - L - 4) / ms.length;
     const max = Math.max(0.1, ...T.ok.map(m => Math.max(m.to, m.tx))), nice = Math.ceil(max * 10) / 10, y = v => Tp + (H - Tp - B) * (1 - v / nice);
     let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Turnover por mês">`;
+    if(sel) s += `<rect x="${L + cw * (sel - 1) + 1}" y="${Tp}" width="${cw - 2}" height="${H - Tp - B}" rx="4" fill="rgba(251,179,21,.16)"/>`;
     [0, .5, 1].forEach(f => s += `<line x1="${L}" x2="${W}" y1="${y(nice * f)}" y2="${y(nice * f)}" stroke="${f ? '#e7e7e7' : '#c2c2c2'}"/><text x="${L - 6}" y="${y(nice * f) + 4}" text-anchor="end">${fmtN(nice * f * 100, 0)}%</text>`);
     const ser = [['to', '#C05621'], ['tx', '#6B6F77']];
     ser.forEach(([k, c]) => { const p = T.ok.map((m, i) => [L + cw * i + cw / 2, y(m[k])]); if(p.length) s += `<polyline points="${p.map(q => q.join(',')).join(' ')}" fill="none" stroke="${c}" stroke-width="2"/>` + p.map(q => `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="${c}" stroke="var(--card,#fff)" stroke-width="2"/>`).join(''); });
-    ms.forEach((m, i) => { s += `<text x="${L + cw * i + cw / 2}" y="${H - 8}" text-anchor="middle">${MES[i]}</text>`; if(!m.futuro) s += `<rect class="hit" x="${L + cw * i}" y="${Tp}" width="${cw}" height="${H - Tp - B}" data-tip="<b>${MESL[i]} de ${T.ano}</b>\nTurnover: ${fmtN(m.to * 100, 1)}%\nTaxa de desligamento: ${fmtN(m.tx * 100, 1)}%\nRetenção: ${fmtN(m.ret * 100, 1)}%"/>`; });
+    ms.forEach((m, i) => { s += `<text x="${L + cw * i + cw / 2}" y="${H - 8}" text-anchor="middle"${sel === i + 1 ? ' style="fill:#C05621;font-weight:700"' : ''}>${MES[i]}</text>`; if(!m.futuro) s += `<rect class="hit" x="${L + cw * i}" y="${Tp}" width="${cw}" height="${H - Tp - B}" data-tip="<b>${MESL[i]} de ${T.ano}</b>\nTurnover: ${fmtN(m.to * 100, 1)}%\nTaxa de desligamento: ${fmtN(m.tx * 100, 1)}%\nRetenção: ${fmtN(m.ret * 100, 1)}%"/>`; });
     return `<div class="rh-lg"><span><i style="background:#C05621"></i>Turnover</span><span><i style="background:#6B6F77"></i>Taxa de desligamento</span><span class="mut" style="margin-left:auto">média mensal: ${fmtN(T.toMes * 100, 1)}%</span></div><div class="rh-ch">${s}</svg></div>`;
   }
   // barras horizontais (uma ou duas séries)
@@ -1035,7 +1047,7 @@
     const ks = Object.keys(cores).filter(k => T.porIni[k]);
     return `<div class="rh-sb">${ks.map(k => `<div style="flex:${T.porIni[k]};background:${cores[k]}" data-tip="<b>${nomes[k]}</b>\n${T.porIni[k]} (${fmtN(T.porIni[k] / tot * 100, 0)}%)"></div>`).join('')}</div>
       <div class="rh-nl">${ks.map(k => `<i style="width:12px;height:12px;border-radius:3px;background:${cores[k]}"></i><span>${nomes[k]}</span><span class="q">${T.porIni[k]} <span class="mut" style="font-weight:400">· ${fmtN(T.porIni[k] / tot * 100, 0)}%</span></span>`).join('')}</div>
-      <table style="margin-top:14px"><thead><tr><th>Setor</th><th class="n">Ativos</th><th class="n">Desligados no ano</th></tr></thead><tbody>${T.setor.map(x => `<tr><td>${x.k === 'SEDE' ? 'Sede' : 'Obras'}</td><td class="n">${x.a}</td><td class="n">${x.d}</td></tr>`).join('')}</tbody></table>`;
+      <table style="margin-top:14px"><thead><tr><th>Setor</th><th class="n">Ativos</th><th class="n">Desligados ${T.mes ? 'no mês' : 'no ano'}</th></tr></thead><tbody>${T.setor.map(x => `<tr><td>${x.k === 'SEDE' ? 'Sede' : 'Obras'}</td><td class="n">${x.a}</td><td class="n">${x.d}</td></tr>`).join('')}</tbody></table>`;
   }
 
   // ----- Painel -----
@@ -1189,9 +1201,9 @@
 
   // ----- Colaboradores (cadastro do RH: ativos e ex-colaboradores) -----
   function vColab(el, ref){
-    const q = norm(filtro.busca), ano = String(anoT);
+    const q = norm(filtro.busca), ano = rotPer();
     const todos = vivos(D.pes);
-    const T = filtro.lista === 'adm-ano' || filtro.lista === 'dem-ano' ? turnover(anoT, ref) : null;
+    const T = filtro.lista === 'adm-ano' || filtro.lista === 'dem-ano' ? turnover(anoT, ref, mesT) : null;
     const LISTAS = {ativos: ['Ativos', p => !desligado(p) && p.sit !== 'conferir'], desligados: ['Ex-colaboradores', p => desligado(p)],
       'adm-ano': ['Admitidos em ' + ano, p => T && T.admA.includes(p)], 'dem-ano': ['Desligados em ' + ano, p => T && T.demA.includes(p)],
       pend: ['Pendências', p => p.sit === 'conferir' || !p.adm || (desligado(p) && !p.dem) || (p.dem && p.adm && p.dem < p.adm)], todos: ['Todos', () => true]};
