@@ -269,16 +269,22 @@ function tabelasCotacoes(ss, d) {
   var dt = function (s) { s = String(s || ''); if (s.length < 10) return ''; var p = s.slice(0, 10).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); };
   var nr = function (c) { return 'COT-' + c.ano + '-' + ('00' + c.n).slice(-3); };
   var lin = [['Nº', 'Data', 'Título', 'Obra', 'Solicitante', 'Comprador', 'Situação', 'Itens', 'Fornecedores', 'Fornecedor(es) escolhido(s)', 'Total escolhido', 'Aprovado por', 'Aprovado em']];
-  var pre = [['Nº', 'Data', 'Obra', 'Situação', 'Item', 'Un', 'Qtd', 'Fornecedor', 'Preço unit.', 'Total', 'Escolhido']];
+  var pre = [['Nº', 'Data', 'Obra', 'Situação', 'Item', 'Un', 'Qtd', 'Fornecedor', 'Marca', 'Preço unit.', 'Total', 'Escolhido']];
   d.cot.filter(function (c) { return !c.del; }).sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : (b.n || 0) - (a.n || 0); }).forEach(function (c) {
     var r = c.res || {};
     lin.push([nr(c), dt(c.d), c.tit || '', c.o || '', c.sol || '', c.u || '', SIT[c.st] || c.st, (c.itens || []).length, (c.fs || []).length,
       (r.forn || []).join(', '), +r.tot || 0, c.apr || '', dt(c.aprd)]);
+    // cada item pode ter linhas de marca (preço da linha k em f.p[id + '~' + k]); só uma é a escolhida
+    var nao = r.nao || [];
     (c.itens || []).forEach(function (i) {
+      var sl = Math.max(1, +i.sl || 1), q = n(i.q) || 0, raiz = i.alt || i.id;
       (c.fs || []).forEach(function (f) {
-        var p = n(f.p && f.p[i.id]); if (!(p > 0)) return;
-        var q = n(i.q) || 0;
-        pre.push([nr(c), dt(c.d), c.o || '', SIT[c.st] || c.st, i.desc || '', i.un || '', q, f.nome || '', p, p * q, r.esc && r.esc[i.id] === f.id ? 'sim' : '']);
+        for (var k = 0; k < sl; k++) {
+          var ch = k ? i.id + '~' + k : i.id, p = n(f.p && f.p[ch]); if (!(p > 0)) continue;
+          var esc = r.esc && r.esc[i.id] === f.id && (+((r.escK || {})[i.id]) || 0) === k;
+          pre.push([nr(c), dt(c.d), c.o || '', SIT[c.st] || c.st, i.desc || '', i.un || '', q, f.nome || '', (f.mk && f.mk[ch]) || '', p, p * q,
+            esc ? 'sim' : nao.indexOf(raiz) >= 0 ? 'não será comprado' : '']);
+        }
       });
     });
   });
@@ -292,5 +298,5 @@ function tabelasCotacoes(ss, d) {
     s.getRange(1, 1, 1, t[0].length).setFontWeight('bold'); s.setFrozenRows(1);
   };
   escreve('Cotações', lin, [2, 13], [11]);
-  escreve('Cotações – Preços', pre, [2], [9, 10]);
+  escreve('Cotações – Preços', pre, [2], [10, 11]);
 }
