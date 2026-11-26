@@ -415,7 +415,7 @@
   const fmtTel = v => { const d = String(v || '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, ''); return d.length === 11 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7) : d.length === 10 ? '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6) : String(v || '').trim(); };
   const fmtCnpj = v => { const d = String(v || '').replace(/\D/g, ''); return d.length === 14 ? d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5') : String(v || '').trim(); };
   const fmtCep = v => { const d = String(v || '').replace(/\D/g, ''); return d.length === 8 ? d.slice(0, 5) + '-' + d.slice(5) : ''; };
-  const CATS = [[/pneu/, 'Pneus'], [/lubrific|oleo/, 'Lubrificantes'], [/combust|posto|derivados de petroleo/, 'Combustível'], [/asfalt|betum|emuls/, 'Emulsão e CAP'],
+  const CATS = [[/pneu/, 'Pneus'], [/lubrific|oleos? lubr/, 'Lubrificantes'], [/combust|posto|derivados de petroleo/, 'Combustível'], [/asfalt|betum|emuls/, 'Emulsão e CAP'],
     [/pedra|brita|areia|cascalho|agregad|pedreira/, 'Agregados'], [/pecas|acessorios para veiculos|autopec|filtro|maquinas e equipamentos/, 'Peças e filtros'],
     [/seguranca|epi|protecao/, 'EPI'], [/locacao|aluguel de maquinas/, 'Locação de equipamentos'], [/material de construcao|ferragens|cimento|madeira/, 'Material de construção'],
     [/ferramenta/, 'Ferramentas'], [/papelaria|escritorio|informatica/, 'Escritório']];
