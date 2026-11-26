@@ -137,3 +137,9 @@ Ao digitar o nome no cadastro de fornecedor, aparece uma lista suspensa com:
 No mapa de cotação, "+ Adicionar fornecedor" virou uma caixa de busca: digite parte do nome e escolha, ou cadastre um novo ali mesmo.
 
 **Chave do Google:** Fornecedores › ⚙ Busca no Google. A chave fica na planilha (aba G360Cotacoes) e vale para todos. No Google Cloud: ative **Places API (New)**, crie a chave e restrinja a `https://fduarteneto1.github.io/*` e à Places API (New). Sem chave, funcionam só os cadastrados e o CNPJ.
+
+## Fornecedores no mapa
+Os fornecedores cadastrados em **Cotações › Fornecedores** aparecem no mapa como um quadrado verde-petróleo com "F". O código está em `fornecedores-mapa.js`, carregado pelo `index.html` depois do `pedagios.js`, sem nada secreto.
+- **Liga/desliga:** botão **Fornecedores** abaixo do zoom (fica salvo em cada navegador). Desligue quando quiser o mapa mais limpo.
+- **Posição:** a que veio do Google ao cadastrar. Sem ela, a ferramenta procura o endereço ou a cidade no OpenStreetMap e mostra a borda tracejada ("posição aproximada").
+- **Clique no fornecedor:** categoria, contato, quantas cotações e quantas vezes foi escolhido; **Abrir cadastro** e **📍 Ajustar posição** (arraste e solte; a posição vai para o cadastro e sincroniza pela planilha).

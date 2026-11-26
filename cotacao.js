@@ -1233,5 +1233,7 @@
 
   receber();
   try{ if(ls.get('aba') === 'cot') trocarAba('cot'); }catch(e){}
-  window.G360Cotacoes = {render, receber, enviar, abrir: abrirMapa, calc, dados: () => D, numCot, nomeLocal, SIT};
+  // posição do fornecedor no mapa (arrastada em fornecedores-mapa.js)
+  const posForn = (id, lat, lng) => { const f = achaForn(id); if(!f) return; f.geo = (+lat).toFixed(6) + ',' + (+lng).toFixed(6); f.upd = agora(); salvar(); };
+  window.G360Cotacoes = {render, receber, enviar, abrir: abrirMapa, calc, dados: () => D, numCot, nomeLocal, SIT, editarForn, posForn};
 })();
