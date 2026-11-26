@@ -2137,7 +2137,7 @@ ${naoC.length ? '<div class="leg" style="color:#5c5c5c">Não serão comprados: '
       if(j.dados && Array.isArray(j.dados.cot)){ D = juntar(D, j.dados); localStorage.setItem(KEY, JSON.stringify(D)); avisarMudanca(); }
       // resumo de cada cotação, só para as abas de consulta da planilha
       const env = Object.assign({}, D, {cot: D.cot.map(c => { if(c.del) return c; const R = calc(c);
-        return Object.assign({}, c, {res: {tot: Math.round(R.final.tot * 100) / 100, forn: R.final.usados.map(id => (c.fs.find(f => f.id === id) || {}).nome), esc: R.esc}}); })});
+        return Object.assign({}, c, {res: {tot: Math.round(R.final.tot * 100) / 100, forn: R.final.usados.map(id => (c.fs.find(f => f.id === id) || {}).nome), esc: R.esc, escK: R.escK, nao: R.NN.filter(n => n.nao).map(n => n.id)}}); })});
       await txApi({acao: 'gravarCotacoes', dados: env});
       localStorage.removeItem(PEND);
       aviso('Salvo na planilha às ' + new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) + '.');
