@@ -24,6 +24,7 @@ function tratar(p) {
     if (p.acao === 'lerDiarias') return lerDiarias(ss);
     if (p.acao === 'lerClima') return lerClima(ss);
     if (p.acao === 'lerCotacoes') return lerCotacoes(ss);
+    if (p.acao === 'lerRH') return lerRH(ss);
     lock.waitLock(20000);
     if (p.acao === 'registro') return registro(ss, p.r || {});
     if (p.acao === 'usina') return usina(ss, p.u || {});
@@ -33,6 +34,7 @@ function tratar(p) {
     if (p.acao === 'gravarDiarias') return gravarDiarias(ss, p.dados);
     if (p.acao === 'gravarClima') return gravarClima(ss, p.cfg, p.usuario);
     if (p.acao === 'gravarCotacoes') return gravarCotacoes(ss, p.dados);
+    if (p.acao === 'gravarRH') return gravarRH(ss, p.dados);
     return { ok: false, erro: 'Ação desconhecida.' };
   } catch (err) {
     return { ok: false, erro: String(err && err.message || err) };
@@ -299,4 +301,67 @@ function tabelasCotacoes(ss, d) {
   };
   escreve('Cotações', lin, [2, 13], [11]);
   escreve('Cotações – Preços', pre, [2], [10, 11]);
+}
+
+// ---------- RH · Férias do Gestão 360º (colaboradores, períodos aquisitivos, programação) ----------
+// Os dados completos ficam como texto JSON na aba oculta "G360RH", em pedaços, como as diárias.
+// A cada gravação, as abas "Férias – Períodos" e "Férias – Programação" são refeitas em formato
+// de tabela, só para consulta (não edite por lá). Os salários ficam só no JSON oculto.
+function abaRH(ss) {
+  var sh = ss.getSheetByName('G360RH');
+  if (!sh) { sh = ss.insertSheet('G360RH'); sh.getRange(1, 1).setValue('rh'); sh.hideSheet(); }
+  return sh;
+}
+function lerRH(ss) {
+  var sh = abaRH(ss), ult = ultimaLinha(sh), txt = '';
+  if (ult > 1) txt = sh.getRange(2, 1, ult - 1, 1).getValues().map(function (r) { return String(r[0] || '').replace(/^~/, ''); }).join('');
+  var d = null;
+  try { d = txt ? JSON.parse(txt) : null; } catch (x) {}
+  return { ok: true, dados: d && Array.isArray(d.pes) ? d : null, quando: iso(sh.getRange(1, 2).getValue()) };
+}
+function gravarRH(ss, d) {
+  if (!d || !Array.isArray(d.pes) || !Array.isArray(d.gozos)) return { ok: false, erro: 'Dados de RH inválidos.' };
+  var txt = JSON.stringify(d), partes = [];
+  for (var i = 0; i < txt.length; i += PEDACO) partes.push(['~' + txt.slice(i, i + PEDACO)]);
+  var sh = abaRH(ss), ult = ultimaLinha(sh);
+  if (partes.length + 1 > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), partes.length + 10);
+  if (ult > 1) sh.getRange(2, 1, ult - 1, 1).clearContent();
+  sh.getRange(2, 1, partes.length, 1).setNumberFormat('@').setValues(partes);
+  sh.getRange(1, 1, 1, 2).setValues([['rh', new Date()]]);
+  try { tabelasRH(ss, d); } catch (x) {}
+  return { ok: true };
+}
+function tabelasRH(ss, d) {
+  var dt = function (s) { s = String(s || ''); if (s.length < 10) return ''; var p = s.slice(0, 10).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); };
+  var mais = function (s, n) { var x = dt(s); if (!x) return ''; x.setDate(x.getDate() + n); return x; };
+  var maisMes = function (s, m) { var x = dt(s); if (!x) return ''; x.setMonth(x.getMonth() + m); return x; };
+  var pes = {};
+  (d.pes || []).forEach(function (p) { if (!p.del) pes[p.id] = p; });
+  var per = [['Código', 'Nome', 'Admissão', 'Situação', 'Início aquisitivo', 'Fim aquisitivo', 'Fim concessivo', 'Direito', 'Gozados', 'Saldo (contab.)', 'Faltas', 'Afastamento', 'Data base']];
+  Object.keys(pes).map(function (k) { return pes[k]; }).sort(function (a, b) { return String(a.nome).localeCompare(String(b.nome)); }).forEach(function (p) {
+    (p.per || []).forEach(function (x) {
+      per.push([p.cod || '', p.nome || '', dt(p.adm), p.ativo === false ? 'fora da programação' : 'ativo', dt(x.ini), dt(x.fim), maisMes(x.fim, 12), +x.dir || 0, +x.goz || 0, +x.rest || 0, +x.faltas || 0, +x.afast || 0, dt(x.base)]);
+    });
+  });
+  var SIT = { sug: 'Sugestão', prog: 'Programada', aviso: 'Aviso emitido', canc: 'Cancelada' };
+  var hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  var vis = d.vis || {};
+  var prog = [['Nome', 'Obra', 'Função', 'Aquisitivo', 'Início', 'Fim', 'Retorno', 'Dias', 'Abono', 'Adiantar 13º', 'Aviso até', 'Aviso emitido em', 'Pagar até', 'Situação', 'Observação', 'Usuário']];
+  (d.gozos || []).filter(function (g) { return !g.del && pes[g.pid]; }).sort(function (a, b) { return a.ini < b.ini ? -1 : a.ini > b.ini ? 1 : 0; }).forEach(function (g) {
+    var p = pes[g.pid], fim = mais(g.ini, (+g.dias || 1) - 1), st = SIT[g.st] || g.st;
+    if (g.st !== 'canc' && g.st !== 'sug' && fim && fim < hoje) st = 'Gozada';
+    else if (g.st !== 'canc' && g.st !== 'sug' && dt(g.ini) <= hoje) st = 'Em férias';
+    prog.push([p.nome || '', (vis[p.id] || {}).o || p.obra || '', (vis[p.id] || {}).f || '', dt(g.per), dt(g.ini), fim, mais(g.ini, +g.dias || 0), +g.dias || 0, +g.abono || 0, g.adi13 ? 'sim' : 'não',
+      mais(g.ini, -((d.cfg && d.cfg.aviso) || 30)), dt(g.avisoEm), mais(g.ini, -2), st, g.obs || '', g.u || '']);
+  });
+  var escreve = function (nome, t, datas) {
+    var s = ss.getSheetByName(nome) || ss.insertSheet(nome);
+    s.clearContents();
+    s.getRange(1, 1, t.length, t[0].length).setValues(t);
+    var nl = Math.max(1, t.length - 1);
+    datas.forEach(function (c) { s.getRange(2, c, nl, 1).setNumberFormat('dd/MM/yyyy'); });
+    s.getRange(1, 1, 1, t[0].length).setFontWeight('bold'); s.setFrozenRows(1);
+  };
+  escreve('Férias – Períodos', per, [3, 5, 6, 7, 13]);
+  escreve('Férias – Programação', prog, [4, 5, 6, 7, 11, 12, 13]);
 }

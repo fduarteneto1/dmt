@@ -152,6 +152,29 @@ No mapa de cotação, "+ Adicionar fornecedor" virou uma caixa de busca: digite 
 
 **Chave do Google:** Fornecedores › ⚙ Busca no Google. A chave fica na planilha (aba G360Cotacoes) e vale para todos. No Google Cloud: ative **Places API (New)**, crie a chave e restrinja a `https://fduarteneto1.github.io/*` e à Places API (New). Sem chave, funcionam só os cadastrados e o CNPJ.
 
+## RH · Férias (aba RH · Férias)
+Gestão das férias dos colaboradores: prazos legais, programação, avisos, custo e cobertura das equipes. O código está em `rh.js`, carregado pelo `index.html` como os outros módulos, sem nada secreto.
+- **No painel lateral:** quadros com vencidas, críticas, avisos a emitir e quem está de férias hoje; lista de **Próximas ações** e **Próximas saídas** (60 dias). **▦ Abrir painel de férias** abre a tela cheia (Esc ou **← Gestão 360º** volta).
+- **Painel:** 8 indicadores (vencidas, críticas, avisos a emitir, sem programação, de férias hoje, dias sem data, passivo de férias, custo em 90 dias), situação dos períodos por nível, limites de gozo por mês (programados × sem data), **cobertura das equipes** (pessoas de férias por obra e mês; contorno vermelho quando passa do limite da equipe), custo das férias por mês e a **fila de prioridade**. Filtro por obra; passe o mouse nos gráficos para ver os nomes.
+- **Colaboradores:** todos, com o período mais urgente, saldo, limite, nível e programação. Clique no nome para a **ficha**: linha do tempo de cada período (aquisitivo, concessivo, hoje, limite e férias marcadas), salário, obra e ligação com a aba Colaboradores.
+- **Cronograma:** uma linha por pessoa, agrupada por obra, com o período concessivo (faixa cinza), o limite (marca vermelha) e as férias. Clique na linha para programar naquela data; clique na barra para editar. No cabeçalho de cada obra, o pico de pessoas fora no mês.
+- **Programação:** todas as férias (sugestões, programadas, aviso emitido, em férias, gozadas, canceladas), com prazo do aviso, data de pagamento e custo. **Emitir aviso** imprime o Aviso de Férias (2 vias, art. 135) e marca como emitido.
+- **✨ Sugerir datas:** monta uma proposta para todos os períodos com saldo: começa numa segunda-feira, respeita o aviso de 30 dias, termina antes do limite e evita desfalcar a obra (mais que o % definido, ou duas pessoas da mesma função). Sugestão só conta depois de **Aceitar**.
+- **Programar férias:** a janela confere na hora as regras da CLT: mínimo de 5 dias, até 3 períodos com um de 14 ou mais (art. 134 §1º), não começar nos 2 dias antes de feriado ou domingo (art. 134 §3º; feriados nacionais e os cadastrados na aba Diárias), abono até 1/3 (art. 143), fim dentro do concessivo (art. 137), aviso de 30 dias (art. 135), faltas (art. 130) e afastamento acima de 6 meses (art. 133). Mostra fim, retorno, prazo do aviso, data de pagamento (art. 145) e custo.
+- **Níveis:** Vencida (prazo estourado: dobro), Crítico (até 60 dias do limite), Alto (até 120), Médio (até 240), Baixo, Em aquisição e Programado. Os prazos se alteram em **Importar e ajustes**.
+- **Limite para iniciar** = fim do concessivo (fim do aquisitivo + 12 meses) − saldo + 1 dia. Custo = salário ÷ 30 × dias + 1/3, sem encargos.
+
+### De onde vêm os dados
+- **Programação de Férias (PDF da contabilidade):** em **Importar e ajustes**, solte o PDF. O arquivo é lido no navegador (pdf.js), mostra uma conferência (quantos colaboradores, novos, quem saiu, nomes repetidos, vencidas) e só aplica quando você confirma. Atualiza código, admissão, períodos, direito, gozados, saldo, faltas e afastamentos. Quem não vem no relatório novo sai do plano (fica como histórico). Férias já lançadas pela contabilidade entram como "aviso emitido". Férias que começaram antes da emissão do relatório passam a contar pelos dias gozados da contabilidade.
+- **Salários (opcional, para o custo):** planilha .xlsx com uma aba que tenha **NOME** e **TOTAL** (como a "Base salários"), ou duas colunas coladas do Excel (nome e salário). Também dá para digitar na ficha.
+- **Obra e função:** vêm da aba Colaboradores, ligados pelo nome (tolera acentos, "da/de/dos" e uma letra trocada). Se não ligar sozinho, escolha na ficha.
+
+### Onde ficam os dados
+- Na aba oculta **G360RH** da planilha (JSON em pedaços, como as diárias). A cada gravação, as abas **Férias – Períodos** e **Férias – Programação** são refeitas só para consulta (sem salários). Se dois computadores mexerem ao mesmo tempo, vale a alteração mais recente de cada pessoa e de cada férias.
+- O Apps Script da planilha precisa ter as ações `lerRH` e `gravarRH` (já estão em `tools/planilha-emulsao.gs`). Depois de colar, publique em **Implantar → Gerenciar implantações → editar → Nova versão**. Até lá, tudo fica guardado no computador e é enviado assim que a planilha aceitar.
+- **Quem vê o módulo:** em **Importar e ajustes**, lista de usuários (vazia = todos). Esconde o botão de quem não está na lista; é uma restrição de tela, não criptografia.
+- **Para voltar à versão sem o RH:** apague `<script src="rh.js?v=1"><\/script>` do `index.html`.
+
 ## Fornecedores no mapa
 Os fornecedores cadastrados em **Cotações › Fornecedores** aparecem no mapa como um quadrado verde-petróleo com "F". O código está em `fornecedores-mapa.js`, carregado pelo `index.html` depois do `pedagios.js`, sem nada secreto.
 - **Liga/desliga:** botão **Fornecedores** abaixo do zoom (fica salvo em cada navegador). Desligue quando quiser o mapa mais limpo.
