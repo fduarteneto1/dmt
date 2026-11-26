@@ -3,6 +3,7 @@
 // - Mostra cada fornecedor cadastrado na posição do endereço (vem do Google ao cadastrar).
 //   Sem posição, procura o endereço/cidade no OpenStreetMap e marca como "posição aproximada".
 // - Botão "Fornecedores" abaixo do zoom liga/desliga a camada (fica salvo neste navegador).
+// - Clique no nome na lista de fornecedores: o mapa vai até ele, destaca e abre os dados.
 // - Clique no fornecedor: dados, cotações, abrir o cadastro e ajustar a posição arrastando.
 (function(){
   try{ if(typeof map === 'undefined' || typeof L === 'undefined' || !window.G360Cotacoes) return; }catch(e){ return; }
@@ -51,7 +52,7 @@
 
   // ---------- camada ----------
   const camada = L.layerGroup();
-  let semPos = 0, total = 0;
+  let semPos = 0, total = 0, marcas = {};
   function dica(f, aprox, nCot, nEsc){
     return `<b>${h(f.nome)}</b><br>` + [f.cat, f.cidade].filter(Boolean).map(h).join(' · ')
       + (f.tel || f.contato ? '<br>' + [f.contato, f.tel].filter(Boolean).map(h).join(' · ') : '')
@@ -59,7 +60,7 @@
       + (aprox ? '<br><i>Posição aproximada (pela cidade/endereço)</i>' : '');
   }
   function desenhar(){
-    camada.clearLayers();
+    camada.clearLayers(); marcas = {};
     const D = C.dados(), cot = (D.cot || []).filter(c => !c.del);
     const forn = (D.forn || []).filter(f => !f.del);
     total = forn.length; semPos = 0;
@@ -83,10 +84,37 @@
       };
       mk.bindPopup(pop);
       mk.on('dragend', () => { const p = mk.getLatLng(); mk.dragging.disable(); C.posForn(f.id, p.lat, p.lng); });
-      camada.addLayer(mk);
+      camada.addLayer(mk); marcas[f.id] = mk;
     });
     pintar();
+    if(selId){ const m = marcas[selId]; if(m){ m.setZIndexOffset(1000); halo.setLatLng(m.getLatLng()).addTo(map); } else halo.remove(); }
   }
+
+  // ---------- destaque (clique no nome do fornecedor na lista) ----------
+  const est = document.createElement('style');
+  est.textContent = '@keyframes g360fpulso{0%{transform:scale(.6);opacity:.95}100%{transform:scale(2.4);opacity:0}}'
+    + '.g360-fhalo{pointer-events:none}.g360-fhalo i{position:absolute;inset:0;border-radius:50%;border:3px solid ' + COR + ';background:rgba(14,116,144,.18);animation:g360fpulso 1.4s ease-out infinite}'
+    + '.g360-fhalo i+i{animation-delay:.7s}';
+  document.head.appendChild(est);
+  const halo = L.marker([0, 0], {interactive: false, keyboard: false, zIndexOffset: 900,
+    icon: L.divIcon({className: 'g360-fhalo', iconSize: [44, 44], iconAnchor: [22, 22], html: '<i></i><i></i>'})});
+  let selId = null;
+  function destacar(id){
+    if(!ligado){ ligado = true; try{ localStorage.setItem(CHAVE, '1'); }catch(e){} camada.addTo(map); pintar(); }
+    const mk = marcas[id];
+    if(!mk){ selId = null; halo.remove(); return false; }
+    if(selId && marcas[selId]) marcas[selId].setZIndexOffset(-100);
+    selId = id; mk.setZIndexOffset(1000);
+    const ll = mk.getLatLng();
+    halo.setLatLng(ll).addTo(map);
+    // no celular o mapa fica em cima da lista: rola até ele
+    const el = map.getContainer();
+    if(window.matchMedia('(max-width:800px)').matches) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+    map.once('moveend', () => mk.openPopup());
+    map.flyTo(ll, Math.max(map.getZoom(), 13), {duration: .8});
+    return true;
+  }
+  map.on('click', () => { selId = null; halo.remove(); });
 
   // ---------- botão liga/desliga ----------
   let botao = null;
@@ -118,5 +146,5 @@
   if(ligado) camada.addTo(map);
   legenda(); setTimeout(legenda, 1500);
   document.addEventListener('g360-cotacoes', desenhar);
-  window.G360FornMapa = {desenhar, camada};
+  window.G360FornMapa = {desenhar, camada, destacar};
 })();

@@ -165,6 +165,10 @@
   #aba-cot .li .nm small{display:block;color:var(--ink3,#8e8e8e);font-size:11px}
   #aba-cot .li .vl{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap;text-align:right}
   #aba-cot .li .vl small{display:block;font-weight:400;color:#1f7a3d;font-size:10.5px}
+  #for-lista .li.sel{background:#cffafe;box-shadow:inset 3px 0 0 #0e7490}
+  #for-lista .li .ed{flex:none;border:1px solid var(--line,#e4e4e7);background:#fff;border-radius:6px;padding:3px 7px;font-size:13px;line-height:1;cursor:pointer;color:var(--ink2,#555)}
+  #for-lista .li .ed:hover{background:var(--head,#f6f6f7)}
+  #for-lista .li .sp{display:block;color:#b45309;font-size:10.5px}
   .cot-tag{display:inline-block;font-size:10px;font-weight:700;border-radius:5px;padding:0 6px;border:1px solid currentColor;white-space:nowrap;line-height:16px}
   #aba-cot .row3{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:0 8px}
   #aba-cot .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
@@ -352,6 +356,7 @@
   };
 
   // ---------- fornecedores ----------
+  let fornSel = null;
   function renderForn(){
     const b = $('for-busca').value.trim().toLowerCase();
     const l = vivos(D.forn).filter(f => !b || casa(Object.assign({}, f, {cat: [f.cat, f.contato, f.end].join(' ')}), b))
@@ -360,9 +365,25 @@
     $('for-lista').innerHTML = l.map(f => { const u = usos(f.id), ganhou = u.filter(c => calc(c).final.usados.includes(f.id) && c.st !== 'aberta' && c.st !== 'cancelada').length;
       return '<li class="li" data-id="' + f.id + '"><span class="nm"><b>' + h(f.nome) + '</b><small>' + [f.cat, f.cidade, f.cnpj && 'CNPJ ' + f.cnpj].filter(Boolean).map(h).join(' · ')
         + '</small><small>' + [f.contato, f.tel, f.email].filter(Boolean).map(h).join(' · ') + '</small></span>'
-        + '<span class="vl" style="font-weight:400;font-size:11px;color:var(--ink3)">' + u.length + ' cotaç' + (u.length === 1 ? 'ão' : 'ões') + (ganhou ? '<br>' + ganhou + ' escolhida' + (ganhou > 1 ? 's' : '') : '') + '</span></li>'; }).join('')
+        + '<span class="vl" style="font-weight:400;font-size:11px;color:var(--ink3)">' + u.length + ' cotaç' + (u.length === 1 ? 'ão' : 'ões') + (ganhou ? '<br>' + ganhou + ' escolhida' + (ganhou > 1 ? 's' : '') : '') + '</span>'
+        + '<button type="button" class="ed" title="Abrir cadastro">✎</button></li>'; }).join('')
       || '<li class="hint" style="padding:10px 0;cursor:default">Nenhum fornecedor' + (b ? ' com essa busca.' : ' cadastrado. Dá para cadastrar aqui ou direto no mapa.') + '</li>';
-    $('for-lista').querySelectorAll('li[data-id]').forEach(li => li.onclick = () => editarForn(li.dataset.id));
+    // clique no fornecedor: destaca no mapa; o lápis abre o cadastro
+    $('for-lista').querySelectorAll('li[data-id]').forEach(li => {
+      if(li.dataset.id === fornSel) li.classList.add('sel');
+      li.querySelector('.ed').onclick = ev => { ev.stopPropagation(); editarForn(li.dataset.id); };
+      li.onclick = () => {
+        $('for-lista').querySelectorAll('li.sel').forEach(x => x.classList.remove('sel'));
+        $('for-lista').querySelectorAll('.sp').forEach(x => x.remove());
+        fornSel = li.dataset.id; li.classList.add('sel');
+        const M = window.G360FornMapa;
+        if(!M || !M.destacar(fornSel)){
+          const sp = document.createElement('small'); sp.className = 'sp';
+          sp.textContent = 'Ainda sem posição no mapa — abra o cadastro (✎) e confira o endereço.';
+          li.querySelector('.nm').appendChild(sp);
+        }
+      };
+    });
   }
   $('for-busca').oninput = render;
   $('for-novo').onclick = () => editarForn();
