@@ -60,12 +60,8 @@
   const achaCot = id => D.cot.find(c => c.id === id);
   const achaForn = id => D.forn.find(f => f.id === id);
   // Opções alternativas de um item (ex.: pneu 1000x20 borrachudo × liso): a linha alternativa tem i.alt = id do
-  // item principal e fica logo abaixo dele, com a mesma unidade e quantidade. O principal guarda em i.sel qual
-  // opção vale no cálculo (vazio = ele mesmo). As outras opções continuam no mapa, com os preços, mas fora da conta.
+  // item original e fica logo abaixo dele, com a mesma unidade e quantidade (ver "cálculo do mapa").
   const raiz = (c, i) => (i.alt && c.itens.find(x => x.id === i.alt)) || i;
-  const opcoes = (c, i) => { const r = raiz(c, i); return r.alt ? [r] : [r].concat(c.itens.filter(x => x.alt === r.id)); };
-  const ativo = (c, i) => { const op = opcoes(c, i); if(op.length < 2) return true; const r = op[0]; return (op.find(x => x.id === r.sel) || r) === i; };
-  const letraOp = (c, i) => String.fromCharCode(65 + Math.max(0, opcoes(c, i).indexOf(i)));
   const numCot = c => 'COT-' + (c.ano || String(c.d || '').slice(0, 4)) + '-' + String(c.n || 0).padStart(3, '0');
 
   function locais(){
@@ -84,13 +80,17 @@
     const ano = hoje().slice(0, 4);
     const n = Math.max(0, ...D.cot.filter(c => String(c.ano) === ano).map(c => +c.n || 0)) + 1;
     const c = {id: uid(), n, ano, tit: '', o: '', sol: '', u: usuario(), d: hoje(), prazo: somaDias(hoje(), 3), st: 'aberta',
-      itens: [], fs: [], venc: {}, modo: 'auto', glob: '', just: '', obs: '', hist: [{q: agoraTxt(), u: usuario(), a: 'Criada'}], upd: agora()};
+      itens: [], fs: [], esc: {}, preset: '', lin: '', cmp: 'media,unico', outNome: '', just: '', obs: '', hist: [{q: agoraTxt(), u: usuario(), a: 'Criada'}], upd: agora()};
     if(base){
       c.tit = base.tit ? base.tit + ' (cópia)' : ''; c.o = base.o; c.sol = base.sol;
+      c.lin = base.lin == null ? '' : base.lin; c.cmp = base.cmp == null ? c.cmp : base.cmp; c.outNome = base.outNome || '';
       const mp = {}; base.itens.forEach(i => mp[i.id] = uid());
       c.itens = base.itens.map(i => { const n = {id: mp[i.id], desc: i.desc, un: i.un, q: i.q, obs: i.obs};
-        if(i.alt && mp[i.alt]) n.alt = mp[i.alt]; if(i.sel && mp[i.sel]) n.sel = mp[i.sel]; return n; });
-      c.fs = base.fs.map(f => ({id: f.id, nome: f.nome, frete: 0, tf: f.tf || 'CIF', desc: 0, prazo: '', pag: f.pag || '', val: '', obs: '', p: {}}));
+        if(i.alt && mp[i.alt]) n.alt = mp[i.alt]; if(+i.sl > 1) n.sl = +i.sl; return n; });
+      // mesmos fornecedores e marcas, preços em branco
+      c.fs = base.fs.map(f => { const mk = {};
+        Object.keys(f.mk || {}).forEach(k => { const [iid, s] = k.split('~'); if(mp[iid]) mk[mp[iid] + (s ? '~' + s : '')] = f.mk[k]; });
+        return {id: f.id, nome: f.nome, frete: 0, tf: f.tf || 'CIF', desc: 0, imp: 0, out: 0, prazo: '', pag: f.pag || '', val: '', obs: '', p: {}, mk}; });
       c.hist[0].a = 'Criada a partir de ' + numCot(base);
     }
     D.cot.push(c);
@@ -99,67 +99,144 @@
   function registrar(c, a){ (c.hist = c.hist || []).push({q: agoraTxt(), u: usuario(), a}); if(c.hist.length > 60) c.hist = c.hist.slice(-60); }
 
   // ---------- cálculo do mapa ----------
-  function calc(c){
-    const todos = c.itens.filter(i => String(i.desc || '').trim() || ok(num(i.q)));
-    const itens = todos.filter(i => ativo(c, i)); // só a opção escolhida de cada item entra na conta
-    const fs = c.fs;
+  // Mesma estrutura do "Mapa de Cotação" BKP (planilha de suprimentos):
+  //  - Necessidade = item original + as opções alternativas dele (i.alt = id do original). Só uma entra na compra.
+  //  - Linhas de marca (i.sl > 1): o mesmo item em outra marca. Cada fornecedor lança o preço da marca dele,
+  //    todas disputam o mesmo item e só uma entra na conta. Preço da linha k fica em f.p[id + '~' + k].
+  //  - Escolha: c.esc[necessidade] = {i, f, k} (célula travada pelo lápis ou por uma predefinição) ou {nao: 1}
+  //    (desaprovado: não será comprado). Sem nada travado vale a recomendação automática: a combinação mais
+  //    barata já com o frete, que inclui comprar tudo de um fornecedor só. Opção alternativa só entra travada.
+  const TAXA_MES = 0.015; // custo do dinheiro para trazer compras a prazo a valor presente
+  const chP = (id, k) => k ? id + '~' + k : id;
+  const slots = i => Math.max(1, +i.sl || 1);
+  const precoN = (f, i, k) => { const p = num(f.p && f.p[chP(i.id, k)]); return ok(p) ? p : NaN; };
+  const marcaDe = (f, i, k) => String((f.mk && f.mk[chP(i.id, k)]) || '');
+  const raizId = (c, i) => i.alt && c.itens.some(x => x.id === i.alt) ? i.alt : i.id;
+
+  function parsePag(txt){
+    const s = String(txt || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    if(!s) return {dias: [0], avista: true, vazio: true, label: ''};
+    const ent = /entrada|^1\s*\+|\+\s*\d/.test(s), mx = s.match(/(\d+)\s*x/), barras = s.match(/\d+(\s*\/\s*\d+)+/);
+    let dias = null;
+    if(barras){ dias = barras[0].split('/').map(x => parseInt(x, 10)); if(ent) dias.unshift(0); }
+    else if(mx){ dias = ent ? [0] : []; for(let k = 1; k <= +mx[1]; k++) dias.push(k * 30); }
+    else { const md = s.match(/(\d+)\s*(d|dia|ddl|$)/) || s.match(/(\d+)/); if(md) dias = [+md[1]]; }
+    if(!dias){
+      if(/vista|pix|dinheiro|antecip|debito/.test(s)) return {dias: [0], avista: true, label: 'à vista'};
+      return {dias: [0], avista: true, desconhecido: true, label: 'não entendi — considerado à vista'};
+    }
+    const av = dias.every(d => d <= 0);
+    return {dias, avista: av, label: av ? 'à vista' : dias.length === 1 ? 'pagamento em ' + dias[0] + ' dias' : dias.length + ' parcelas · ' + dias.join('/') + ' dias'};
+  }
+  function valorPresente(v, dias, taxa){
+    if(!taxa || !dias || !dias.length) return v;
+    const parc = v / dias.length; return dias.reduce((s, d) => s + parc / Math.pow(1 + taxa, Math.max(0, d) / 30), 0);
+  }
+  const diasEntrega = f => { const m = String(f.prazo || '').match(/\d+/); return m ? +m[0] : Infinity; };
+
+  // escolhas da cotação; as feitas antes desta versão (modo "um fornecedor só", "item a item" e a bolinha da
+  // opção) são convertidas só para o cálculo e passam a ser gravadas no formato novo quando alguém mexer
+  function escolhas(c){
+    if(c.esc) return c.esc;
+    const e = {}, fs = c.fs || [];
     const ef = (f, i) => { const p = num(f.p && f.p[i.id]); return ok(p) ? p * (1 - (num(f.desc) || 0) / 100) : null; };
-    const R = {itens, todos, fs, it: {}, f: {}, semPreco: 0};
+    const priced = (fid, i) => { const f = fs.find(x => x.id === fid); return f && ef(f, i) != null; };
+    (c.itens || []).forEach(i => {
+      if(i.alt) return;
+      const sel = i.sel && c.itens.find(x => x.id === i.sel && x.alt === i.id), at = sel || i;
+      if(c.modo === 'manual' && c.venc && c.venc[at.id] && priced(c.venc[at.id], at)) e[i.id] = {i: at.id, f: c.venc[at.id], k: 0};
+      else if(c.modo === 'unico' && c.glob && priced(c.glob, at)) e[i.id] = {i: at.id, f: c.glob, k: 0};
+      else if(sel){ let b = null; fs.forEach(f => { const v = ef(f, sel); if(v != null && (!b || v < b.v)) b = {f: f.id, v}; }); if(b) e[i.id] = {i: sel.id, f: b.f, k: 0}; }
+    });
+    return e;
+  }
+
+  function calc(c){
+    const fs = c.fs, nf = fs.length, E0 = escolhas(c), fidx = {};
+    fs.forEach((f, k) => fidx[f.id] = k);
+    const ef = (f, i, k) => { const p = precoN(f, i, k || 0); return isFinite(p) ? p * (1 - Math.min(100, Math.max(0, num(f.desc) || 0)) / 100) : null; };
+    const todos = c.itens.filter(i => String(i.desc || '').trim() || ok(num(i.q)));
+    const ofertas = i => { const q = num(i.q) || 0, o = [];
+      fs.forEach(f => { for(let k = 0; k < slots(i); k++){ const p = ef(f, i, k); if(p != null) o.push({i, fid: f.id, k, p, q, custo: p * q}); } });
+      return o; };
+    const NN = [], idx = {};
+    todos.forEach(i => { const r = raizId(c, i); if(!(r in idx)){ idx[r] = NN.length; NN.push({id: r, orig: c.itens.find(x => x.id === r), itens: []}); } NN[idx[r]].itens.push(i); });
+    NN.forEach(n => {
+      n.auto = n.itens.includes(n.orig) ? ofertas(n.orig) : [];      // a recomendação automática usa só o item original
+      n.todas = [].concat(...n.itens.map(ofertas));
+      const e = E0[n.id]; n.nao = !!(e && e.nao); n.trava = null;
+      if(e && !e.nao) n.trava = n.todas.find(x => x.i.id === e.i && x.fid === e.f && x.k === (+e.k || 0)) || null;
+    });
+    const N = NN.filter(n => !n.nao);
+    const R = {fs, todos, N, NN, ef, ofertas, it: {}, f: {}};
     todos.forEach(i => {
-      const q = num(i.q) || 0, vs = fs.map(f => ({f, v: ef(f, i)})).filter(x => x.v != null);
-      const r = {q, n: vs.length, min: null, max: null, med: null, melhores: []};
-      if(vs.length){
-        r.min = Math.min(...vs.map(x => x.v)); r.max = Math.max(...vs.map(x => x.v));
-        r.med = vs.reduce((s, x) => s + x.v, 0) / vs.length;
-        r.melhores = vs.filter(x => x.v - r.min < 0.000001).map(x => x.f.id);
-      } else if(itens.includes(i)) R.semPreco++;
+      const o = ofertas(i), r = {q: num(i.q) || 0, n: o.length, min: null, max: null, med: null, melhores: []};
+      if(o.length){ const ps = o.map(x => x.p); r.min = Math.min(...ps); r.max = Math.max(...ps); r.med = ps.reduce((s, v) => s + v, 0) / ps.length;
+        r.melhores = [...new Set(o.filter(x => x.p - r.min < 1e-6).map(x => x.fid))]; }
       R.it[i.id] = r;
     });
+    // cada fornecedor comprando tudo sozinho (rodapé da tabela)
     fs.forEach(f => {
-      let sub = 0, n = 0;
-      itens.forEach(i => { const p = num(f.p && f.p[i.id]); if(ok(p)){ sub += p * R.it[i.id].q; n++; } });
-      const dv = sub * (num(f.desc) || 0) / 100, fr = num(f.frete) || 0;
-      R.f[f.id] = {sub, dv, fr, tot: sub - dv + fr, n, completo: itens.length > 0 && n === itens.length};
+      let sub = 0, bruto = 0, n = 0; const asg = {};
+      N.forEach(nd => { let b = null; nd.auto.forEach(x => { if(x.fid === f.id && (!b || x.custo < b.custo)) b = x; });
+        if(b){ sub += b.custo; bruto += precoN(f, b.i, b.k) * b.q; n++; asg[nd.id] = b; } });
+      const fr = num(f.frete) || 0, imp = num(f.imp) || 0, out = num(f.out) || 0, tot = sub + fr + imp + out, pg = parsePag(f.pag);
+      R.f[f.id] = {f, sub: bruto, dv: bruto - sub, liq: sub, fr, imp, out, tot, n, asg, completo: N.length > 0 && n === N.length, pag: pg, pv: valorPresente(tot, pg.dias, TAXA_MES)};
     });
-    // cenário 1: menor preço em cada item (+ frete de cada fornecedor envolvido)
-    const cen = escolha => {
-      let tot = 0; const usados = new Set(), falta = [];
-      itens.forEach(i => { const fid = escolha(i); const f = fs.find(x => x.id === fid); const v = f && ef(f, i);
-        if(v == null){ falta.push(i); return; } tot += v * R.it[i.id].q; usados.add(fid); });
-      usados.forEach(fid => tot += R.f[fid].fr);
-      return {tot, usados: [...usados], falta};
+    const avaliar = asg => {
+      let itens = 0; const us = {}, ids = [];
+      N.forEach(nd => { const x = asg[nd.id]; if(!x) return; itens += x.custo; if(!us[x.fid]){ us[x.fid] = []; ids.push(x.fid); } us[x.fid].push(x); });
+      let fr = 0, out = 0; ids.forEach(id => { fr += R.f[id].fr; out += R.f[id].out; });
+      const E = {asg, itens, fr, out, us, usados: ids, imp: 0, integral: false};
+      // impostos informados no total da proposta só entram quando a compra é toda com aquele fornecedor
+      if(ids.length === 1 && R.f[ids[0]].completo && us[ids[0]].length === N.length){ E.integral = true; E.imp = R.f[ids[0]].imp; }
+      E.tot = itens + fr + out + E.imp;
+      E.falta = N.filter(nd => !asg[nd.id]);
+      return E;
     };
-    R.porItem = cen(i => R.it[i.id].melhores[0]);
-    const comp = fs.filter(f => R.f[f.id].completo).sort((a, b) => R.f[a.id].tot - R.f[b.id].tot);
-    R.unico = comp.length ? {f: comp[0], tot: R.f[comp[0].id].tot} : null;
-    // sugestão automática: o mais barato entre os dois cenários
-    R.sugUnico = !!(R.unico && (R.porItem.falta.length || R.unico.tot <= R.porItem.tot + 0.005));
-    // escolha valendo (automática, um fornecedor só, ou item a item à mão)
-    let modo = c.modo || 'auto';
-    if(modo === 'unico' && !fs.some(f => f.id === c.glob)) modo = 'auto';
-    R.modo = modo;
-    R.esc = {};
-    itens.forEach(i => {
-      let fid;
-      if(modo === 'unico') fid = c.glob;
-      else if(modo === 'manual' && c.venc && c.venc[i.id] && fs.some(f => f.id === c.venc[i.id] && ef(f, i) != null)) fid = c.venc[i.id];
-      else if(modo === 'auto' && R.sugUnico) fid = R.unico.f.id;
-      else fid = R.it[i.id].melhores[0];
-      const f = fs.find(x => x.id === fid);
-      R.esc[i.id] = f && ef(f, i) != null ? fid : '';
-    });
-    R.final = cen(i => R.esc[i.id]);
-    let eMed = 0, eMax = 0, base = 0;
-    itens.forEach(i => { const fid = R.esc[i.id], r = R.it[i.id]; if(!fid || r.med == null) return;
-      const v = ef(fs.find(x => x.id === fid), i); eMed += (r.med - v) * r.q; eMax += (r.max - v) * r.q; base += r.med * r.q; });
-    // economia: com 2+ propostas completas, compara totais (já com frete e desconto); senão, item a item
-    const tc = fs.filter(f => R.f[f.id].completo).map(f => R.f[f.id].tot);
-    if(tc.length >= 2 && !R.final.falta.length){
-      const med = tc.reduce((s, v) => s + v, 0) / tc.length;
-      eMed = med - R.final.tot; eMax = Math.max(...tc) - R.final.tot; base = med;
-    }
-    R.ecoMed = eMed; R.ecoMax = eMax; R.ecoPct = base > 0 ? eMed / base * 100 : 0;
-    R.ef = ef;
+    R.avaliar = avaliar;
+    // melhor combinação de fornecedores, com o frete (testa todas as combinações até 14 fornecedores)
+    const otim = trav => {
+      const needs = []; N.forEach(nd => { const o = trav && nd.trava ? [nd.trava] : nd.auto; if(o.length) needs.push({nd, o}); });
+      if(!needs.length) return null;
+      let best = null;
+      if(nf <= 14){
+        for(let mask = 1; mask < (1 << nf); mask++){
+          let tot = 0, used = 0, okm = true; const asg = {};
+          for(const nn of needs){
+            let bo = null; for(const x of nn.o) if(((mask >> fidx[x.fid]) & 1) && (!bo || x.custo < bo.custo)) bo = x;
+            if(!bo){ okm = false; break; } tot += bo.custo; used |= 1 << fidx[bo.fid]; asg[nn.nd.id] = bo;
+          }
+          if(!okm || used !== mask) continue;
+          let cnt = 0; for(let k = 0; k < nf; k++) if((mask >> k) & 1){ tot += R.f[fs[k].id].fr + R.f[fs[k].id].out; cnt++; }
+          if(!best || tot < best.tot - 0.005 || (Math.abs(tot - best.tot) <= 0.005 && cnt < best.cnt)) best = {tot, asg, cnt};
+        }
+      } else { const asg = {}; needs.forEach(nn => asg[nn.nd.id] = nn.o.reduce((m, y) => !m || y.custo < m.custo ? y : m, null)); best = {asg, cnt: 0}; }
+      return best;
+    };
+    let un = null; fs.forEach(f => { const x = R.f[f.id]; if(x.completo && (!un || x.tot < un.tot - 0.005)) un = x; });
+    R.unico = un ? {f: un.f, tot: un.tot, E: avaliar(un.asg)} : null;
+    const cb = otim(false); R.combo = cb ? {E: avaliar(cb.asg), cnt: cb.cnt} : null;
+    if(R.unico && (!R.combo || R.unico.E.tot <= R.combo.E.tot + 0.005)) R.rec = {E: R.unico.E, unico: true};
+    else R.rec = R.combo ? {E: R.combo.E, unico: R.combo.cnt === 1} : null;
+    // escolha do comprador: células travadas + o resto otimizado
+    R.manual = N.some(nd => nd.trava);
+    if(R.manual){ const cu = otim(true); R.E = avaliar(cu ? cu.asg : {}); } else R.E = R.rec ? R.rec.E : avaliar({});
+    R.pend = R.manual ? N.filter(nd => !nd.trava).length : 0;
+    // formato usado pela lista, relatórios, mapa de fornecedores e planilha
+    R.esc = {}; R.escK = {}; R.itens = [];
+    N.forEach(nd => { const x = R.E.asg[nd.id], it = x ? x.i : nd.orig; R.itens.push(it); if(x){ R.esc[it.id] = x.fid; R.escK[it.id] = x.k; } });
+    R.final = {tot: R.E.tot, usados: R.E.usados, falta: R.E.falta.map(nd => nd.orig)};
+    const mp = {}; N.forEach(nd => { const b = nd.auto.reduce((m, y) => !m || y.custo < m.custo ? y : m, null); if(b) mp[nd.id] = b; });
+    R.menor = avaliar(mp);
+    R.porItem = {tot: R.menor.tot, usados: R.menor.usados, falta: R.menor.falta.map(nd => nd.orig)};
+    // economia: quanto a compra fica abaixo da média dos preços recebidos de cada item escolhido
+    let base = 0, pago = 0;
+    N.forEach(nd => { const x = R.E.asg[nd.id]; if(!x) return; const o = ofertas(x.i); base += x.q * o.reduce((s, y) => s + y.p, 0) / o.length; pago += x.custo; });
+    R.ecoMed = base - pago; R.ecoPct = base > 0 ? R.ecoMed / base * 100 : 0;
+    const cs = fs.map(f => R.f[f.id]).filter(x => x.completo);
+    R.ecoMax = cs.length ? Math.max(...cs.map(x => x.tot)) - R.E.tot : 0;
+    R.semPreco = N.filter(nd => !nd.todas.length).length;
     return R;
   }
 
@@ -275,11 +352,7 @@
   #cot-mapa .cv-t td.alto input,#cot-mapa .cv-t td.alto .tv{color:#b42318}
   #cot-mapa .cv-t td.esc{background:var(--cv2)}
   #cot-mapa .cv-t td.esc input,#cot-mapa .cv-t td.esc .tv,#cot-mapa .cv-t td.esc .rs{color:var(--cvt);font-weight:700}
-  #cot-mapa .cv-t td.cd select{min-width:140px;font-size:12px}
   #cot-mapa .cv-t td.pc,#cot-mapa .cv-t tfoot td{text-align:right}
-  #cot-mapa .cv-t td.ac{width:40px;text-align:center;background:var(--card,#fff)}
-  #cot-mapa .cv-t td.ac .x{background:none;border:0;color:#b42318;padding:0 4px;font-size:15px;cursor:pointer;opacity:0}
-  #cot-mapa .cv-t tr:hover td.ac .x{opacity:.8}
   #cot-mapa .cv-t .ult{display:block;font-size:10.5px;color:var(--ink3,#8e8e8e);margin-top:2px;padding:0 3px}
   #cot-mapa .cv-t tbody.nv td{padding:9px 10px}
   #cot-mapa .cv-t tbody.nv a{color:var(--cv);font-weight:600;cursor:pointer;text-decoration:none;margin-right:16px}
@@ -295,18 +368,6 @@
   #cot-mapa .cv-t tfoot input,#cot-mapa .cv-t tfoot select{text-align:right}
   #cot-mapa .cv-t tfoot tr.cd input{text-align:left}
   #cot-mapa .cv-dica{margin-top:10px}
-  #cot-mapa .cv-t .opc{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 3px;padding:0 3px;font-size:10.5px;color:var(--ink3,#8e8e8e);white-space:nowrap}
-  #cot-mapa .cv-t .opc label{display:inline-flex;align-items:center;gap:5px;margin:0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--cv);cursor:pointer}
-  #cot-mapa .cv-t td .opc input{width:auto;margin:0;padding:0;accent-color:var(--cv);cursor:pointer}
-  #cot-mapa .cv-t .opc .opm.bar{color:#1f7a3d;font-weight:600}
-  #cot-mapa .cv-t tr.grp td.it{box-shadow:inset 3px 0 0 var(--line,#d9d9dc)}
-  #cot-mapa .cv-t tr.grp.on td.it{box-shadow:inset 3px 0 0 var(--cv)}
-  #cot-mapa .cv-t tr.grp.alt td{border-top:1px dashed var(--line,#e8e8ea)}
-  #cot-mapa .cv-t tr.off td.it textarea,#cot-mapa .cv-t tr.off td.u,#cot-mapa .cv-t tr.off td.q,#cot-mapa .cv-t tr.off td.pc{opacity:.55}
-  #cot-mapa .cv-t tr.off .opc label{color:var(--ink3,#8e8e8e)}
-  #cot-mapa .cv-t td.ac{white-space:nowrap;width:58px}
-  #cot-mapa .cv-t td.ac .ao{background:none;border:0;color:var(--cv);padding:0 3px;font-size:13px;font-weight:700;cursor:pointer;opacity:0}
-  #cot-mapa .cv-t tr:hover td.ac .ao{opacity:.85}
   #cot-mapa .cv-folha.foto th.add,#cot-mapa .cv-folha.foto td.ac,#cot-mapa .cv-folha.foto .cv-dica,#cot-mapa .cv-folha.foto tbody.nv,#cot-mapa .cv-folha.foto .trava{display:none}
   #cot-mapa .cv-folha.foto .wrap{overflow:visible}
   #cot-mapa .linhab{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
@@ -326,8 +387,103 @@
   #cot-mapa .ped b.t{float:right;font-variant-numeric:tabular-nums}
   #cot-mapa .ped ul{margin:4px 0 6px;padding-left:18px;color:var(--ink2,#5c5c5c);font-size:11.5px}
   #cot-mapa textarea{width:100%;min-height:62px;font-family:inherit;font-size:12.5px;border:1px solid var(--line,#e8e8ea);border-radius:8px;padding:8px 11px;background:var(--card,#fff);color:var(--ink,#232323)}
-  #cot-mapa .modos{display:flex;gap:4px;flex-wrap:wrap}
   #cot-mapa .seg button.on{color:var(--cv)}
+  /* estrutura do Mapa de Cotação BKP: marcas, alternativas, lápis, desaprovar, resultado */
+  #cot-mapa .cv-t tbody.it td.it{position:relative}
+  #cot-mapa .cv-t .gut{position:absolute;top:4px;right:4px;display:flex;gap:3px;opacity:0;transition:opacity .12s;z-index:2}
+  #cot-mapa .cv-t tbody.it:hover .gut,#cot-mapa .cv-t tbody.it:focus-within .gut{opacity:1}
+  #cot-mapa .cv-t .gut button{width:24px;height:24px;border:1px solid var(--line,#e8e8ea);background:var(--card,#fff);border-radius:6px;cursor:pointer;color:var(--ink2,#5c5c5c);display:flex;align-items:center;justify-content:center;padding:0;line-height:0}
+  #cot-mapa .cv-t .gut button svg{width:14px;height:14px}
+  #cot-mapa .cv-t .gut button:hover{border-color:var(--cv);color:var(--cv);filter:none}
+  #cot-mapa .cv-t .gut button.x{color:#b42318;font-size:15px;line-height:1}
+  #cot-mapa .cv-t tbody.it td.it textarea{padding-right:84px}
+  #cot-mapa .cv-t tbody.it:not(:hover):not(:focus-within) td.it textarea{padding-right:3px}
+  #cot-mapa .cv-t .altde{display:block;font-size:10.5px;font-style:italic;color:var(--cv);padding:0 3px 2px}
+  #cot-mapa .cv-t .naotag{display:block;font-size:10.5px;font-style:italic;color:var(--ink3,#8e8e8e);padding:0 3px}
+  #cot-mapa .cv-t .naotag:empty{display:none}
+  #cot-mapa .cv-t tbody.alt td{border-top:1px dashed var(--line,#e8e8ea)}
+  #cot-mapa .cv-t tbody.alt td.it{box-shadow:inset 3px 0 0 var(--cv2)}
+  #cot-mapa .cv-t tr.mrc td.pc{border-top:1px dashed var(--line2,#ececee)}
+  #cot-mapa .cv-t tbody.naob td>*,#cot-mapa .cv-t tbody.naob td.it textarea{opacity:.42}
+  #cot-mapa .cv-t tbody.naob td.it .naotag,#cot-mapa .cv-t tbody.naob td.it .gut{opacity:1}
+  #cot-mapa .cv-t tbody.altoff td.pc .pw,#cot-mapa .cv-t tbody.altoff td.pc .tv{color:var(--ink3,#9aa3ab)}
+  #cot-mapa .cv-t tbody.altoff td.pc input{color:var(--ink3,#9aa3ab)}
+  #cot-mapa .cv-t td.pc .mkl{display:flex;justify-content:flex-end;align-items:center;min-height:15px;gap:4px}
+  #cot-mapa .cv-t td.pc .tagb{border:0;background:none;padding:1px;margin:0;cursor:pointer;color:var(--ink,#232323);opacity:.16;line-height:0}
+  #cot-mapa .cv-t td.pc:hover .tagb{opacity:.45}
+  #cot-mapa .cv-t td.pc .tagb:hover{opacity:.9;color:var(--cv);filter:none}
+  #cot-mapa .cv-t td.pc .tagb svg{width:11px;height:11px}
+  #cot-mapa .cv-t td.pc input.mke{display:none;width:100%;text-align:right;font-size:10.5px;text-transform:uppercase;color:var(--ink2,#5c5c5c);font-weight:400;padding:0 3px}
+  #cot-mapa .cv-t td.pc input.mke.on,#cot-mapa .cv-t td.pc input.mke:focus{display:block}
+  #cot-mapa .cv-t td.pc .mkl:has(.mke.on) .tagb,#cot-mapa .cv-t td.pc .mkl:has(.mke:focus) .tagb{display:none}
+  #cot-mapa .cv-t td.pc .mkt{font-size:10.5px;color:var(--ink2,#5c5c5c);text-transform:uppercase}
+  #cot-mapa .cv-t td.pc.esc.trv{box-shadow:inset 0 0 0 2px var(--cv)}
+  #cot-mapa .cv-t td.dim>*{opacity:.4}
+  #cot-mapa .cv-t td.gh{background:transparent;border-right:0}
+  #cot-mapa.escolhendo .cv-t td.pc{cursor:pointer}
+  #cot-mapa.escolhendo .cv-t td.pc:not(.vz):hover{box-shadow:inset 0 0 0 2px var(--cv)}
+  #cot-mapa.escolhendo .cv-t td.pc input{cursor:pointer}
+  #cot-mapa.escolhendo .cv-t .gut,#cot-mapa.marcando .cv-t .gut{display:none}
+  #cot-mapa.marcando .cv-t tbody.it,#cot-mapa.marcando .cv-t tbody.it *{cursor:pointer}
+  #cot-mapa.marcando .cv-t tbody.it:hover td{background:#e9ecef}
+  #cot-mapa .cv-t tfoot tr.escgap td{border:0;background:transparent;height:18px;padding:0}
+  #cot-mapa .cv-t tfoot tr.escrow th,#cot-mapa .cv-t tfoot tr.escrow td{color:var(--cvt);font-weight:600;border-top:1px solid var(--line2,#f0f0f2)}
+  #cot-mapa .cv-t tfoot td small[data-pg]{display:block;text-align:left}
+  #cot-mapa .cv-edg{display:inline-flex;align-items:stretch}
+  #cot-mapa .cv-em{display:none;border:1px solid var(--cv);border-right:0;border-radius:8px 0 0 8px;overflow:hidden;background:var(--card,#fff)}
+  #cot-mapa .cv-edg.ab .cv-em{display:inline-flex}
+  #cot-mapa .cv-edg.ab .ic{border-radius:0 8px 8px 0}
+  #cot-mapa .cv-em button{background:var(--card,#fff);color:var(--ink2,#5c5c5c);border:0;border-radius:0;font-weight:600;padding:0 14px;font-size:12px}
+  #cot-mapa .cv-em button+button{border-left:1px solid var(--line,#e8e8ea)}
+  #cot-mapa .cv-em button.on{background:var(--cv);color:#fff}
+  #cot-mapa .cv-edg .ic.on,#cot-mapa .pen.on{background:var(--cv);color:#fff;border-color:var(--cv)}
+  #cv-escbar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:4100;background:var(--card,#fff);color:var(--ink2,#3a444f);border:1px solid var(--line,#cdd2d7);border-radius:12px;box-shadow:0 10px 30px rgba(17,38,48,.18);padding:10px 12px 10px 16px;display:flex;align-items:center;gap:12px;font-size:12.5px;max-width:calc(100% - 24px)}
+  #cv-escbar b{color:var(--cv,#0f7c86)}
+  #cot-mapa .rhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+  #cot-mapa .rhead h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--cv);margin:0}
+  #cot-mapa .rhead button svg{width:14px;height:14px;vertical-align:-3px}
+  #cot-mapa .resg{display:grid;grid-template-columns:minmax(0,1fr) 312px;gap:12px;align-items:stretch}
+  #cot-mapa .plan{position:relative;border:2px solid #4fad0a;border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;background:var(--card,#fff)}
+  #cot-mapa .plan.man{border-color:var(--cv)}
+  #cot-mapa .plan .pbtns{position:absolute;top:12px;right:12px;display:flex;gap:6px}
+  #cot-mapa .pen{width:32px;height:32px;border:1px solid var(--line,#e8e8ea);background:var(--card,#fff);border-radius:8px;cursor:pointer;color:var(--ink,#232323);display:flex;align-items:center;justify-content:center;padding:0}
+  #cot-mapa .pen:hover{border-color:var(--cv);filter:none}
+  #cot-mapa .pen svg{width:15px;height:15px}
+  #cot-mapa .plan .badge{align-self:flex-start;background:#67bb2c;color:#fff;font-size:11px;font-weight:600;padding:3px 10px;border-radius:7px}
+  #cot-mapa .plan.man .badge{background:var(--cv)}
+  #cot-mapa .plan .big{font-size:26px;font-weight:700;margin:6px 0 0;letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:38px}
+  #cot-mapa .plan .big.pend{font-size:22px;color:var(--ink3,#8e8e8e)}
+  #cot-mapa .plan .delta{font-size:12.5px;font-style:italic;color:var(--ink2,#5c5c5c);margin:2px 0 10px;min-height:2.9em}
+  #cot-mapa .plan .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 12px;margin-top:auto;padding-top:9px;border-top:1px solid var(--line2,#f0f0f2)}
+  #cot-mapa .plan .facts div{font-size:11px;color:var(--ink3,#8e8e8e)}
+  #cot-mapa .plan .facts b{display:block;font-size:12.5px;color:var(--ink,#232323);font-weight:600}
+  #cot-mapa .side{display:flex;flex-direction:column;gap:10px}
+  #cot-mapa .cmp{position:relative;flex:1;border:1px solid var(--line2,#e7eaed);border-radius:12px;background:var(--head,#fbfcfc);padding:12px 14px;display:flex;flex-direction:column;justify-content:center;min-height:96px;text-align:left}
+  #cot-mapa .cmp .k{font-size:11.5px;color:var(--ink3,#8e8e8e);padding-right:16px}
+  #cot-mapa .cmp .v{font-size:18px;font-weight:700;color:#58641d;margin-top:3px;font-variant-numeric:tabular-nums}
+  #cot-mapa .cmp .v.ruim{color:var(--ink,#232323)}
+  #cot-mapa .cmp .s{font-size:11.5px;color:var(--ink3,#8e8e8e);margin-top:1px}
+  #cot-mapa .cmpx{position:absolute;top:6px;right:6px;border:0;background:none;color:var(--ink3,#8e8e8e);font-size:12px;cursor:pointer;opacity:0;padding:2px 5px;border-radius:5px}
+  #cot-mapa .cmp:hover .cmpx{opacity:1}
+  #cot-mapa .cmpx:hover{color:#b42318;filter:none}
+  #cot-mapa .cmp.add{border:1.5px dashed var(--line,#cdd2d7);background:var(--card,#fff);cursor:pointer;align-items:center;color:var(--ink3,#8e8e8e)}
+  #cot-mapa .cmp.add:hover{border-color:#4fad0a;color:#58641d;filter:none}
+  #cot-mapa .cmp.add svg{width:22px;height:22px}
+  #cot-mapa .alerts{margin-top:14px;display:flex;flex-direction:column;gap:6px}
+  #cot-mapa .al{font-size:12.5px;padding:8px 12px;border-radius:8px;background:#fdf6e3;border-left:3px solid #e0b000;color:#5c4a00}
+  #cot-mapa .al.r{background:#fbeeee;border-left-color:#c0392b;color:#7a2318}
+  #cot-mapa .cv-dica svg{width:12px;height:12px;vertical-align:-2px}
+  #cot-mapa .cv-dica b{font-weight:600}
+  #cv-pop{position:fixed;z-index:4200;background:var(--card,#fff);color:var(--ink,#232323);border:1px solid var(--line,#d9dde1);border-radius:10px;box-shadow:0 10px 28px rgba(17,38,48,.16);padding:4px;min-width:200px;max-width:340px;max-height:360px;overflow:auto}
+  #cv-pop button{display:flex;align-items:center;gap:9px;width:100%;border:0;background:none;text-align:left;font:inherit;font-size:12.5px;font-weight:500;padding:7px 10px;border-radius:7px;cursor:pointer;color:var(--ink,#232323)}
+  #cv-pop button:hover{background:#e9f3f4;filter:none}
+  #cv-pop button.on{font-weight:700}
+  #cv-pop small{display:block;font-size:11px;color:var(--ink3,#8e8e8e);font-weight:400}
+  #cv-pop .cbx{width:14px;height:14px;border:1.5px solid #cdd2d7;border-radius:4px;flex-shrink:0;position:relative}
+  #cv-pop .cbx.on{background:#0f7c86;border-color:#0f7c86}
+  #cv-pop .cbx.on:after{content:'';position:absolute;left:3.5px;top:.5px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+  #cot-mapa .cv-folha.foto .gut,#cot-mapa .cv-folha.foto .tagb,#cot-mapa .cv-folha.foto td.gh{display:none}
+  @media (max-width:900px){ #cot-mapa .resg{grid-template-columns:1fr} }
   #cot-mapa .hist{font-size:11.5px;color:var(--ink2,#5c5c5c);max-height:160px;overflow:auto}
   #cot-mapa .trava{padding:8px 12px;border-radius:8px;background:#eef4ff;color:#1d3d7a;font-size:12.5px;margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   #cot-mapa .cv-lis{padding:22px 24px 26px}
@@ -473,12 +629,12 @@
   $('cot-tela').onclick = () => abrirLista();
 
   $('cot-csv').onclick = () => {
-    const lin = [['Nº', 'Data', 'Título', 'Obra', 'Solicitante', 'Comprador', 'Situação', 'Item', 'Un', 'Qtd', 'Fornecedor', 'Preço unit.', 'Total', 'Menor preço', 'Escolhido', 'Opção']];
-    vivos(D.cot).forEach(c => { const R = calc(c);
-      R.todos.forEach(i => c.fs.forEach(f => { const p = num(f.p[i.id]); if(!ok(p)) return;
-        lin.push([numCot(c), dataBR(c.d), c.tit, c.o, c.sol, c.u, (SIT[c.st] || {}).n, i.desc, i.un, fq(i.q), f.nome, f2(p), f2(p * (num(i.q) || 0)),
-          R.it[i.id].melhores.includes(f.id) ? 'sim' : '', R.esc[i.id] === f.id ? 'sim' : '',
-          opcoes(c, i).length > 1 ? letraOp(c, i) + (ativo(c, i) ? ' (considerada)' : ' (não considerada)') : '']); })); });
+    const lin = [['Nº', 'Data', 'Título', 'Obra', 'Solicitante', 'Comprador', 'Situação', 'Item', 'Un', 'Qtd', 'Fornecedor', 'Marca', 'Preço unit.', 'Total', 'Menor preço', 'Escolhido', 'Opção']];
+    vivos(D.cot).forEach(c => { const R = calc(c), nao = new Set(R.NN.filter(n => n.nao).map(n => n.id));
+      R.todos.forEach(i => c.fs.forEach(f => { for(let k = 0; k < slots(i); k++){ const p = precoN(f, i, k); if(!isFinite(p)) continue;
+        const o = raiz(c, i) !== i ? 'alternativa de ' + raiz(c, i).desc : '';
+        lin.push([numCot(c), dataBR(c.d), c.tit, c.o, c.sol, c.u, (SIT[c.st] || {}).n, i.desc, i.un, fq(i.q), f.nome, marcaDe(f, i, k), f2(p), f2(p * (num(i.q) || 0)),
+          R.it[i.id].melhores.includes(f.id) && Math.abs(R.ef(f, i, k) - R.it[i.id].min) < 1e-6 ? 'sim' : '', R.esc[i.id] === f.id && R.escK[i.id] === k ? 'sim' : nao.has(raizId(c, i)) ? 'não será comprado' : '', o]); } })); });
     const csv = '\ufeff' + lin.map(r => r.map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(';')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
     a.download = 'cotacoes-' + hoje() + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -757,8 +913,8 @@
     const pal = b.split(/\s+/);
     const l = [];
     vivos(D.cot).filter(c => c.st !== 'cancelada').forEach(c => { const R = calc(c);
-      R.todos.filter(i => pal.every(p => String(i.desc).toLowerCase().includes(p))).forEach(i => c.fs.forEach(f => {
-        const p = num(f.p[i.id]); if(ok(p)) l.push({c, i, f, p, esc: R.esc[i.id] === f.id && c.st !== 'aberta', min: R.it[i.id].melhores.includes(f.id)}); })); });
+      R.todos.filter(i => pal.every(p => String(i.desc).toLowerCase().includes(p))).forEach(i => c.fs.forEach(f => { for(let k = 0; k < slots(i); k++){
+        const p = precoN(f, i, k); if(isFinite(p)) l.push({c, i, f, p, mk: marcaDe(f, i, k), esc: R.esc[i.id] === f.id && R.escK[i.id] === k && c.st !== 'aberta', min: R.it[i.id].melhores.includes(f.id) && Math.abs(R.ef(f, i, k) - R.it[i.id].min) < 1e-6}); } })); });
     l.sort((a, b2) => String(b2.c.d).localeCompare(String(a.c.d)) || a.p - b2.p);
     const esc = l.filter(x => x.esc);
     const ps = l.map(x => x.p);
@@ -767,16 +923,18 @@
       + '<div class="kpi"><span>Menor já cotado</span><b>' + R$(Math.min(...ps)) + '</b></div><div class="kpi"><span>Propostas</span><b>' + l.length + '</b></div></div>'
       + '<table><tr><th>Data</th><th>Item</th><th>Fornecedor</th><th class="n">Preço unit.</th></tr>'
       + l.slice(0, 120).map(x => '<tr><td>' + dataBR(x.c.d) + '<br><small class="hint">' + numCot(x.c) + '</small></td><td>' + h(x.i.desc) + ' <small class="hint">(' + h(x.i.un || '') + ')</small></td><td>'
-        + (x.esc ? '★ ' : '') + h(x.f.nome) + '</td><td class="n"' + (x.min ? ' style="color:#1f7a3d;font-weight:700"' : '') + '>' + R$(x.p) + '</td></tr>').join('') + '</table>';
+        + (x.esc ? '★ ' : '') + h(x.f.nome) + (x.mk ? ' <small class="hint">' + h(x.mk) + '</small>' : '') + '</td><td class="n"' + (x.min ? ' style="color:#1f7a3d;font-weight:700"' : '') + '>' + R$(x.p) + '</td></tr>').join('') + '</table>';
   }
   $('pre-busca').oninput = render;
   // último preço escolhido de um item parecido (para mostrar no mapa)
+  const cacheR = new WeakMap(); // cálculo das cotações fechadas (não mudam enquanto o mapa está aberto)
+  const calcC = c => { const x = cacheR.get(c); if(x && x.u === c.upd) return x.R; const R = calc(c); cacheR.set(c, {u: c.upd, R}); return R; };
   function ultimoPreco(desc, menosId){
     const d = String(desc || '').trim().toLowerCase(); if(d.length < 3) return null;
     let m = null;
-    vivos(D.cot).forEach(c => { if(c.id === menosId || c.st === 'aberta' || c.st === 'cancelada' || c.st === 'aprovacao') return; const R = calc(c);
+    vivos(D.cot).forEach(c => { if(c.id === menosId || c.st === 'aberta' || c.st === 'cancelada' || c.st === 'aprovacao') return; const R = calcC(c);
       R.itens.forEach(i => { if(String(i.desc).trim().toLowerCase() !== d) return; const fid = R.esc[i.id], f = c.fs.find(x => x.id === fid); if(!f) return;
-        const p = num(f.p[i.id]); if(ok(p) && (!m || c.d > m.d)) m = {p, d: c.d, f: f.nome}; }); });
+        const p = precoN(f, i, R.escK[i.id] || 0); if(isFinite(p) && (!m || c.d > m.d)) m = {p, d: c.d, f: f.nome}; }); });
     return m;
   }
 
@@ -821,7 +979,14 @@
     imp: svg('<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>'),
     env: svg('<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M22 6l-10 7L2 6"/>'),
     fil: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/></svg>',
-    bus: svg('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>')
+    bus: svg('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>'),
+    lap: svg('<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17z"/><path d="m14.5 7.5 3 3"/>'),
+    pre: svg('<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>'),
+    lin: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h11M18 13.5v5M15.5 16h5"/>'),
+    mais: svg('<path d="M12 5v14M5 12h14"/>'),
+    eti: svg('<path d="M13.6 3H20.5a.5.5 0 0 1 .5.5v6.9L10.4 21a1.4 1.4 0 0 1-2 0l-5.4-5.4a1.4 1.4 0 0 1 0-2z"/><circle cx="16.8" cy="7.2" r="1.6"/>'),
+    tag: svg('<path d="M12.6 3H20.5a.5.5 0 0 1 .5.5v7.9"/><path d="M13.2 20.4 10.4 21a1.4 1.4 0 0 1-2 0l-5.4-5.4a1.4 1.4 0 0 1 0-2L12.6 3"/><circle cx="16.8" cy="7.2" r="1.5"/><circle cx="17.6" cy="17.6" r="4.4"/><path d="M17.6 15.4v4.4M15.4 17.6h4.4"/>'),
+    alt: svg('<path d="M6 3v12"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>')
   };
   const pill = si => '<span class="cv-pill"><i style="background:' + si.c + '"></i>' + h(si.n) + '</span>';
 
@@ -933,14 +1098,23 @@
   }
 
   // ----- mapa -----
+  // Estrutura do "Mapa de Cotação" BKP: itens nas linhas, fornecedores nas colunas, linhas de marca e opções
+  // alternativas por item, rodapé com as linhas que o comprador escolher, recomendação automática (com frete)
+  // ou escolha à mão pelo lápis, predefinições, itens desaprovados e comparativos no resultado.
+  let ESC = false, NAO = false;   // lápis (escolher a célula que fecha) e "Desaprovar" (itens que não serão comprados)
   function abrirMapa(id, novo){
     const c = achaCot(id); if(!c) return;
-    mostrarM(); tela = 'mapa'; aberta = id;
+    mostrarM(); tela = 'mapa'; aberta = id; ESC = NAO = false;
     montarMapa(c);
     M.querySelector('.corpo').scrollTop = 0;
     if(novo) setTimeout(() => { const t = M.querySelector('[data-k=tit]'); if(t) t.focus(); }, 50);
   }
   function mexeu(c, semMapa){ c.upd = agora(); salvar(true); if(!semMapa) atualizar(c); }
+  const redesenhar = (c, foco) => { const cp = M.querySelector('.corpo'), y = cp ? cp.scrollTop : 0, x = (M.querySelector('#cm-t') || {}).parentElement;
+    const sx = x ? x.scrollLeft : 0; montarMapa(c); M.querySelector('.corpo').scrollTop = y; const w = M.querySelector('#cm-t'); if(w) w.parentElement.scrollLeft = sx;
+    if(foco){ const el = M.querySelector(foco); if(el){ el.focus(); if(el.select) el.select(); } } };
+  // a partir da primeira mudança na escolha, ela passa a ser gravada no formato novo
+  const garantirEsc = c => { if(!c.esc) c.esc = JSON.parse(JSON.stringify(escolhas(c))); return c.esc; };
 
   // situações para onde a cotação pode ir agora: [situação, texto, principal, perigo]
   function transicoes(c){
@@ -954,19 +1128,59 @@
     return bts;
   }
 
+  // ----- linhas do rodapé (o comprador escolhe quais aparecem; linha com valor nunca some) -----
+  const LINHAS = [
+    {k: 'desconto', t: 'Desconto (%)', campo: 'desc', s: 'abate em todos os preços do fornecedor'},
+    {k: 'frete', t: 'Frete (CIF / FOB)', campo: 'frete'},
+    {k: 'impostos', t: 'Impostos (ICMS / IPI)', campo: 'imp', s: 'entram quando a compra é toda com o fornecedor'},
+    {k: 'outros', t: 'Outro valor (nome livre)', campo: 'out', s: 'soma no total'},
+    {k: 'pagamento', t: 'Condição de pagamento', campo: 'pag', s: 'mostra também o valor presente'},
+    {k: 'entrega', t: 'Prazo de entrega', campo: 'prazo'},
+    {k: 'validade', t: 'Validade da proposta', campo: 'val'},
+    {k: 'cobertura', t: 'Cobertura', s: 'quantos itens cada um cotou'},
+    {k: 'obs', t: 'Observação / nº do orçamento', campo: 'obs'}
+  ];
+  const temValor = (c, campo) => c.fs.some(f => { const v = f[campo]; return v != null && String(v).trim() !== '' && !(+v === 0 && /^[\d.,\s]*$/.test(String(v))); });
+  function linhasAtivas(c){
+    const at = c.lin == null ? (c.fs.length ? ['frete', 'pagamento', 'entrega'] : []) : String(c.lin).split(',').filter(Boolean);
+    LINHAS.forEach(l => { if(l.campo && !at.includes(l.k) && temValor(c, l.campo)) at.push(l.k); });
+    return LINHAS.map(l => l.k).filter(k => at.includes(k));
+  }
+
+  // ----- menu suspenso (predefinições, linhas, comparativos, situação) -----
+  function fecharMenu(){ const m = $('cv-pop'); if(m) m.remove(); document.removeEventListener('mousedown', foraMenu, true); }
+  function foraMenu(e){ if(!e.target.closest('#cv-pop')) fecharMenu(); }
+  function abrirMenu(anc, ops, atual, pick){
+    fecharMenu();
+    const m = document.createElement('div'); m.id = 'cv-pop';
+    m.innerHTML = ops.map((o, k) => '<button data-mi="' + k + '"' + (o.v === atual ? ' class="on"' : '') + '>' + (o.chk !== undefined ? '<i class="cbx' + (o.chk ? ' on' : '') + '"></i>' : '')
+      + (o.cor ? '<i class="dot" style="background:' + o.cor + '"></i>' : '') + '<span>' + h(o.t || o.v) + (o.s ? '<small>' + h(o.s) + '</small>' : '') + '</span></button>').join('');
+    document.body.appendChild(m);
+    const r = anc.getBoundingClientRect(), w = m.offsetWidth;
+    m.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+    m.style.top = (r.bottom + 4 + m.offsetHeight > innerHeight ? Math.max(8, r.top - m.offsetHeight - 4) : r.bottom + 4) + 'px';
+    m.onclick = e => { const b = e.target.closest('[data-mi]'); if(!b) return; fecharMenu(); pick(ops[+b.dataset.mi].v); };
+    setTimeout(() => document.addEventListener('mousedown', foraMenu, true), 0);
+  }
+
+  // ----- montagem do mapa -----
   function montarMapa(c){
+    fecharMenu();
     const tr = travada(c), dis = tr ? ' disabled' : '', si = SIT[c.st] || SIT.aberta;
+    if(tr){ ESC = NAO = false; }
     const fs = c.fs, fc = id => achaForn(id) || {};
     M.innerHTML = `
     <div class="cv-top">
       <button class="cv-bk" data-a="fechar" title="Voltar para a lista (Esc)">← Mapas</button>
       <span class="cv-est" id="cv-salvo"></span>
       <span class="esp"></span>
+      ${tr ? '' : '<span class="cv-edg"><span class="cv-em"><button data-em="cel">Editar</button><button data-em="nao">Desaprovar</button></span>'
+        + '<button class="ic" data-a="lapis" id="cv-lapis" title="Editar a escolha: marcar à mão a célula que fecha em cada item">' + ICO.lap + '</button></span>'}
       <div class="cv-stw"><button class="cv-st" data-a="st" title="Mudar a situação">${si.n} <i style="background:${si.c}"></i></button><div class="cv-menu" hidden></div></div>
       <button class="ic" data-a="pedir" title="Pedir cotação aos fornecedores (WhatsApp / e-mail)">${ICO.env}</button>
-      <button class="ic" data-a="foto" title="Copiar imagem do mapa">${ICO.cam}</button>
-      <button class="ic" data-a="imp" title="Imprimir mapa (A4 paisagem)">${ICO.imp}</button>
-      <button class="ic" data-a="dup" title="Duplicar cotação">${ICO.dup}</button>
+      <button class="ic" data-a="foto" title="Imagem para pedir orçamento (WhatsApp) e imagem do mapa">${ICO.cam}</button>
+      <button class="ic" data-a="imp" title="Imprimir / salvar PDF">${ICO.imp}</button>
+      <button class="ic" data-a="dup" title="Duplicar: nova cotação com os mesmos itens, marcas e fornecedores, sem preços">${ICO.dup}</button>
       <button class="ic dg" data-a="del" title="Excluir cotação">${ICO.del}</button>
       <div class="cv-mos"><span>Mostrar</span><button data-mo="u"${MOS === 'u' ? ' class="on"' : ''}>Unitário</button><button data-mo="t"${MOS === 't' ? ' class="on"' : ''}>Total</button></div>
     </div>
@@ -990,18 +1204,18 @@
           <thead><tr>
             <th class="it fix">Item</th><th class="c" style="width:64px">Und</th><th class="n" style="width:86px">Qtd</th>
             ${fs.map(f => '<th class="fh">' + (tr ? '' : '<button class="x" data-rf="' + f.id + '" title="Tirar da cotação">×</button>') + h(f.nome)
-              + '<small>' + h([fc(f.id).cidade, fc(f.id).tel].filter(Boolean).join(' · ').toUpperCase() || ' ') + '</small></th>').join('')}
-            ${fs.length > 1 ? '<th style="min-width:150px">Comprar de</th>' : ''}
+              + '<small>' + h([fc(f.id).cidade, fc(f.id).tel].filter(Boolean).join(' · ').toUpperCase() || ' ') + '</small></th>').join('')}
             ${tr ? '' : '<th class="add">+ Fornecedor<input id="cm-addf" placeholder="digite o nome"></th>'}
           </tr></thead>
-          <tbody id="cm-b">${c.itens.map((i, k) => linhaItem(c, i, k, tr)).join('')}</tbody>
-          ${tr ? '' : '<tbody class="nv"><tr><td class="fix" colspan="3"><a data-a="item">+ novo item</a><a data-a="colar">📋 colar do Excel</a></td>' + '<td colspan="' + (fs.length + (fs.length > 1 ? 1 : 0) + 1) + '"></td></tr></tbody>'}
+          ${c.itens.map(i => corpoItem(c, i, tr)).join('')}
+          ${tr ? '' : '<tbody class="nv"><tr><td class="fix" colspan="3"><a data-a="item">+ novo item</a><a data-a="colar">📋 colar do Excel</a></td><td colspan="' + (fs.length + 1) + '"></td></tr></tbody>'}
           <tfoot id="cm-f"></tfoot>
         </table></div>
-        ${tr ? '' : '<div class="hint cv-dica">Clique no valor para lançar o preço unitário; em branco = o fornecedor não cotou. Enter desce para o próximo item. Verde = menor preço do item (já com desconto) · vermelho = o mais caro · fundo verde-petróleo = compra escolhida. ⎇ (no fim da linha) cria uma opção alternativa do item — ex.: pneu 1000x20 borrachudo × liso — e você marca qual opção entra no cálculo.</div>'}
+        ${tr ? '' : '<div class="hint cv-dica">Clique no valor para lançar o preço unitário (em branco = não cotou); Enter desce, e dá para colar uma coluna de preços do Excel. Verde = menor preço do item · vermelho = o mais caro · fundo verde-petróleo = compra escolhida. Passe o mouse no item: '
+          + '<b>' + ICO.tag + ' outra marca</b> (cada fornecedor lança a marca dele, só uma entra na conta) e <b>' + ICO.alt + ' opção alternativa</b> (outro produto no lugar deste; entra se você escolher pelo lápis).</div>'}
       </div>
 
-      <div class="cv-folha"><h2>Resultado</h2><div id="cm-res"></div></div>
+      <div class="cv-folha" id="cm-res"></div>
 
       <div class="duas">
         <div class="cv-folha"><h2>Pedido por fornecedor</h2><div id="cm-ped"></div></div>
@@ -1018,30 +1232,29 @@
       </div>
     </div>`;
 
-    // campos do cabeçalho e textos
     M.querySelectorAll('[data-k]').forEach(el => {
       const k = el.dataset.k;
       el.addEventListener(el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', () => { c[k] = el.value; mexeu(c, k !== 'o'); });
     });
-    // itens e preços
     ligarCorpo(c);
-    // botões
-    M.querySelectorAll('[data-a]').forEach(b => b.onclick = () => acao(c, b.dataset.a, b));
+    M.querySelectorAll('.cv-top [data-a],.trava [data-a],tbody.nv [data-a]').forEach(b => b.onclick = () => acao(c, b.dataset.a, b));
+    M.querySelectorAll('[data-em]').forEach(b => b.onclick = () => { const cel = b.dataset.em === 'cel'; ESC = cel ? !ESC : false; NAO = cel ? false : !NAO; aplicarModo(c); });
     M.querySelectorAll('[data-mo]').forEach(b => b.onclick = () => {
       if(MOS === b.dataset.mo) return; MOS = b.dataset.mo;
       try{ localStorage.setItem('dmtbkp_cotMostra', MOS); }catch(e){}
-      const y = M.querySelector('.corpo').scrollTop; montarMapa(c); M.querySelector('.corpo').scrollTop = y;
+      redesenhar(c);
     });
     M.querySelectorAll('[data-rf]').forEach(b => b.onclick = () => {
       const f = c.fs.find(x => x.id === b.dataset.rf); if(!f) return;
       const n = Object.values(f.p || {}).filter(v => ok(num(v))).length;
       if(n && !confirm('Tirar ' + f.nome + ' da cotação? Os ' + n + ' preço(s) lançados dele serão apagados.')) return;
-      c.fs = c.fs.filter(x => x !== f); if(c.glob === f.id) c.glob = '';
-      registrar(c, 'Fornecedor retirado: ' + f.nome); mexeu(c, true); montarMapa(c);
+      c.fs = c.fs.filter(x => x !== f);
+      if(c.esc) Object.keys(c.esc).forEach(k => { if(c.esc[k].f === f.id) delete c.esc[k]; });
+      registrar(c, 'Fornecedor retirado: ' + f.nome); mexeu(c, true); redesenhar(c);
     });
     const af = $('cm-addf');
     if(af){
-      const add = f => { if(c.fs.some(x => x.id === f.id)) return; c.fs.push({id: f.id, nome: f.nome, frete: 0, tf: 'CIF', desc: 0, prazo: '', pag: '', val: '', obs: '', p: {}}); registrar(c, 'Fornecedor incluído: ' + f.nome); mexeu(c, true); montarMapa(c);
+      const add = f => { if(c.fs.some(x => x.id === f.id)) return; c.fs.push({id: f.id, nome: f.nome, frete: 0, tf: 'CIF', desc: 0, imp: 0, out: 0, prazo: '', pag: '', val: '', obs: '', p: {}, mk: {}}); registrar(c, 'Fornecedor incluído: ' + f.nome); mexeu(c, true); redesenhar(c);
         setTimeout(() => { const n = $('cm-addf'); if(n) n.focus(); }, 30); };
       sugerir(af, {local: q => {
         const l = vivos(D.forn).filter(f => !c.fs.some(x => x.id === f.id) && (!q || casa(f, q))).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR')).slice(0, 40);
@@ -1049,245 +1262,503 @@
           {itens: [{t: q ? '➕ Cadastrar "' + q + '" como fornecedor novo' : '➕ Cadastrar fornecedor novo…', s: 'Busca no Google e pelo CNPJ', novo: true, ac: () => { af.value = ''; af.blur(); editarForn(null, add, q); }}]}];
       }});
     }
+    aplicarModo(c, true);
     atualizar(c);
   }
 
-  function linhaItem(c, i, k, tr){
-    const dis = tr ? ' disabled' : '';
-    const ult = ultimoPreco(i.desc, c.id);
+  function corpoItem(c, i, tr){
+    const S = slots(i), dis = tr ? ' disabled' : '', orig = i.alt ? c.itens.find(x => x.id === i.alt) : null, ult = ultimoPreco(i.desc, c.id);
     const edita = !tr && MOS === 'u';
-    const op = opcoes(c, i), grp = op.length > 1, at = ativo(c, i), filho = grp && op[0] !== i;
-    const disQ = filho ? ' disabled title="Mesma unidade e quantidade da opção A"' : dis;
-    return '<tr data-i="' + i.id + '"' + (grp ? ' class="grp' + (filho ? ' alt' : '') + (at ? ' on' : ' off') + '"' : '') + '>'
-      + '<td class="it fix">'
-      + (grp ? '<div class="opc"><label title="Marque a opção que entra no cálculo da cotação"><input type="radio" name="op-' + op[0].id + '" data-op' + (at ? ' checked' : '') + dis + '>Opção ' + letraOp(c, i)
-        + (at ? ' · no cálculo' : '') + '</label><span class="opm"></span></div>' : '')
-      + '<textarea data-ik="desc" rows="1" placeholder="' + (filho ? 'descrição da alternativa (ex.: mesma medida, outra especificação)' : 'descrição do item') + '"' + dis + '>' + h(i.desc) + '</textarea>'
-      + (ult ? '<span class="ult">último preço: ' + R$(ult.p) + ' · ' + h(ult.f) + ' · ' + dataBR(ult.d) + '</span>' : '') + '</td>'
-      + '<td class="c u"><input data-ik="un" value="' + h(i.un) + '" list="cot-un" style="text-align:center"' + disQ + '></td>'
-      + '<td class="n q"><input data-ik="q" value="' + h(i.q == null ? '' : fqIn(i.q)) + '" inputmode="decimal" style="text-align:right"' + disQ + '></td>'
-      + c.fs.map(f => '<td class="pc" data-c="' + f.id + '">'
-        + (edita ? '<div class="pw"><span class="rs">R$</span><input class="pr" data-p="' + f.id + '" inputmode="decimal" value="' + h(prIn(f.p[i.id])) + '" placeholder="–"></div>' : '<span class="tv"></span>')
-        + '<span class="mk"></span></td>').join('')
-      + (c.fs.length > 1 ? '<td class="cd">' + (at ? '<select data-v' + dis + '></select>' : '<span class="hint">fora do cálculo</span>') + '</td>' : '')
-      + (tr ? '' : '<td class="ac"><button class="ao" data-ao title="Criar opção alternativa deste item (mesma medida, outra especificação — ex.: pneu borrachudo × liso)">⎇</button><button class="x" data-ri title="Excluir ' + (filho ? 'esta opção' : 'item') + '">×</button></td>') + '</tr>';
+    let t = '<tbody class="it' + (orig ? ' alt' : '') + '" data-i="' + i.id + '" data-need="' + raizId(c, i) + '">';
+    for(let k = 0; k < S; k++){
+      t += '<tr' + (k ? ' class="mrc"' : '') + '>';
+      if(!k) t += '<td class="it fix" rowspan="' + S + '">'
+        + (tr ? '' : '<span class="gut"><button data-g="marca" tabindex="-1" title="Outra marca deste produto: cada fornecedor lança a marca dele, só uma entra na conta">' + ICO.tag + '</button>'
+          + '<button data-g="alt" tabindex="-1" title="Opção alternativa: outro produto no lugar deste (ex.: pneu 1000x20 borrachudo × liso)">' + ICO.alt + '</button>'
+          + '<button data-g="del" class="x" tabindex="-1" title="Remover ' + (orig ? 'esta opção' : 'o item') + '">×</button></span>')
+        + (orig ? '<span class="altde">opção alternativa de ' + h(orig.desc || '(sem descrição)') + '</span>' : '')
+        + '<textarea data-ik="desc" rows="1" placeholder="' + (orig ? 'descrição da alternativa (outra especificação)' : 'descrição do item') + '"' + dis + '>' + h(i.desc) + '</textarea>'
+        + '<span class="naotag"></span>'
+        + (ult ? '<span class="ult">último preço: ' + R$(ult.p) + ' · ' + h(ult.f) + ' · ' + dataBR(ult.d) + '</span>' : '') + '</td>'
+        + '<td class="c u" rowspan="' + S + '"><input data-ik="un" value="' + h(i.un) + '" list="cot-un" style="text-align:center"' + (orig ? ' disabled title="Mesma unidade do item original"' : dis) + '></td>'
+        + '<td class="n q" rowspan="' + S + '"><input data-ik="q" value="' + h(i.q == null ? '' : fqIn(i.q)) + '" inputmode="decimal" style="text-align:right"' + (orig ? ' disabled title="Mesma quantidade do item original"' : dis) + '></td>';
+      t += c.fs.map(f => celPreco(i, f, k, edita, tr)).join('') + (tr ? '' : '<td class="gh"></td>') + '</tr>';
+    }
+    return t + '</tbody>';
+  }
+  function celPreco(i, f, k, edita, tr){
+    const p = precoN(f, i, k), mk = marcaDe(f, i, k);
+    return '<td class="pc' + (isFinite(p) ? '' : ' vz') + '" data-cell="' + i.id + '|' + f.id + '|' + k + '">'
+      + (edita ? '<div class="pw"><span class="rs">R$</span><input class="pr" data-p="' + f.id + '" data-k="' + k + '" inputmode="decimal" value="' + h(isFinite(p) ? f2(p) : '') + '" placeholder="–"></div>' : '<span class="tv"></span>')
+      + '<div class="mkl">' + (edita ? '<button class="tagb" data-tg tabindex="-1" title="Escrever a marca">' + ICO.eti + '</button><input class="mke' + (mk ? ' on' : '') + '" data-mk="' + f.id + '" data-k="' + k + '" value="' + h(mk) + '" placeholder="marca" tabindex="-1">'
+        : (mk ? '<span class="mkt">' + h(mk) + '</span>' : '')) + '</div>'
+      + '<span class="mk"></span></td>';
   }
   const prIn = v => ok(num(v)) ? f2(num(v)) : '';
   const fqIn = v => ok(num(v)) ? fq(num(v)) : String(v || '');
+
+  // ----- itens: marcas, alternativas, remoção -----
+  function novaMarca(c, i){
+    const S = slots(i);
+    for(let k = 1; k < S; k++) if(!c.fs.some(f => isFinite(precoN(f, i, k)) || marcaDe(f, i, k))) return redesenhar(c, '[data-cell="' + i.id + '|' + (c.fs[0] || {}).id + '|' + k + '"] input.pr');
+    i.sl = S + 1; registrar(c, 'Linha de marca criada: ' + (i.desc || 'item sem descrição')); mexeu(c, true);
+    redesenhar(c, c.fs[0] ? '[data-cell="' + i.id + '|' + c.fs[0].id + '|' + S + '"] input.pr' : null);
+    if(!c.fs.length) alert('Inclua os fornecedores para lançar os preços de cada marca.');
+  }
+  // tira linhas de marca que ficaram vazias (fica pelo menos uma)
+  function compactarMarcas(c, i){
+    let mudouAlgo = false;
+    for(let k = slots(i) - 1; k >= 1; k--){
+      if(c.fs.some(f => isFinite(precoN(f, i, k)) || marcaDe(f, i, k))) continue;
+      const S = slots(i);
+      c.fs.forEach(f => { f.mk = f.mk || {};
+        for(let j = k; j < S - 1; j++){ const a = chP(i.id, j), b = chP(i.id, j + 1);
+          if(f.p[b] != null) f.p[a] = f.p[b]; else delete f.p[a]; if(f.mk[b]) f.mk[a] = f.mk[b]; else delete f.mk[a]; }
+        delete f.p[chP(i.id, S - 1)]; delete f.mk[chP(i.id, S - 1)]; });
+      if(c.esc) Object.keys(c.esc).forEach(n => { const e = c.esc[n]; if(e.i === i.id && +e.k > k) e.k = +e.k - 1; else if(e.i === i.id && +e.k === k) delete c.esc[n]; });
+      i.sl = S - 1; mudouAlgo = true;
+    }
+    if(i.sl === 1) delete i.sl;
+    return mudouAlgo;
+  }
+  function novaAlternativa(c, i){
+    const r = c.itens.find(x => x.id === raizId(c, i)) || i, op = [r].concat(c.itens.filter(x => x.alt === r.id));
+    const n = {id: uid(), desc: '', un: r.un, q: r.q, obs: '', alt: r.id};
+    c.itens.splice(c.itens.indexOf(op[op.length - 1]) + 1, 0, n);
+    registrar(c, 'Opção alternativa criada para: ' + (r.desc || 'item sem descrição')); mexeu(c, true);
+    redesenhar(c, 'tbody[data-i="' + n.id + '"] [data-ik=desc]');
+  }
+  function removerItem(c, i){
+    const alts = c.itens.filter(x => x.alt === i.id);
+    const temP = c.fs.some(f => { for(let k = 0; k < slots(i); k++) if(isFinite(precoN(f, i, k))) return true; return false; });
+    if((String(i.desc || '').trim() || temP) && !confirm('Remover "' + (i.desc || 'item sem descrição') + '"?' + (temP ? ' Os preços dele também serão apagados.' : ''))) return;
+    const e = garantirEsc(c);
+    if(alts.length){ const nv = alts[0]; delete nv.alt; alts.slice(1).forEach(x => x.alt = nv.id); if(e[i.id]){ e[nv.id] = e[i.id]; } }
+    delete e[i.id]; Object.keys(e).forEach(n => { if(e[n].i === i.id) delete e[n]; });
+    c.fs.forEach(f => { for(let k = 0; k < slots(i); k++){ delete f.p[chP(i.id, k)]; if(f.mk) delete f.mk[chP(i.id, k)]; } });
+    c.itens = c.itens.filter(x => x !== i); mexeu(c, true); redesenhar(c);
+  }
+
+  // ----- escolha pelo lápis e itens desaprovados -----
+  function escolherCelula(c, key){
+    const [iid, fid, ks] = key.split('|'), k = +ks, i = c.itens.find(x => x.id === iid), f = c.fs.find(x => x.id === fid);
+    if(!i || !f || !isFinite(precoN(f, i, k))) return;
+    const e = garantirEsc(c), n = raizId(c, i), at = e[n];
+    if(at && at.i === iid && at.f === fid && (+at.k || 0) === k) delete e[n]; else e[n] = {i: iid, f: fid, k};
+    c.preset = ''; mexeu(c);
+  }
+  function alternarNao(c, need){
+    const e = garantirEsc(c), it = c.itens.find(x => x.id === need);
+    if(e[need] && e[need].nao){ delete e[need]; registrar(c, 'Item reaprovado: ' + ((it || {}).desc || '')); }
+    else { e[need] = {nao: 1}; registrar(c, 'Item desaprovado (não será comprado): ' + ((it || {}).desc || '')); }
+    c.preset = ''; mexeu(c);
+  }
+  function aplicarModo(c, semAtualizar){
+    if(!M) return;
+    const at = ESC || NAO;
+    M.classList.toggle('escolhendo', ESC); M.classList.toggle('marcando', NAO);
+    const g = M.querySelector('.cv-edg'); if(g) g.classList.toggle('ab', at);
+    M.querySelectorAll('[data-em]').forEach(b => b.classList.toggle('on', (b.dataset.em === 'cel' && ESC) || (b.dataset.em === 'nao' && NAO)));
+    const lp = $('cv-lapis'); if(lp){ lp.classList.toggle('on', at); lp.title = at ? 'Concluir' : 'Editar a escolha: marcar à mão a célula que fecha em cada item'; }
+    M.querySelectorAll('#cm-t input.pr,#cm-t input.mke').forEach(x => x.readOnly = at);
+    let eb = $('cv-escbar'); if(eb) eb.remove();
+    if(at){
+      eb = document.createElement('div'); eb.id = 'cv-escbar';
+      eb.innerHTML = ESC ? '<span><b>Escolha manual:</b> clique no preço que vai fechar em cada item (pode ser de uma opção alternativa ou de outra marca). Clique de novo para desfazer.</span>'
+          + '<button class="sec mini" data-eb="rec">Voltar à recomendação</button><button class="mini" data-eb="ok">Concluir</button>'
+        : '<span><b>Desaprovar:</b> clique nas linhas dos itens que não serão comprados. Clique de novo para desfazer.</span><button class="mini" data-eb="ok">Concluir</button>';
+      M.appendChild(eb);
+      eb.querySelectorAll('[data-eb]').forEach(b => b.onclick = () => {
+        if(b.dataset.eb === 'rec'){ soNaoComprar(c); c.preset = ''; registrar(c, 'Voltou à recomendação automática'); mexeu(c, true); }
+        ESC = NAO = false; aplicarModo(c);
+      });
+    }
+    if(!semAtualizar) atualizar(c);
+  }
+  const soNaoComprar = c => { const e = garantirEsc(c); Object.keys(e).forEach(n => { if(!e[n].nao) delete e[n]; }); };
 
   function ligarCorpo(c){
     if(!document.getElementById('cot-un')){
       const dl = document.createElement('datalist'); dl.id = 'cot-un'; dl.innerHTML = UNID.map(u => '<option value="' + u + '">').join(''); document.body.appendChild(dl);
     }
-    const tb = $('cm-b');
+    const tab = $('cm-t'), tr = travada(c);
     const alt = ta => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
-    tb.querySelectorAll('textarea[data-ik=desc]').forEach(ta => { requestAnimationFrame(() => alt(ta)); ta.addEventListener('input', () => alt(ta)); });
-    tb.querySelectorAll('tr[data-i]').forEach(tr => {
-      const i = c.itens.find(x => x.id === tr.dataset.i); if(!i) return;
-      tr.querySelectorAll('[data-ik]').forEach(el => {
+    tab.querySelectorAll('textarea[data-ik=desc]').forEach(ta => { requestAnimationFrame(() => alt(ta)); ta.addEventListener('input', () => alt(ta)); });
+    tab.querySelectorAll('tbody.it').forEach(tb => {
+      const i = c.itens.find(x => x.id === tb.dataset.i); if(!i) return;
+      tb.querySelectorAll('[data-ik]').forEach(el => {
         el.addEventListener('input', () => { const k = el.dataset.ik; i[k] = el.value;
           // unidade e quantidade valem para todas as opções do item
-          if(k === 'un' || k === 'q') c.itens.filter(x => x.alt === i.id).forEach(x => { x[k] = el.value; const o = tb.querySelector('tr[data-i="' + x.id + '"] [data-ik=' + k + ']'); if(o) o.value = el.value; });
+          if(k === 'un' || k === 'q') c.itens.filter(x => x.alt === i.id).forEach(x => { x[k] = el.value; const o = tab.querySelector('tbody[data-i="' + x.id + '"] [data-ik=' + k + ']'); if(o) o.value = el.value; });
+          if(k === 'desc') tab.querySelectorAll('tbody.alt').forEach(t2 => { const x = c.itens.find(y => y.id === t2.dataset.i); if(x && x.alt === i.id){ const a = t2.querySelector('.altde'); if(a) a.textContent = 'opção alternativa de ' + (i.desc || '(sem descrição)'); } });
           mexeu(c); });
         if(el.dataset.ik === 'q') el.addEventListener('blur', () => { el.value = fqIn(i.q); });
       });
-      tr.querySelectorAll('input[data-p]').forEach(el => {
-        const f = c.fs.find(x => x.id === el.dataset.p);
-        const larg = () => { el.style.width = Math.max(3.5, el.value.length * 0.92 + 0.6) + 'ch'; }; larg(); // "R$" colado no valor
-        el.addEventListener('input', () => { larg(); const v = num(el.value); if(ok(v)) f.p[i.id] = v; else delete f.p[i.id]; mexeu(c); });
-        el.addEventListener('blur', () => { el.value = prIn(f.p[i.id]); larg(); });
-        el.addEventListener('focus', () => el.select());
+      tb.querySelectorAll('input[data-p]').forEach(el => {
+        const f = c.fs.find(x => x.id === el.dataset.p), k = +el.dataset.k, ch = chP(i.id, k);
+        const larg = () => { el.style.width = Math.max(3.5, el.value.length * 0.92 + 0.6) + 'ch'; }; larg();
+        el.addEventListener('input', () => { larg(); const v = num(el.value); if(ok(v)) f.p[ch] = v; else delete f.p[ch]; mexeu(c); });
+        el.addEventListener('blur', () => { el.value = prIn(f.p[ch]); larg(); });
+        el.addEventListener('focus', () => { if(!el.readOnly) el.select(); });
+        el.addEventListener('paste', e => colarPrecos(c, i, f, k, e));
       });
-      // clicar em qualquer ponto da célula do preço leva ao campo
-      tr.querySelectorAll('td.pc').forEach(td => td.addEventListener('mousedown', e => { const inp = td.querySelector('input'); if(inp && e.target !== inp){ e.preventDefault(); inp.focus(); } }));
-      const sv = tr.querySelector('select[data-v]');
-      if(sv) sv.onchange = () => {
-        c.venc = c.venc || {};
-        if(c.modo !== 'manual'){ const R = calc(c); c.itens.forEach(x => c.venc[x.id] = R.esc[x.id] || ''); c.modo = 'manual'; }
-        c.venc[i.id] = sv.value; mexeu(c);
-      };
-      const redesenhar = foco => { const y = M.querySelector('.corpo').scrollTop; montarMapa(c); M.querySelector('.corpo').scrollTop = y;
-        if(foco){ const t = M.querySelector('#cm-b tr[data-i="' + foco + '"] [data-ik=desc]'); if(t){ t.focus(); t.setSelectionRange(t.value.length, t.value.length); } } };
-      // qual opção do item entra no cálculo
-      const ro = tr.querySelector('input[data-op]');
-      if(ro) ro.onchange = () => { const r = raiz(c, i); r.sel = r === i ? '' : i.id;
-        registrar(c, 'Opção ' + letraOp(c, i) + ' considerada: ' + (i.desc || 'sem descrição')); mexeu(c, true); redesenhar(); };
-      // nova opção alternativa, logo abaixo das opções que o item já tem
-      const ao = tr.querySelector('[data-ao]');
-      if(ao) ao.onclick = () => {
-        const r = raiz(c, i), op = opcoes(c, r), n = {id: uid(), desc: r.desc || '', un: r.un, q: r.q, obs: '', alt: r.id};
-        c.itens.splice(c.itens.indexOf(op[op.length - 1]) + 1, 0, n);
-        registrar(c, 'Opção alternativa criada para: ' + (r.desc || 'item sem descrição')); mexeu(c, true); redesenhar(n.id);
-      };
-      const ri = tr.querySelector('[data-ri]');
-      if(ri) ri.onclick = () => {
-        const op = opcoes(c, i), grp = op.length > 1;
-        if((i.desc || c.fs.some(f => ok(num(f.p[i.id])))) && !confirm('Excluir ' + (grp ? 'a opção ' + letraOp(c, i) : 'o item') + ' "' + (i.desc || 'sem descrição') + '"?')) return;
-        if(grp && op[0] === i){ // saiu a opção A: a B passa a ser a principal
-          const nv = op[1]; delete nv.alt; op.slice(2).forEach(x => x.alt = nv.id); nv.sel = i.sel && i.sel !== nv.id ? i.sel : '';
-        } else if(grp && op[0].sel === i.id) op[0].sel = '';
-        c.itens = c.itens.filter(x => x !== i); c.fs.forEach(f => delete f.p[i.id]); mexeu(c, true); redesenhar();
-      };
+      tb.querySelectorAll('input[data-mk]').forEach(el => {
+        const f = c.fs.find(x => x.id === el.dataset.mk), ch = chP(i.id, +el.dataset.k);
+        el.addEventListener('input', () => { f.mk = f.mk || {}; const v = el.value.toUpperCase(); if(v.trim()) f.mk[ch] = v; else delete f.mk[ch]; mexeu(c, true); });
+        el.addEventListener('blur', () => { el.value = el.value.toUpperCase(); el.classList.toggle('on', !!el.value.trim()); });
+      });
+      tb.querySelectorAll('[data-tg]').forEach(b => b.onclick = () => { const mk = b.parentElement.querySelector('.mke'); if(mk){ mk.classList.add('on'); mk.focus(); } });
+      tb.querySelectorAll('[data-g]').forEach(b => b.onclick = e => { e.stopPropagation();
+        if(b.dataset.g === 'marca') novaMarca(c, i); else if(b.dataset.g === 'alt') novaAlternativa(c, i); else removerItem(c, i); });
+      // ao sair do item, linhas de marca vazias somem
+      tb.addEventListener('focusout', e => { if(slots(i) < 2 || (e.relatedTarget && tb.contains(e.relatedTarget))) return;
+        const destino = e.relatedTarget;
+        setTimeout(() => {
+          // o mapa foi redesenhado (ex.: acabou de criar a linha de marca) ou o foco voltou para o mesmo item: não mexe
+          const ae = document.activeElement, novo = M.querySelector('tbody.it[data-i="' + i.id + '"]');
+          if(!tb.isConnected || (novo && novo.contains(ae))) return;
+          if(aberta === c.id && compactarMarcas(c, i)){ mexeu(c, true); const dk = destino && destino.closest && destino.closest('td[data-cell]');
+          redesenhar(c, dk ? '[data-cell="' + dk.dataset.cell + '"] input.pr' : null); } }, 0); });
     });
-    // Enter desce na mesma coluna; na última linha cria um item novo (coluna descrição)
-    tb.addEventListener('keydown', e => {
-      if(e.key !== 'Enter' || (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA')) return;
+    // clique na célula: no lápis escolhe; no "Total" volta para o unitário; senão leva ao campo
+    tab.addEventListener('mousedown', e => {
+      const tb = e.target.closest('tbody.it');
+      if(NAO){ if(tb && !e.target.closest('.gut')){ e.preventDefault(); alternarNao(c, tb.dataset.need); } return; }
+      const td = e.target.closest('td.pc'); if(!td) { if(ESC && tb) e.preventDefault(); return; }
+      if(e.target.closest('.tagb') || e.target.closest('.mke')) return;
+      if(ESC){ e.preventDefault(); escolherCelula(c, td.dataset.cell); return; }
+      if(tr) return;
+      if(MOS === 't'){ e.preventDefault(); MOS = 'u'; try{ localStorage.setItem('dmtbkp_cotMostra', MOS); }catch(x){} redesenhar(c, '[data-cell="' + td.dataset.cell + '"] input.pr'); return; }
+      const inp = td.querySelector('input.pr'); if(inp && e.target !== inp){ e.preventDefault(); inp.focus(); }
+    });
+    // Enter desce na mesma coluna; na última descrição cria um item novo
+    tab.addEventListener('keydown', e => {
+      const el = e.target; if(e.key !== 'Enter' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if(el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') return;
+      if(e.key !== 'Enter' && !el.matches('input.pr,[data-ik=q]')) return;
       e.preventDefault();
-      const td = e.target.closest('td'), tr = td.parentElement, col = [...tr.children].indexOf(td);
-      const prox = tr.nextElementSibling;
-      if(prox){ const inp = prox.children[col] && prox.children[col].querySelector('input,textarea'); if(inp) inp.focus(); }
-      else if(e.target.dataset.ik === 'desc' && !travada(c)){ acao(c, 'item'); }
+      const sel = el.matches('input.pr') ? 'input.pr[data-p="' + el.dataset.p + '"]' : el.matches('input.mke') ? 'input.mke[data-mk="' + el.dataset.mk + '"]' : '[data-ik=' + el.dataset.ik + ']:not(:disabled)';
+      const todos = [...tab.querySelectorAll(sel)], k = todos.indexOf(el), alvo = todos[k + (e.key === 'ArrowUp' || e.shiftKey ? -1 : 1)];
+      if(alvo){ alvo.focus(); if(alvo.select && alvo.tagName === 'INPUT') alvo.select(); }
+      else if(el.dataset.ik === 'desc' && !tr && !e.shiftKey) acao(c, 'item');
+      else el.blur();
     });
   }
+  // colar uma coluna (ou um bloco) de preços do Excel a partir da célula
+  function colarPrecos(c, i, f, k, e){
+    const t = ((e.clipboardData || window.clipboardData).getData('text/plain') || '').replace(/\r/g, '').replace(/\n+$/, '');
+    if(!/[\n\t]/.test(t)) return;
+    e.preventDefault();
+    const linhas = []; c.itens.forEach(x => { for(let j = 0; j < slots(x); j++) linhas.push({i: x, k: j}); });
+    const r0 = linhas.findIndex(l => l.i === i && l.k === k), c0 = c.fs.indexOf(f);
+    let n = 0;
+    t.split('\n').forEach((lin, ri) => { const l = linhas[r0 + ri]; if(!l) return;
+      lin.split('\t').forEach((v, ci) => { const ff = c.fs[c0 + ci]; if(!ff) return; const p = num(v), ch = chP(l.i.id, l.k); if(ok(p)){ ff.p[ch] = p; n++; } else if(!String(v).trim()) delete ff.p[ch]; }); });
+    registrar(c, n + ' preço(s) colados'); mexeu(c, true); redesenhar(c);
+  }
 
-  // atualiza totais, destaques e resultado sem redesenhar os campos (para não perder o foco)
+  // ----- atualiza destaques, rodapé e resultado sem redesenhar os campos (para não perder o foco) -----
   function atualizar(c){
     if(!M || aberta !== c.id) return;
-    const R = calc(c), tr = travada(c);
+    const R = calc(c), tr = travada(c), E = R.E;
     estadoSalvo();
-    $('cm-b').querySelectorAll('tr[data-i]').forEach(row => {
-      const i = c.itens.find(x => x.id === row.dataset.i), r = R.it[i.id];
-      c.fs.forEach(f => {
-        const p = num(f.p[i.id]), td = row.querySelector('td[data-c="' + f.id + '"]'); if(!td) return;
-        const v = R.ef(f, i), min = r && v != null && r.n > 1 && r.melhores.includes(f.id), esc = r && R.esc[i.id] === f.id && c.fs.length > 1;
-        td.classList.toggle('min', !!min);
-        td.classList.toggle('esc', !!esc);
-        td.classList.toggle('alto', !!(r && v != null && r.n > 2 && v - r.max > -0.000001 && r.max > r.min));
-        td.classList.toggle('vz', !ok(p));
+    const pickItem = {}, naoN = {}, escCel = {};
+    R.NN.forEach(n => { if(n.nao) naoN[n.id] = 1; if(n.trava) pickItem[n.id] = n.trava.i.id; });
+    Object.values(E.asg).forEach(x => escCel[x.i.id + '|' + x.fid + '|' + x.k] = 1);
+    $('cm-t').querySelectorAll('tbody.it').forEach(tb => {
+      const i = c.itens.find(x => x.id === tb.dataset.i); if(!i) return;
+      const need = tb.dataset.need, nao = !!naoN[need], pk = pickItem[need];
+      const fora = nao || !!(pk && pk !== i.id), altoff = !!(i.alt && !pk && !nao);
+      tb.classList.toggle('naob', fora); tb.classList.toggle('altoff', altoff);
+      const tg = tb.querySelector('.naotag'); if(tg) tg.textContent = nao ? 'não será comprado' : fora ? 'fora da compra — outra opção escolhida' : altoff ? 'fora da conta — escolha pelo lápis para comprar esta opção' : '';
+      const r = R.it[i.id];
+      tb.querySelectorAll('td[data-cell]').forEach(td => {
+        const [, fid, ks] = td.dataset.cell.split('|'), k = +ks, f = c.fs.find(x => x.id === fid); if(!f) return;
+        const p = precoN(f, i, k), v = R.ef(f, i, k), esc = !!escCel[td.dataset.cell] && !fora;
+        const conta = !fora && !altoff;
+        td.classList.toggle('vz', !isFinite(p));
+        td.classList.toggle('min', !!(conta && r && v != null && r.n > 1 && Math.abs(v - r.min) < 1e-6));
+        td.classList.toggle('alto', !!(conta && r && v != null && r.n > 2 && r.max > r.min && v - r.max > -1e-6));
+        td.classList.toggle('esc', esc);
+        td.classList.toggle('trv', esc && pk === i.id);
+        td.classList.toggle('dim', ESC && !!pk && !esc);
         const q = r ? r.q : (num(i.q) || 0);
-        const tv = td.querySelector('.tv'); if(tv) tv.textContent = ok(p) ? R$(MOS === 't' ? p * q : p) : 'R$ –';
+        const tv = td.querySelector('.tv'); if(tv) tv.textContent = isFinite(p) ? R$(MOS === 't' ? p * q : p) : 'R$ –';
         const mk = td.querySelector('.mk');
-        if(mk) mk.textContent = !ok(p) ? '' : MOS === 't' ? 'unit. ' + R$(p) : (q ? '= ' + R$(p * q) : '');
-        td.title = r && v != null && r.min != null && v > r.min ? '+' + pct((v / r.min - 1) * 100) + ' sobre o menor' : (min ? 'Menor preço do item' : '');
+        if(mk) mk.textContent = !isFinite(p) ? '' : MOS === 't' ? 'unit. ' + R$(p) : (q ? '= ' + R$(p * q) : '');
+        td.title = r && v != null && r.min != null && v > r.min + 1e-6 ? '+' + pct((v / r.min - 1) * 100) + ' sobre o menor' : (td.classList.contains('min') ? 'Menor preço do item' : '');
       });
-      const om = row.querySelector('.opm');
-      if(om){ // menor total de cada opção, para ajudar a escolher
-        const tot = x => { const y = R.it[x.id]; return y && y.min != null ? y.min * y.q : null; };
-        const ts = opcoes(c, i).map(tot).filter(v => v != null), t = tot(i);
-        const bar = t != null && ts.length > 1 && t - Math.min(...ts) < 0.005;
-        om.textContent = t == null ? 'sem preço' : 'melhor: ' + R$(t) + (bar ? ' · mais barata' : '');
-        om.classList.toggle('bar', bar);
-      }
-      const sv = row.querySelector('select[data-v]');
-      if(sv){
-        const opts = '<option value="">— sem preço —</option>' + c.fs.filter(f => R.ef(f, i) != null).map(f => '<option value="' + f.id + '">' + h(f.nome) + '</option>').join('');
-        if(sv.dataset.o !== opts){ sv.innerHTML = opts; sv.dataset.o = opts; }
-        sv.value = R.esc[i.id] || '';
-      }
     });
-    // rodapé: totais e condições comerciais
-    const n = R.itens.length;
-    const melhorTot = Math.min(...c.fs.filter(f => R.f[f.id].completo).map(f => R.f[f.id].tot), Infinity);
-    const span = '<th colspan="3" class="fix">';
-    const ultCol = (c.fs.length > 1 ? '<td></td>' : '') + (tr ? '' : '<td></td>');
-    const campo = (f, k, ph, tipo) => '<td><input data-fk="' + k + '" data-f="' + f.id + '" value="' + h(k === 'frete' ? prIn(f.frete) : f[k] || '') + '" placeholder="' + ph + '"' + (tipo ? ' type="' + tipo + '"' : '') + (k === 'frete' || k === 'desc' ? ' inputmode="decimal" style="text-align:right"' : '') + (tr ? ' disabled' : '') + '></td>';
-    const foot = $('cm-f');
-    const focado = document.activeElement && foot.contains(document.activeElement) ? document.activeElement : null;
-    if(!focado || foot.dataset.n !== c.fs.map(f => f.id).join()){
-      foot.dataset.n = c.fs.map(f => f.id).join();
-      foot.innerHTML = !c.fs.length ? '<tr><td colspan="' + (3 + (tr ? 0 : 1)) + '" class="hint" style="padding:14px;text-align:left">Adicione os fornecedores digitando o nome em "+ Fornecedor", no cabeçalho do mapa.</td></tr>' :
-        '<tr data-r="sub">' + span + 'Subtotal</th>' + c.fs.map(f => '<td data-s="' + f.id + '"></td>').join('') + ultCol + '</tr>'
-        + '<tr>' + span + 'Desconto (%)</th>' + c.fs.map(f => campo(f, 'desc', '0')).join('') + ultCol + '</tr>'
-        + '<tr>' + span + 'Frete</th>' + c.fs.map(f => '<td><div style="display:flex;gap:4px;justify-content:flex-end"><select data-fk="tf" data-f="' + f.id + '" style="width:auto"' + (tr ? ' disabled' : '') + '>'
-          + ['CIF', 'FOB'].map(t => '<option' + (f.tf === t ? ' selected' : '') + '>' + t + '</option>').join('') + '</select>'
-          + '<input data-fk="frete" data-f="' + f.id + '" value="' + h(prIn(f.frete)) + '" placeholder="R$ –" inputmode="decimal" style="text-align:right;width:110px"' + (tr ? ' disabled' : '') + '></div></td>').join('') + ultCol + '</tr>'
-        + '<tr class="tot">' + span + 'Total<small id="cm-nit"></small></th>' + c.fs.map(f => '<td data-tot="' + f.id + '"></td>').join('') + ultCol + '</tr>'
-        + '<tr class="cd">' + span + 'Prazo de entrega</th>' + c.fs.map(f => campo(f, 'prazo', 'Ex.: 3 dias úteis')).join('') + ultCol + '</tr>'
-        + '<tr class="cd">' + span + 'Condição de pagamento</th>' + c.fs.map(f => '<td><input data-fk="pag" data-f="' + f.id + '" value="' + h(f.pag || '') + '" list="cot-pag" placeholder="Ex.: 28 dias"' + (tr ? ' disabled' : '') + '></td>').join('') + ultCol + '</tr>'
-        + '<tr class="cd">' + span + 'Validade da proposta</th>' + c.fs.map(f => campo(f, 'val', '', 'date')).join('') + ultCol + '</tr>'
-        + '<tr class="cd">' + span + 'Observação / marca</th>' + c.fs.map(f => campo(f, 'obs', 'Ex.: marca, nº do orçamento')).join('') + ultCol + '</tr>';
-      if(!$('cot-pag')){ const dl = document.createElement('datalist'); dl.id = 'cot-pag'; dl.innerHTML = PAG.map(u => '<option value="' + u + '">').join(''); document.body.appendChild(dl); }
-      foot.querySelectorAll('[data-fk]').forEach(el => {
-        const f = c.fs.find(x => x.id === el.dataset.f), k = el.dataset.fk;
-        el.addEventListener(el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', () => {
-          if(k === 'frete' || k === 'desc'){ const v = num(el.value); f[k] = isFinite(v) && v >= 0 ? Math.min(k === 'desc' ? 100 : 1e12, v) : 0; } else f[k] = el.value;
-          mexeu(c);
-        });
-        if(k === 'frete') el.addEventListener('blur', () => { el.value = prIn(f.frete); });
-      });
-    }
-    const nit = $('cm-nit'); if(nit) nit.textContent = n + ' ite' + (n === 1 ? 'm cotado' : 'ns cotados');
-    c.fs.forEach(f => {
-      const x = R.f[f.id];
-      const s = foot.querySelector('[data-s="' + f.id + '"]'); if(s) s.textContent = R$(x.sub);
-      const t = foot.querySelector('[data-tot="' + f.id + '"]');
-      if(t){
-        const best = x.completo && Math.abs(x.tot - melhorTot) < 0.005 && c.fs.length > 1;
-        t.innerHTML = (x.n ? R$(x.tot) : '—') + '<small' + (x.n < n ? ' style="color:#b26a00"' : '') + '>' + (best ? 'menor proposta completa' : x.n < n ? 'cotou ' + x.n + ' de ' + n : ' ') + '</small>';
-        t.classList.toggle('best', best);
-      }
-    });
+    rodape(c, R, tr);
     renderResultado(c, R);
   }
 
+  function rodape(c, R, tr){
+    const foot = $('cm-f'), lin = linhasAtivas(c), tem = k => lin.includes(k), fs = c.fs;
+    const sig = fs.map(f => f.id).join() + '/' + lin.join() + '/' + tr;
+    const focado = document.activeElement && foot.contains(document.activeElement);
+    const ult = tr ? '' : '<td class="gh"></td>';
+    const span = r => '<th colspan="3" class="fix">' + r + '</th>';
+    const din = (f, k, ph, x) => '<input data-fk="' + k + '" data-f="' + f.id + '" value="' + h(x && x.money ? prIn(f[k]) : (f[k] == null ? '' : f[k])) + '" placeholder="' + (ph || '') + '"'
+      + (x && x.money ? ' inputmode="decimal" style="text-align:right"' : '') + (x && x.list ? ' list="' + x.list + '"' : '') + (x && x.tipo ? ' type="' + x.tipo + '"' : '') + (tr ? ' disabled' : '') + '>';
+    const linha = (rot, cel, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '>' + span(rot) + fs.map(f => '<td>' + cel(f) + '</td>').join('') + ult + '</tr>';
+    if(!focado || foot.dataset.n !== sig){
+      foot.dataset.n = sig;
+      if(!fs.length){ foot.innerHTML = '<tr><td colspan="' + (3 + (tr ? 0 : 1)) + '" class="hint" style="padding:14px;text-align:left">Adicione os fornecedores digitando o nome em "+ Fornecedor", no cabeçalho do mapa.</td></tr>'; return; }
+      let t = '';
+      if(['desconto', 'frete', 'impostos', 'outros'].some(tem)) t += '<tr data-r="sub">' + span('Subtotal') + fs.map(f => '<td data-s="' + f.id + '"></td>').join('') + ult + '</tr>';
+      if(tem('desconto')) t += linha('Desconto (%)', f => din(f, 'desc', '0', {money: 0}).replace('placeholder', 'inputmode="decimal" style="text-align:right" placeholder'));
+      if(tem('frete')) t += linha('Frete', f => '<div style="display:flex;gap:4px;justify-content:flex-end"><select data-fk="tf" data-f="' + f.id + '" style="width:auto"' + (tr ? ' disabled' : '') + '>'
+        + ['CIF', 'FOB'].map(x => '<option' + (f.tf === x ? ' selected' : '') + '>' + x + '</option>').join('') + '</select>' + din(f, 'frete', 'R$ –', {money: 1}).replace('style="text-align:right"', 'style="text-align:right;width:110px"') + '</div>');
+      if(tem('impostos')) t += linha('Impostos (ICMS / IPI)', f => din(f, 'imp', 'R$ –', {money: 1}));
+      if(tem('outros')) t += '<tr>' + span('<input data-on="1" value="' + h(c.outNome || '') + '" placeholder="Outro valor (dê um nome)"' + (tr ? ' disabled' : '') + ' style="font-weight:700">')
+        + fs.map(f => '<td>' + din(f, 'out', 'R$ –', {money: 1}) + '</td>').join('') + ult + '</tr>';
+      t += '<tr class="tot">' + span('Total<small id="cm-nit"></small>') + fs.map(f => '<td data-tot="' + f.id + '"></td>').join('') + ult + '</tr>';
+      if(tem('pagamento')){
+        t += linha('Condição de pagamento', f => din(f, 'pag', 'Ex.: 28 dias, 30/60, 3x', {list: 'cot-pag'}) + '<small data-pg="' + f.id + '"></small>', 'cd');
+        t += '<tr class="cd" data-r="pv">' + span('Total a valor presente') + fs.map(f => '<td data-pv="' + f.id + '"></td>').join('') + ult + '</tr>';
+      }
+      if(tem('entrega')) t += linha('Prazo de entrega', f => din(f, 'prazo', 'Ex.: 3 dias úteis'), 'cd');
+      if(tem('validade')) t += linha('Validade da proposta', f => din(f, 'val', '', {tipo: 'date'}), 'cd');
+      if(tem('cobertura')) t += '<tr class="cd">' + span('Cobertura') + fs.map(f => '<td data-cob="' + f.id + '"></td>').join('') + ult + '</tr>';
+      if(tem('obs')) t += linha('Observação / nº do orçamento', f => din(f, 'obs', 'Ex.: orçamento 1234'), 'cd');
+      // separado por uma linha em branco: só para conferência, não soma em nada
+      t += '<tr class="escgap" data-r="eg"><td colspan="' + (3 + fs.length + (tr ? 0 : 1)) + '"></td></tr>'
+        + '<tr class="escrow" data-r="es">' + span('Subtotal das escolhas') + fs.map(f => '<td data-es="' + f.id + '"></td>').join('') + ult + '</tr>';
+      foot.innerHTML = t;
+      if(!$('cot-pag')){ const dl = document.createElement('datalist'); dl.id = 'cot-pag'; dl.innerHTML = PAG.map(u => '<option value="' + u + '">').join(''); document.body.appendChild(dl); }
+      foot.querySelectorAll('[data-fk]').forEach(el => {
+        const f = fs.find(x => x.id === el.dataset.f), k = el.dataset.fk, din2 = ['frete', 'desc', 'imp', 'out'].includes(k);
+        el.addEventListener(el.tagName === 'SELECT' || el.type === 'date' ? 'change' : 'input', () => {
+          if(din2){ const v = num(el.value); f[k] = isFinite(v) && v >= 0 ? Math.min(k === 'desc' ? 100 : 1e12, v) : 0; } else f[k] = el.value;
+          mexeu(c);
+        });
+        if(din2 && k !== 'desc') el.addEventListener('blur', () => { el.value = prIn(f[k]); });
+      });
+      const on = foot.querySelector('[data-on]'); if(on) on.addEventListener('input', () => { c.outNome = on.value; mexeu(c, true); });
+    }
+    const n = R.N.length, E = R.E;
+    const nit = $('cm-nit'); if(nit) nit.textContent = n + ' ite' + (n === 1 ? 'm cotado' : 'ns cotados');
+    let algumPrazo = false;
+    fs.forEach(f => {
+      const x = R.f[f.id], put = (a, v) => { const el = foot.querySelector('[' + a + '="' + f.id + '"]'); if(el) el.innerHTML = v; return el; };
+      put('data-s', x.n ? R$(x.sub) + (x.dv > 0.005 ? '<small>com desconto: ' + R$(x.liq) + '</small>' : '') : '—');
+      const best = !!(R.unico && R.unico.f.id === f.id && fs.length > 1);
+      const t = put('data-tot', x.n ? R$(x.tot) + '<small' + (x.n < n ? ' style="color:#b26a00"' : '') + '>' + (best ? 'menor proposta completa' : x.n < n ? 'cotação parcial · ' + x.n + ' de ' + n : ' ') + '</small>' : '—<small>não cotou</small>');
+      if(t) t.classList.toggle('best', best);
+      if(x.n && !x.pag.avista) algumPrazo = true;
+      put('data-pv', !x.n ? '—' : x.pag.avista ? '<span class="hint">à vista</span>' : R$(x.pv));
+      put('data-pg', x.pag.vazio || (x.pag.avista && !x.pag.desconhecido) ? '' : x.pag.desconhecido ? '<span style="color:#b42318">' + x.pag.label + '</span>' : x.pag.label);
+      put('data-cob', x.n + ' de ' + n);
+      const us = E.us[f.id] || [];
+      put('data-es', us.length ? R$(us.reduce((s, y) => s + y.custo, 0)) + '<small>' + us.length + (us.length === 1 ? ' item' : ' itens') + '</small>' : '—');
+    });
+    const pv = foot.querySelector('[data-r=pv]'); if(pv) pv.style.display = algumPrazo ? '' : 'none';
+    const temEsc = E.usados.length > 0 && fs.length > 1;
+    foot.querySelectorAll('[data-r=eg],[data-r=es]').forEach(r => r.style.display = temEsc ? '' : 'none');
+  }
+
+  // ----- resultado: card da compra + 2 comparativos -----
+  const PRESETS = [
+    {k: 'rec', t: 'Recomendação automática', s: 'melhor combinação, já com o frete'},
+    {k: 'unico', t: 'Melhor fornecedor único', s: 'tudo num pedido só'},
+    {k: 'menor', t: 'Menor preço em cada item', s: 'ignora o frete e o número de pedidos'},
+    {k: 'vp', t: 'Melhor a valor presente', s: 'considera o prazo de pagamento'},
+    {k: 'entrega', t: 'Entrega mais rápida', s: 'menor prazo de entrega em cada item'}
+  ];
+  const COMPARATIVOS = [
+    {k: 'media', t: 'Economia vs. média das cotações', s: 'quanto a compra fica abaixo da média dos preços recebidos'},
+    {k: 'maior', t: 'Economia vs. maior proposta', s: 'diferença para a proposta completa mais cara'},
+    {k: 'unico', t: 'Comparado ao melhor fornecedor único', s: 'quanto custaria comprar tudo de um só'},
+    {k: 'ultima', t: 'Variação vs. última compra', s: 'preços frente à última compra dos mesmos itens'},
+    {k: 'spread', t: 'Dispersão de preços', s: 'distância entre o maior e o menor preço de cada item'},
+    {k: 'vp', t: 'Valor presente da compra', s: 'total trazido a hoje pelo prazo de pagamento'},
+    {k: 'frete', t: 'Peso do frete', s: 'quanto do total é frete e outros custos do pedido'},
+    {k: 'concentracao', t: 'Concentração da compra', s: 'fatia do maior fornecedor e número de pedidos'},
+    {k: 'competicao', t: 'Competitividade', s: 'média de propostas recebidas por item'},
+    {k: 'prazo', t: 'Prazo para receber tudo', s: 'maior prazo de entrega entre os escolhidos'}
+  ];
+  const compSel = c => String(c.cmp == null ? 'media,unico' : c.cmp).split(',').filter(k => COMPARATIVOS.some(x => x.k === k)).slice(0, 2);
+  function compValor(k, c, R){
+    const E = R.E, nf = id => h((c.fs.find(f => f.id === id) || {}).nome || '');
+    if(k === 'media'){
+      if(!E.usados.length) return {v: '—', s: 'sem preços suficientes'};
+      return {ruim: R.ecoMed < -0.005, v: R$(Math.abs(R.ecoMed)), s: (R.ecoMed >= 0 ? '↓ ' + pct(R.ecoPct) + ' abaixo' : '↑ ' + pct(-R.ecoPct) + ' acima') + ' da média'};
+    }
+    if(k === 'maior'){
+      const cs = c.fs.map(f => R.f[f.id]).filter(x => x.completo); if(!cs.length) return {v: '—', s: 'nenhuma proposta completa'};
+      const mx = cs.reduce((m, x) => !m || x.tot > m.tot ? x : m, null), d = mx.tot - E.tot;
+      if(d <= 0.005) return {v: R$(0), s: 'a compra já é a proposta mais cara'};
+      return {v: R$(d), s: '↓ ' + pct(d / mx.tot * 100) + ' abaixo de ' + nf(mx.f.id)};
+    }
+    if(k === 'unico'){
+      if(!R.unico) return {v: '—', s: 'ninguém cotou todos os itens'};
+      const d = E.tot - R.unico.E.tot;
+      if(Math.abs(d) < 0.01) return {v: R$(R.unico.E.tot), s: 'a compra é tudo com ' + nf(R.unico.f.id)};
+      return {ruim: d > 0, v: R$(Math.abs(d)), s: (d < 0 ? '↓ mais barato' : '↑ mais caro') + ' que comprar tudo de ' + nf(R.unico.f.id)};
+    }
+    if(k === 'ultima'){
+      let b = 0, p = 0, n = 0;
+      Object.values(E.asg).forEach(x => { const ul = ultimoPreco(x.i.desc, c.id); if(ul){ b += x.q * ul.p; p += x.custo; n++; } });
+      if(!n || !(b > 0)) return {v: '—', s: 'sem compra anterior desses itens'};
+      const vr = (p - b) / b; return {ruim: vr > 0.0005, v: (vr > 0.0005 ? '↑ ' : vr < -0.0005 ? '↓ ' : '') + pct(Math.abs(vr) * 100), s: (vr > 0 ? 'acima' : 'abaixo') + ' da última compra · ' + n + (n === 1 ? ' item' : ' itens')};
+    }
+    if(k === 'spread'){
+      let t = 0, q = 0;
+      R.N.forEach(nd => { const ps = nd.auto.map(x => x.p); if(ps.length < 2) return; const mn = Math.min(...ps); t += (Math.max(...ps) - mn) / mn; q++; });
+      if(!q) return {v: '—', s: 'precisa de 2 preços por item'};
+      return {v: pct(t / q * 100), s: 'entre o maior e o menor preço, em média · ' + q + (q === 1 ? ' item' : ' itens')};
+    }
+    if(k === 'vp'){
+      let vp = 0, nom = 0, prazo = false;
+      E.usados.forEach(fid => { const x = R.f[fid], v = E.us[fid].reduce((s, y) => s + y.custo, 0) + x.fr + x.out; if(!x.pag.avista) prazo = true; nom += v; vp += valorPresente(v, x.pag.dias, TAXA_MES); });
+      if(E.imp){ nom += E.imp; vp += E.imp; }
+      if(!prazo) return {v: R$(E.tot), s: 'pagamento à vista — igual ao total'};
+      return {v: R$(vp), s: '↓ ' + R$(nom - vp) + ' a menos que o total, a ' + pct(TAXA_MES * 100) + ' a.m.'};
+    }
+    if(k === 'frete'){
+      const fr = E.fr + E.out; if(!(E.tot > 0)) return {v: '—', s: ''};
+      return {v: pct(fr / E.tot * 100), s: fr ? R$(fr) + ' em frete e outros custos' : 'sem frete nesta compra'};
+    }
+    if(k === 'concentracao'){
+      if(!E.usados.length) return {v: '—', s: ''};
+      let top = null, tv = 0;
+      E.usados.forEach(fid => { const x = R.f[fid], v = E.us[fid].reduce((s, y) => s + y.custo, 0) + x.fr + x.out; if(v > tv){ tv = v; top = fid; } });
+      return {v: pct(tv / E.tot * 100), s: 'com ' + nf(top) + ' · ' + E.usados.length + (E.usados.length === 1 ? ' pedido' : ' pedidos')};
+    }
+    if(k === 'competicao'){
+      let soma = 0, n3 = 0, nn = 0;
+      R.N.forEach(nd => { const q = new Set(nd.auto.map(x => x.fid)).size; if(!q) return; soma += q; nn++; if(q >= 3) n3++; });
+      if(!nn) return {v: '—', s: ''};
+      return {v: (soma / nn).toLocaleString('pt-BR', {maximumFractionDigits: 1}) + ' propostas', s: 'por item · ' + n3 + ' de ' + nn + ' itens com 3 ou mais'};
+    }
+    if(k === 'prazo'){
+      let pior = null, dp = -1;
+      E.usados.forEach(fid => { const d = diasEntrega(R.f[fid].f); if(isFinite(d) && d > dp){ dp = d; pior = fid; } });
+      if(!pior) return {v: '—', s: 'preencha o prazo de entrega'};
+      return {v: dp + (dp === 1 ? ' dia' : ' dias'), s: 'o mais demorado: ' + nf(pior)};
+    }
+    return {v: '—', s: ''};
+  }
+  function asgValorPresente(c, R){
+    const fs = c.fs, nf = fs.length, fidx = {}, fat = {};
+    fs.forEach((f, k) => { fidx[f.id] = k; fat[f.id] = valorPresente(1, R.f[f.id].pag.dias, TAXA_MES); });
+    const needs = R.N.filter(nd => nd.auto.length); let best = null;
+    for(let mask = 1; mask < (1 << Math.min(nf, 14)); mask++){
+      let tot = 0, used = 0, okm = true; const asg = {};
+      for(const nd of needs){ let bo = null, bv = Infinity;
+        nd.auto.forEach(x => { if(!((mask >> fidx[x.fid]) & 1)) return; const v = x.custo * fat[x.fid]; if(v < bv){ bv = v; bo = x; } });
+        if(!bo){ okm = false; break; } tot += bv; used |= 1 << fidx[bo.fid]; asg[nd.id] = bo; }
+      if(!okm || used !== mask) continue;
+      for(let k = 0; k < nf; k++) if((mask >> k) & 1) tot += (R.f[fs[k].id].fr + R.f[fs[k].id].out) * fat[fs[k].id];
+      if(!best || tot < best.tot - 0.005) best = {tot, asg};
+    }
+    return best ? best.asg : null;
+  }
+  function aplicarPreset(c, k){
+    const R = calc(c); let asg = null;
+    if(k === 'rec'){ soNaoComprar(c); c.preset = ''; registrar(c, 'Escolha: recomendação automática'); mexeu(c); return; }
+    if(k === 'unico'){ if(!R.unico) return alert('Nenhum fornecedor cotou todos os itens.'); asg = R.unico.E.asg; }
+    if(k === 'menor') asg = R.menor.asg;
+    if(k === 'vp'){ asg = asgValorPresente(c, R); if(!asg) return alert('Sem preços para calcular.'); }
+    if(k === 'entrega'){
+      if(!c.fs.some(f => isFinite(diasEntrega(f)))) return alert('Preencha o prazo de entrega dos fornecedores (linha "Prazo de entrega" — ative em Linhas da tabela).');
+      asg = {}; R.N.forEach(nd => { let b = null; nd.auto.forEach(x => { const d = diasEntrega(R.f[x.fid].f), db = b ? diasEntrega(R.f[b.fid].f) : Infinity;
+        if(!b || d < db || (d === db && x.custo < b.custo)) b = x; }); if(b) asg[nd.id] = b; });
+    }
+    soNaoComprar(c); const e = c.esc;
+    Object.keys(asg).forEach(n => { const x = asg[n]; e[n] = {i: x.i.id, f: x.fid, k: x.k}; });
+    c.preset = k; registrar(c, 'Escolha: ' + PRESETS.find(p => p.k === k).t); mexeu(c);
+  }
+  function abrirLinhas(c, anc){
+    const at = linhasAtivas(c);
+    abrirMenu(anc, LINHAS.map(l => ({v: l.k, t: l.t, s: l.s, chk: at.includes(l.k)})), null, k => {
+      const l = LINHAS.find(x => x.k === k), novo = linhasAtivas(c);
+      if(novo.includes(k)){
+        if(l.campo && temValor(c, l.campo)){
+          if(!confirm('Tirar a linha "' + l.t + '"? Os valores preenchidos nela serão apagados.')) return;
+          c.fs.forEach(f => f[l.campo] = ['frete', 'desc', 'imp', 'out'].includes(l.campo) ? 0 : '');
+          if(k === 'outros') c.outNome = '';
+        }
+        novo.splice(novo.indexOf(k), 1);
+      } else novo.push(k);
+      c.lin = novo.join(','); mexeu(c, true); redesenhar(c);
+      const b = M.querySelector('[data-r=linhas]'); if(b) abrirLinhas(c, b);
+    });
+  }
+
   function renderResultado(c, R){
-    const tr = travada(c);
+    const tr = travada(c), box = $('cm-res'), E = R.E;
     const nf = id => (c.fs.find(f => f.id === id) || {}).nome || '';
-    const pi = R.porItem, un = R.unico;
-    let html = '';
-    if(!R.itens.length || !c.fs.length){
-      html = '<div class="hint">Lance os itens e pelo menos dois fornecedores para comparar as propostas.</div>';
+    const cab = '<div class="rhead"><h2>Resultado</h2>' + (tr ? '' : '<button class="sec mini" data-r="linhas" title="Escolher as linhas do rodapé da tabela">' + ICO.lin + ' Linhas da tabela</button>') + '</div>';
+    if(!R.N.length || !c.fs.length || !R.N.some(nd => nd.todas.length)){
+      box.innerHTML = cab + '<div class="hint">Lance os itens, os fornecedores e os preços para comparar as propostas.</div>';
     } else {
-      const ver = R.final.tot;
-      html = '<div class="res">'
-        + '<div class="bx ver"><span>Compra escolhida</span><b>' + R$(ver) + '</b><small>' + (R.final.usados.length ? R.final.usados.map(nf).map(h).join(' + ') : '—') + '</small></div>'
-        + '<div class="bx"><span>Menor preço por item</span><b>' + R$(pi.tot) + '</b><small>' + pi.usados.length + ' fornecedor(es), com frete' + (pi.falta.length ? ' · ' + pi.falta.length + ' item(ns) sem preço' : '') + '</small></div>'
-        + '<div class="bx"><span>Tudo num fornecedor só</span><b>' + (un ? R$(un.tot) : '—') + '</b><small>' + (un ? h(un.f.nome) : 'ninguém cotou todos os itens') + '</small></div>'
-        + '<div class="bx"><span>Economia sobre a média das propostas</span><b style="color:' + (R.ecoMed > 0.005 ? '#1f7a3d' : 'inherit') + '">' + R$(R.ecoMed) + '</b><small>' + pct(R.ecoPct) + ' · sobre o maior preço: ' + R$(R.ecoMax) + '</small></div>'
-        + '</div>';
-      // sugestão
-      if(un && !pi.falta.length && Math.abs(un.tot - pi.tot) > 0.005){
-        html += un.tot < pi.tot
-          ? '<div class="sug">💡 Comprar tudo de <b>' + h(un.f.nome) + '</b> sai <b>' + R$(pi.tot - un.tot) + '</b> mais barato do que dividir por menor preço por item (o frete pesa).</div>'
-          : '<div class="sug">💡 Dividir a compra pelo menor preço de cada item economiza <b>' + R$(un.tot - pi.tot) + '</b> em relação a comprar tudo de ' + h(un.f.nome) + ' (já com frete).</div>';
-      } else if(un && !pi.falta.length) html += '<div class="sug">💡 Comprar tudo de <b>' + h(un.f.nome) + '</b> já é o menor preço em todos os itens.</div>';
-      if(R.semPreco) html += '<div class="sug al">⚠ ' + R.semPreco + ' item(ns) sem nenhum preço ainda.</div>';
-      const comp = c.fs.filter(f => !R.f[f.id].completo && R.f[f.id].n);
-      if(comp.length) html += '<div class="hint" style="margin-top:6px">Não cotaram todos os itens: ' + comp.map(f => h(f.nome) + ' (' + R.f[f.id].n + '/' + R.itens.length + ')').join(', ') + '.</div>';
-      // modo da escolha
-      html += '<label style="margin-top:12px">Como escolher</label><div class="seg modos" id="cm-modo">'
-        + '<button data-m="auto"' + (R.modo === 'auto' ? ' class="on"' : '') + '>Automático (mais barato)</button>'
-        + '<button data-m="item"' + (R.modo === 'item' ? ' class="on"' : '') + '>Menor preço por item</button>'
-        + (un || c.fs.length ? '<button data-m="unico"' + (R.modo === 'unico' ? ' class="on"' : '') + '>Um fornecedor só</button>' : '')
-        + '<button data-m="manual"' + (R.modo === 'manual' ? ' class="on"' : '') + '>Escolher item a item</button></div>'
-        + (R.modo === 'unico' || c.modo === 'unico' ? '<select id="cm-glob" style="margin-top:6px"><option value="">— escolha o fornecedor —</option>' + c.fs.map(f => '<option value="' + f.id + '"' + (f.id === c.glob ? ' selected' : '') + '>' + h(f.nome) + ' · ' + R$(R.f[f.id].tot) + (R.f[f.id].completo ? '' : ' (cotou ' + R.f[f.id].n + '/' + R.itens.length + ')') + '</option>').join('') + '</select>' : '')
-        + (R.modo === 'manual' ? '<div class="hint" style="margin-top:4px">Escolha na coluna "Comprar de" do mapa.</div>' : '');
-      if(R.final.falta.length && R.modo === 'unico') html += '<div class="sug al">⚠ ' + h(nf(c.glob)) + ' não cotou ' + R.final.falta.length + ' item(ns): ' + R.final.falta.map(i => h(i.desc)).join(', ') + '.</div>';
+      const pend = (R.manual || ESC) ? R.N.filter(nd => !nd.trava).length : 0;
+      const pre = R.manual && c.preset ? PRESETS.find(x => x.k === c.preset) : null;
+      const badge = pre ? pre.t : R.manual ? 'Escolha do comprador' : 'Recomendado';
+      let linha;
+      if(R.manual && R.rec){ const d = E.tot - R.rec.E.tot;
+        linha = Math.abs(d) < 0.01 ? 'Mesmo valor da recomendação automática.' : d > 0 ? R$(d) + ' mais caro que a recomendação automática (' + R$(R.rec.E.tot) + ').' : R$(-d) + ' mais barato que a recomendação automática.'; }
+      else if(E.usados.length === 1) linha = 'Tudo com ' + h(nf(E.usados[0])) + ' — um pedido só.';
+      else if(R.unico) linha = 'Dividida em ' + E.usados.length + ' pedidos · economiza ' + R$(R.unico.E.tot - E.tot) + ' em relação a comprar tudo de ' + h(R.unico.f.nome) + '.';
+      else linha = 'Nenhum fornecedor cotou todos os itens; a compra fica dividida em ' + E.usados.length + ' pedidos.';
+      const fsu = E.usados.map(id => c.fs.find(f => f.id === id)).filter(Boolean), uni = a => [...new Set(a.filter(Boolean))];
+      const pags = uni(fsu.map(f => f.pag)), ents = uni(fsu.map(f => f.prazo));
+      const card = '<div class="plan' + (R.manual ? ' man' : '') + '">'
+        + (tr ? '' : '<div class="pbtns"><button class="pen" data-r="preset" title="Predefinições de escolha">' + ICO.pre + '</button>'
+          + '<button class="pen' + (ESC ? ' on' : '') + '" data-r="lapis" title="' + (ESC ? 'Concluir a escolha' : 'Escolher à mão a célula que fecha em cada item') + '">' + ICO.lap + '</button></div>')
+        + '<span class="badge">' + h(badge) + '</span>'
+        + (pend ? '<div class="big pend">Escolha pendente</div><div class="delta">Falta escolher ' + pend + ' de ' + R.N.length + (R.N.length === 1 ? ' item' : ' itens') + '. Use o lápis para marcar uma célula em cada item.</div>'
+          : '<div class="big">' + R$(E.tot) + '</div><div class="delta">' + linha + '</div>')
+        + '<div class="facts"><div>Frete<b>' + (E.fr ? R$(E.fr) : '—') + '</b></div><div>Pagamento<b>' + (pags.length ? h(pags.join(' / ')) : '—') + '</b></div><div>Entrega<b>' + (ents.length ? h(ents.join(' / ')) : '—') + '</b></div></div></div>';
+      const sel = compSel(c);
+      let side = sel.map(k => { const d = COMPARATIVOS.find(x => x.k === k), r = pend ? {v: '—', s: 'escolha pendente'} : compValor(k, c, R);
+        return '<div class="cmp">' + (tr ? '' : '<button class="cmpx" data-cx="' + k + '" title="Remover">✕</button>') + '<div class="k">' + h(d.t) + '</div><div class="v' + (r.ruim ? ' ruim' : '') + '">' + r.v + '</div><div class="s">' + r.s + '</div></div>'; }).join('');
+      for(let k = sel.length; k < 2; k++) side += tr ? '' : '<button class="cmp add" data-r="cmpadd" title="Adicionar comparativo">' + ICO.mais + '</button>';
+      // avisos
+      const al = [];
+      const comPreco = c.fs.filter(f => R.N.some(nd => nd.todas.some(x => x.fid === f.id))).length;
+      if(comPreco < 3) al.push(['', 'Só ' + comPreco + (comPreco === 1 ? ' fornecedor cotou' : ' fornecedores cotaram') + '. O usual é comparar pelo menos 3 propostas.']);
+      R.N.forEach(nd => { const d = h((nd.orig || {}).desc || '(sem descrição)');
+        if(!nd.todas.length) al.push(['r', 'Sem nenhum preço: ' + d + '.']);
+        else if(!nd.auto.length && !nd.trava) al.push(['r', d + ' não tem preço; só a opção alternativa foi cotada. Use o lápis para fechar a alternativa.']); });
+      R.todos.forEach(i => { if(!(num(i.q) > 0)) al.push(['r', 'Quantidade zerada em ' + h(i.desc || '(sem descrição)') + '.']); });
+      c.fs.forEach(f => { if(f.val && f.val < hoje() && R.f[f.id].n) al.push(['', 'A proposta de ' + h(f.nome) + ' venceu em ' + dataBR(f.val) + '. Confirme os preços antes de fechar.']);
+        if(R.f[f.id].pag.desconhecido) al.push(['', 'Não entendi a condição de pagamento de ' + h(f.nome) + ' ("' + h(f.pag) + '"). Use algo como "à vista", "30 dias", "28/42" ou "3x".']); });
+      box.innerHTML = cab + '<div class="resg">' + card + '<div class="side">' + side + '</div></div>'
+        + (al.length ? '<div class="alerts">' + al.map(a => '<div class="al ' + a[0] + '">' + a[1] + '</div>').join('') + '</div>' : '');
     }
-    $('cm-res').innerHTML = html;
-    M.querySelectorAll('#cm-modo button').forEach(b => { b.disabled = tr; b.onclick = () => {
-      const m = b.dataset.m;
-      if(m === 'item'){ c.modo = 'manual'; c.venc = {}; R.itens.forEach(i => c.venc[i.id] = R.it[i.id].melhores[0] || ''); }
-      else if(m === 'manual'){ c.venc = {}; R.itens.forEach(i => c.venc[i.id] = R.esc[i.id] || ''); c.modo = 'manual'; }
-      else if(m === 'unico'){ c.modo = 'unico'; if(!c.glob) c.glob = (R.unico && R.unico.f.id) || (c.fs[0] || {}).id || ''; }
-      else c.modo = 'auto';
-      mexeu(c);
-    }; });
-    // "Menor preço por item" fica marcado quando a escolha manual bate com o menor de cada item
-    if(R.modo === 'manual' && R.itens.every(i => !R.it[i.id].melhores.length || R.it[i.id].melhores.includes(R.esc[i.id]))){
-      M.querySelectorAll('#cm-modo button').forEach(b => b.classList.toggle('on', b.dataset.m === 'item'));
-    }
-    const g = $('cm-glob'); if(g){ g.disabled = tr; g.onchange = () => { c.glob = g.value; c.modo = 'unico'; mexeu(c); }; }
+    box.querySelectorAll('[data-r]').forEach(b => b.onclick = () => {
+      const r = b.dataset.r;
+      if(r === 'linhas') return abrirLinhas(c, b);
+      if(r === 'preset') return abrirMenu(b, PRESETS.map(x => ({v: x.k, t: x.t, s: x.s})), R.manual ? c.preset : 'rec', k => aplicarPreset(c, k));
+      if(r === 'lapis'){ ESC = !ESC; NAO = false; return aplicarModo(c); }
+      if(r === 'cmpadd'){ const sel = compSel(c);
+        return abrirMenu(b, COMPARATIVOS.filter(x => !sel.includes(x.k)).map(x => ({v: x.k, t: x.t, s: x.s})), null, k => { sel.push(k); c.cmp = sel.join(','); mexeu(c); }); }
+    });
+    box.querySelectorAll('[data-cx]').forEach(b => b.onclick = () => { c.cmp = compSel(c).filter(x => x !== b.dataset.cx).join(','); mexeu(c); });
 
     // pedido por fornecedor
-    const ped = R.final.usados.map(fid => {
-      const f = c.fs.find(x => x.id === fid), its = R.itens.filter(i => R.esc[i.id] === fid);
-      const tot = its.reduce((s, i) => s + R.ef(f, i) * R.it[i.id].q, 0) + R.f[fid].fr;
-      return {f, its, tot};
-    });
-    $('cm-ped').innerHTML = !ped.length ? '<div class="hint">Assim que houver preços, aparece aqui o que comprar de cada fornecedor.</div>'
+    const ped = E.usados.map(fid => { const x = R.f[fid], its = E.us[fid];
+      return {f: x.f, its, fr: x.fr, out: x.out, imp: E.integral ? E.imp : 0, tot: its.reduce((s, y) => s + y.custo, 0) + x.fr + x.out + (E.integral ? E.imp : 0)}; });
+    const mkTxt = (f, x) => { const m = marcaDe(f, x.i, x.k); return m ? ' (' + m + ')' : ''; };
+    const naoC = R.NN.filter(nd => nd.nao);
+    $('cm-ped').innerHTML = (!ped.length ? '<div class="hint">Assim que houver preços, aparece aqui o que comprar de cada fornecedor.</div>'
       : ped.map(p => '<div class="ped"><b>' + h(p.f.nome) + '</b><b class="t">' + R$(p.tot) + '</b><ul>'
-        + p.its.map(i => '<li>' + h(i.desc) + ' — ' + fq(i.q) + ' ' + h(i.un || '') + ' × ' + R$(R.ef(p.f, i)) + '</li>').join('')
-        + (R.f[p.f.id].fr ? '<li>Frete ' + h(p.f.tf || '') + ': ' + R$(R.f[p.f.id].fr) + '</li>' : '') + '</ul>'
+        + p.its.map(x => '<li>' + h(x.i.desc) + h(mkTxt(p.f, x)) + ' — ' + fq(x.q) + ' ' + h(x.i.un || '') + ' × ' + R$(x.p) + '</li>').join('')
+        + (p.fr ? '<li>Frete ' + h(p.f.tf || '') + ': ' + R$(p.fr) + '</li>' : '') + (p.out ? '<li>' + h(c.outNome || 'Outro valor') + ': ' + R$(p.out) + '</li>' : '') + (p.imp ? '<li>Impostos (ICMS / IPI): ' + R$(p.imp) + '</li>' : '') + '</ul>'
         + '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="sec mini" data-pf="' + p.f.id + '" data-t="zap">Pedido no WhatsApp</button><button class="sec mini" data-pf="' + p.f.id + '" data-t="cp">Copiar texto</button>'
         + '<span class="hint">' + [p.f.prazo && 'Entrega: ' + h(p.f.prazo), p.f.pag && 'Pagto: ' + h(p.f.pag)].filter(Boolean).join(' · ') + '</span></div></div>').join('')
-        + '<div class="ped" style="background:var(--head,#f6f6f7)"><b>Total da compra</b><b class="t">' + R$(R.final.tot) + '</b></div>';
+        + '<div class="ped" style="background:var(--head,#f6f6f7)"><b>Total da compra</b><b class="t">' + R$(E.tot) + '</b></div>')
+      + (E.falta.length ? '<div class="sug al">⚠ Sem preço para comprar: ' + E.falta.map(nd => h((nd.orig || {}).desc || '')).join(', ') + '.</div>' : '')
+      + (naoC.length ? '<div class="hint" style="margin-top:8px">Não serão comprados: ' + naoC.map(nd => h((nd.orig || {}).desc || '')).join(', ') + '.</div>' : '');
     $('cm-ped').querySelectorAll('[data-pf]').forEach(b => b.onclick = async () => {
       const p = ped.find(x => x.f.id === b.dataset.pf); if(!p) return;
       const o = c.o ? nomeLocal(c.o) : '';
       const t = '*Pedido de compra – BKP Construtora*\nRef.: ' + numCot(c) + (c.tit ? ' – ' + c.tit : '') + (o ? '\nObra: ' + o : '') + '\n\n'
-        + p.its.map((i, k) => (k + 1) + '. ' + i.desc + ' — ' + fq(i.q) + ' ' + (i.un || '') + ' × ' + R$(R.ef(p.f, i)) + ' = ' + R$(R.ef(p.f, i) * R.it[i.id].q)).join('\n')
-        + (R.f[p.f.id].fr ? '\nFrete (' + (p.f.tf || '') + '): ' + R$(R.f[p.f.id].fr) : '')
+        + p.its.map((x, k) => (k + 1) + '. ' + x.i.desc + mkTxt(p.f, x) + ' — ' + fq(x.q) + ' ' + (x.i.un || '') + ' × ' + R$(x.p) + ' = ' + R$(x.custo)).join('\n')
+        + (p.fr ? '\nFrete (' + (p.f.tf || '') + '): ' + R$(p.fr) : '') + (p.out ? '\n' + (c.outNome || 'Outro valor') + ': ' + R$(p.out) : '') + (p.imp ? '\nImpostos: ' + R$(p.imp) : '')
         + '\n\n*Total: ' + R$(p.tot) + '*' + (p.f.pag ? '\nPagamento: ' + p.f.pag : '') + (p.f.prazo ? '\nEntrega: ' + p.f.prazo : '')
         + '\n\nPor favor, confirme o recebimento do pedido e a data de entrega. Faturar para BKP Construtora.';
       if(b.dataset.t === 'zap'){ const n = zap((achaForn(p.f.id) || {}).tel); window.open('https://wa.me/' + n + '?text=' + encodeURIComponent(t), '_blank'); }
@@ -1303,13 +1774,12 @@
   function mudarSit(c, s){
     const R = calc(c);
     if(s === 'aprovacao' || s === 'aprovada'){
+      if(!R.N.length) return alert('Lance os itens antes.');
       const prob = [];
-      if(!R.itens.length) prob.push('não há itens');
-      if(R.final.falta.length) prob.push(R.final.falta.length + ' item(ns) sem fornecedor escolhido');
+      if(R.pend) prob.push('falta escolher ' + R.pend + ' item(ns) pelo lápis');
+      if(R.E.falta.length) prob.push(R.E.falta.length + ' item(ns) sem fornecedor escolhido');
       if(c.fs.length < 3) prob.push('só ' + c.fs.length + ' fornecedor(es) cotado(s) (o usual são 3)');
-      const caro = R.final.usados.length && R.itens.some(i => R.esc[i.id] && !R.it[i.id].melhores.includes(R.esc[i.id]));
-      if(caro && !String(c.just || '').trim()) prob.push('a escolha não é o menor preço em todos os itens e não há justificativa');
-      if(!R.itens.length) return alert('Lance os itens antes.');
+      if(R.manual && R.rec && R.E.tot > R.rec.E.tot + 0.005 && !String(c.just || '').trim()) prob.push('a escolha fica ' + R$(R.E.tot - R.rec.E.tot) + ' mais cara que a recomendação automática e não há justificativa');
       if(prob.length && !confirm('Atenção:\n• ' + prob.join('\n• ') + '\n\nContinuar mesmo assim?')) return;
     }
     if(s === 'cancelada' && !confirm('Cancelar a ' + numCot(c) + '?')) return;
@@ -1317,8 +1787,8 @@
     if(s === 'aberta'){ c.apr = ''; c.aprd = ''; }
     if(s === 'pedido') c.pedd = hoje();
     // congela a escolha ao aprovar, para o resultado não mudar se alguém reabrir e mexer
-    if(s === 'aprovada' && c.modo === 'auto'){ c.venc = {}; R.itens.forEach(i => c.venc[i.id] = R.esc[i.id] || ''); c.modo = 'manual'; }
-    c.st = s; registrar(c, (SIT[s] || {}).n + (s === 'aprovada' ? ' · ' + R$(R.final.tot) : ''));
+    if(s === 'aprovada' && !R.manual){ const e = garantirEsc(c); R.N.forEach(nd => { const x = R.E.asg[nd.id]; if(x) e[nd.id] = {i: x.i.id, f: x.fid, k: x.k}; }); c.preset = 'rec'; }
+    c.st = s; ESC = NAO = false; registrar(c, (SIT[s] || {}).n + (s === 'aprovada' ? ' · ' + R$(R.E.tot) : ''));
     mexeu(c, true); montarMapa(c);
   }
 
@@ -1334,10 +1804,11 @@
       const re = mn.querySelector('[data-re]'); if(re) re.onclick = () => { mn.hidden = true; acao(c, 'reabrir'); };
       mn.hidden = false; return;
     }
-    if(a === 'foto') return foto(c, el);
+    if(a === 'lapis'){ if(ESC || NAO){ ESC = NAO = false; } else ESC = true; return aplicarModo(c); }
+    if(a === 'foto') return abrirImagem(c);
     if(a === 'item'){
-      const i = {id: uid(), desc: '', un: 'un', q: 1, obs: ''}; c.itens.push(i); mexeu(c, true); montarMapa(c);
-      const ins = M.querySelectorAll('#cm-b tr:last-child [data-ik=desc]'); if(ins[0]) ins[0].focus();
+      const i = {id: uid(), desc: '', un: 'un', q: 1, obs: ''}; c.itens.push(i); mexeu(c, true);
+      redesenhar(c, 'tbody[data-i="' + i.id + '"] [data-ik=desc]');
       return;
     }
     if(a === 'colar') return modal('Colar itens do Excel',
@@ -1353,7 +1824,7 @@
           return {id: uid(), desc: desc || '', un: un || 'un', q: isFinite(num(q)) ? num(q) : 1, obs: ''};
         }).filter(i => i.desc && !/^descri/i.test(i.desc));
         if(!novos.length) return false;
-        c.itens = c.itens.filter(i => String(i.desc).trim()).concat(novos); registrar(c, novos.length + ' item(ns) colados'); mexeu(c, true); montarMapa(c);
+        c.itens = c.itens.filter(i => String(i.desc).trim() || c.itens.some(x => x.alt === i.id)).concat(novos); registrar(c, novos.length + ' item(ns) colados'); mexeu(c, true); redesenhar(c);
       }, null, 'Incluir itens');
     if(a === 'pedir') return pedirCotacao(c);
     if(a === 'imp') return imprimir(c);
@@ -1419,16 +1890,143 @@
       location.href = 'mailto:' + encodeURIComponent(x.cad.email) + '?subject=' + encodeURIComponent('Solicitação de orçamento – BKP Construtora – ' + numCot(c)) + '&body=' + encodeURIComponent(personal(x).replace(/\*/g, '')); b.textContent = 'E-mail ✓'; });
   }
 
+  // ---------- imagem para pedir orçamento (WhatsApp) ----------
+  // PNG com os itens, sem preços (o WhatsApp converte para JPEG; partir de PNG evita comprimir duas vezes).
+  // Até 12 itens: uma coluna. Mais: colunas lado a lado numa imagem só, lendo da esquerda para a direita.
+  const EMPRESA = 'BKP Construtora', CNPJ = '16.939.495/0001-59';
+  function quebrar(ctx, txt, larg){
+    const palavras = String(txt || '').split(/\s+/), linhas = []; let atual = '';
+    palavras.forEach(p => {
+      const t = atual ? atual + ' ' + p : p;
+      if(ctx.measureText(t).width <= larg){ atual = t; return; }
+      if(atual) linhas.push(atual);
+      while(ctx.measureText(p).width > larg){ let k = p.length; while(k > 1 && ctx.measureText(p.slice(0, k)).width > larg) k--; linhas.push(p.slice(0, k)); p = p.slice(k); }
+      atual = p;
+    });
+    if(atual) linhas.push(atual);
+    return linhas.length ? linhas : [''];
+  }
+  function pintarImagem(c, logo){
+    const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+    let num0 = 0;
+    const its = c.itens.filter(i => String(i.desc || '').trim()).map(i => ({i, ou: !!(i.alt && c.itens.some(x => x.id === i.alt)), n: i.alt && c.itens.some(x => x.id === i.alt) ? '' : String(++num0)}));
+    const n = its.length, ncol = n <= 12 ? 1 : n <= 50 ? 2 : 3, por = Math.ceil(n / ncol);
+    const PAD = 56, COLW = 968, GAP = 64, cN = 76, cUn = 120, cQ = 150, cItem = COLW - cN - cUn - cQ;
+    const W = PAD * 2 + ncol * COLW + (ncol - 1) * GAP;
+    const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+    ctx.font = '28px ' + FONT;
+    const colunas = [];
+    for(let ci = 0; ci < ncol; ci++) colunas.push(its.slice(ci * por, (ci + 1) * por).map(x => {
+      const txt = quebrar(ctx, (x.ou ? 'ou: ' : '') + x.i.desc.toUpperCase(), cItem - 30);
+      return {x, txt, h: Math.max(78, txt.length * 36 + 42)}; }));
+    const hHead = 112, hTit = 78, hCap = ncol > 1 ? 44 : 0, hTH = 62, hCont = ncol > 1 ? 52 : 0, temOu = its.some(x => x.ou), hNota = temOu ? 50 : 0;
+    const hCol = Math.max(...colunas.map(cl => cl.reduce((s, l) => s + l.h, 0)));
+    const H = PAD + hHead + hTit + hCap + hTH + hCol + hCont + hNota + PAD - 8;
+    const S = Math.min(2, 4096 / W);
+    cv.width = Math.round(W * S); cv.height = Math.round(H * S); ctx.scale(S, S);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+    let y = PAD;
+    const lh = 67, b1 = y + 29, b2 = y + 57; let lw = 0;
+    if(logo){ lw = logo.width * lh / logo.height; ctx.drawImage(logo, PAD, y, lw, lh); }
+    ctx.textAlign = 'left'; ctx.fillStyle = '#404040'; ctx.font = '700 27px ' + FONT;
+    ctx.fillText(EMPRESA.toUpperCase(), PAD + lw + 19, b1);
+    ctx.fillStyle = '#8b949c'; ctx.font = '19px ' + FONT; ctx.fillText('CNPJ ' + CNPJ, PAD + lw + 19, b2);
+    ctx.textAlign = 'right';
+    const dir = []; if(c.u) dir.push('Comprador: ' + String(c.u).toUpperCase()); dir.push('Mapa nº ' + numCot(c));
+    (dir.length === 2 ? [b1, b2] : [b2]).forEach((b, k) => ctx.fillText(dir[k], W - PAD, b));
+    y += hHead;
+    ctx.textAlign = 'left'; ctx.fillStyle = '#0f7c86'; ctx.font = '700 40px ' + FONT;
+    ctx.fillText('Solicitação de orçamento', PAD, y + 40);
+    if(c.o){ const w0 = ctx.measureText('Solicitação de orçamento').width; ctx.fillStyle = '#8b949c'; ctx.font = '24px ' + FONT; ctx.fillText('  ·  entrega: ' + nomeLocal(c.o), PAD + w0, y + 40); }
+    y += hTit;
+    const yTopo = y;
+    colunas.forEach((linhas, ci) => {
+      const x0 = PAD + ci * (COLW + GAP), xs = [x0, x0 + cN, x0 + cN + cItem, x0 + cN + cItem + cUn, x0 + COLW]; let yy = yTopo;
+      if(ncol > 1){
+        ctx.textAlign = 'left'; ctx.fillStyle = '#0a5b66'; ctx.font = '700 23px ' + FONT;
+        ctx.fillText('Parte ' + (ci + 1) + ' de ' + ncol, x0, yy + 26); yy += hCap;
+      }
+      ctx.fillStyle = '#0f7c86'; ctx.fillRect(x0, yy, COLW, hTH);
+      ctx.fillStyle = '#ffffff'; ctx.font = '700 25px ' + FONT;
+      ctx.textAlign = 'center'; ctx.fillText('#', (xs[0] + xs[1]) / 2, yy + 40);
+      ctx.textAlign = 'left'; ctx.fillText('Item', xs[1] + 16, yy + 40);
+      ctx.textAlign = 'center'; ctx.fillText('Und', (xs[2] + xs[3]) / 2, yy + 40); ctx.fillText('Qtd', (xs[3] + xs[4]) / 2, yy + 40);
+      yy += hTH;
+      linhas.forEach((l, k) => {
+        ctx.fillStyle = k % 2 ? '#ffffff' : '#f4f7f8'; ctx.fillRect(x0, yy, COLW, l.h);
+        ctx.strokeStyle = '#e1e5e8'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, yy + l.h - .5); ctx.lineTo(x0 + COLW, yy + l.h - .5); ctx.stroke();
+        const base = yy + (l.h - (l.txt.length - 1) * 36) / 2 + 10;
+        ctx.fillStyle = '#76808a'; ctx.font = '26px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(l.x.n, (xs[0] + xs[1]) / 2, base);
+        ctx.fillStyle = l.x.ou ? '#3a444f' : '#1d2630'; ctx.font = (l.x.ou ? 'italic ' : '') + '28px ' + FONT; ctx.textAlign = 'left';
+        l.txt.forEach((t, j) => ctx.fillText(t, xs[1] + 16, base + j * 36));
+        ctx.font = '28px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(String(l.x.i.un || '').toUpperCase(), (xs[2] + xs[3]) / 2, base);
+        ctx.font = '700 28px ' + FONT; ctx.fillText(fq(l.x.i.q), (xs[3] + xs[4]) / 2, base);
+        yy += l.h;
+      });
+      if(ci < ncol - 1){
+        ctx.textAlign = 'right'; ctx.fillStyle = '#0f7c86'; ctx.font = '700 24px ' + FONT; ctx.fillText('continua  →', x0 + COLW, yy + 38);
+        const xd = x0 + COLW + GAP / 2; ctx.strokeStyle = '#cdd2d7'; ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
+        ctx.beginPath(); ctx.moveTo(xd, yTopo); ctx.lineTo(xd, yTopo + hCap + hTH + hCol + hCont - 10); ctx.stroke(); ctx.setLineDash([]);
+      } else if(ncol > 1){ ctx.textAlign = 'right'; ctx.fillStyle = '#8b949c'; ctx.font = '24px ' + FONT; ctx.fillText('fim da lista', x0 + COLW, yy + 38); }
+    });
+    if(temOu){ ctx.textAlign = 'left'; ctx.fillStyle = '#76808a'; ctx.font = '24px ' + FONT;
+      ctx.fillText('Nos itens com "ou", favor cotar todas as opções.', PAD, yTopo + hCap + hTH + hCol + hCont + 34); }
+    return cv;
+  }
+  function abrirImagem(c){
+    if(!c.itens.some(i => String(i.desc || '').trim())) return alert('Adicione os itens antes de gerar a imagem.');
+    const logo = new Image();
+    const fazer = lg => {
+      const cv = pintarImagem(c, lg);
+      try{ cv.toDataURL('image/png', 0); }catch(e){ if(lg) return fazer(null); } // logo bloqueado pelo navegador: sai sem ele
+      cv.toBlob(b => {
+        const url = URL.createObjectURL(b), nome = 'orcamento-' + numCot(c) + '.png';
+        let share = false; try{ share = !!(navigator.canShare && navigator.canShare({files: [new File([b], nome, {type: 'image/png'})]})); }catch(e){}
+        const m = modal('Solicitação de orçamento',
+          '<div class="hint" style="margin-bottom:8px">Imagem com os itens, sem preços, para mandar aos fornecedores. No WhatsApp Web, clique em Copiar e cole na conversa (Ctrl+V).</div>'
+          + '<div style="background:#eef1f3;padding:10px;border-radius:8px;max-height:52vh;overflow:auto"><img src="' + url + '" alt="solicitação de orçamento" style="max-width:100%;display:block;box-shadow:0 2px 10px rgba(0,0,0,.15)"></div>'
+          + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px"><button type="button" class="sec mini" data-im="baixar">Baixar</button>' + (share ? '<button type="button" class="sec mini" data-im="share">Compartilhar…</button>' : '')
+          + '<button type="button" class="sec mini" data-im="mapa" title="Imagem do mapa inteiro, com os preços">Copiar imagem do mapa (com preços)</button></div>',
+          (d, fm) => { const bt = fm.querySelector('button[type=submit]');
+            if(!(navigator.clipboard && window.ClipboardItem)){ bt.textContent = 'Este navegador não copia — use Baixar'; return false; }
+            navigator.clipboard.write([new ClipboardItem({'image/png': b})]).then(() => { bt.textContent = 'Copiada ✓ — cole no WhatsApp'; }, () => { bt.textContent = 'Não deu para copiar — use Baixar'; });
+            return false; }, null, 'Copiar imagem');
+        m.querySelector('form').style.width = '760px';
+        m.querySelectorAll('[data-im]').forEach(x => x.onclick = () => {
+          if(x.dataset.im === 'baixar'){ const a = document.createElement('a'); a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove(); }
+          else if(x.dataset.im === 'share') navigator.share({files: [new File([b], nome, {type: 'image/png'})]}).catch(() => {});
+          else { m.remove(); const bt = M.querySelector('[data-a=foto]'); foto(c, bt); }
+        });
+      }, 'image/png');
+    };
+    logo.onload = () => fazer(logo); logo.onerror = () => fazer(null); logo.src = 'logo-bkp.png';
+  }
+
   // ---------- impressão do mapa ----------
   function imprimir(c){
-    const R = calc(c), fs = c.fs, base = location.href.replace(/[^/]*$/, ''), si = SIT[c.st] || SIT.aberta;
+    const R = calc(c), fs = c.fs, base = location.href.replace(/[^/]*$/, ''), si = SIT[c.st] || SIT.aberta, E = R.E;
     const nf = id => (fs.find(f => f.id === id) || {}).nome || '';
+    const lin = linhasAtivas(c), tem = k => lin.includes(k);
     const larg = fs.length > 4 ? 'font-size:8.5px' : fs.length > 3 ? 'font-size:9.5px' : '';
     const linhaCond = (rot, fn) => '<tr class="cond"><td colspan="4" class="r">' + rot + '</td>' + fs.map(f => '<td colspan="2" class="c">' + fn(f) + '</td>').join('') + '</tr>';
-    const melhorTot = Math.min(...fs.filter(f => R.f[f.id].completo).map(f => R.f[f.id].tot), Infinity);
-    // item com opções: mostra a escolhida na tabela e lista as outras embaixo da descrição
-    const notaOp = i => { const op = opcoes(c, i).filter(x => x !== i && R.it[x.id]); if(!op.length) return '';
-      return '<br><small style="color:#8e8e8e">Opção ' + letraOp(c, i) + ' escolhida · outra(s): ' + op.map(x => letraOp(c, x) + ') ' + h(x.desc) + (R.it[x.id].min != null ? ' – melhor ' + R$(R.it[x.id].min * R.it[x.id].q) : ' – sem preço')).join('; ') + '</small>'; };
+    // uma linha por item que entra na compra; em cada fornecedor, a marca escolhida (ou a mais barata dele)
+    const linhasItens = R.N.map((nd, k) => {
+      const x = E.asg[nd.id], i = x ? x.i : nd.orig, r = R.it[i.id] || {}, outros = nd.itens.filter(o => o !== i);
+      const nota = (i.alt ? '<br><small style="color:#0b5d65">opção alternativa de ' + h((nd.orig || {}).desc || '') + '</small>' : '')
+        + (outros.length ? '<br><small style="color:#8e8e8e">outra(s) opção(ões): ' + outros.map(o => h(o.desc) + (R.it[o.id] && R.it[o.id].min != null ? ' – melhor ' + R$(R.it[o.id].min * R.it[o.id].q) : ' – sem preço')).join('; ') + '</small>' : '');
+      return '<tr><td class="c">' + (k + 1) + '</td><td>' + h(i.desc) + nota + '</td><td class="c">' + h(i.un || '') + '</td><td class="n">' + fq(i.q) + '</td>'
+        + fs.map(f => {
+          let o = x && x.fid === f.id ? x : null;
+          if(!o) for(let s = 0; s < slots(i); s++){ const p = R.ef(f, i, s); if(p != null && (!o || p < o.p)) o = {p, k: s}; }
+          if(!o) return '<td class="c" colspan="2" style="color:#aaa">não cotou</td>';
+          const mk = marcaDe(f, i, o.k), min = r.n > 1 && Math.abs(o.p - r.min) < 1e-6, e = !!(x && x.fid === f.id && x.k === o.k);
+          const cl = (min ? 'min ' : '') + (e ? 'esc' : '');
+          return '<td class="n ' + cl + '">' + f2(o.p) + (mk ? '<br><small>' + h(mk) + '</small>' : '') + '</td><td class="n ' + cl + '">' + f2(o.p * (num(i.q) || 0)) + '</td>';
+        }).join('') + '</tr>';
+    }).join('');
+    const naoC = R.NN.filter(nd => nd.nao);
+    const pre = R.manual && c.preset ? PRESETS.find(x => x.k === c.preset) : null;
+    const comps = compSel(c).map(k => { const d = COMPARATIVOS.find(x => x.k === k), v = compValor(k, c, R); return '<div><span>' + h(d.t) + '</span><b>' + v.v + '</b><br>' + v.s + '</div>'; }).join('');
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Mapa de cotação ${numCot(c)}</title>
 <style>
  @page{size:A4 landscape;margin:10mm}
@@ -1442,11 +2040,12 @@
  th{background:#0f7c86;color:#fff;font-size:8.5px;text-transform:uppercase;padding:5px;border:1px solid #0d6c75;text-align:center}
  th.f{font-size:9.5px}
  td{padding:3px 5px;border:1px solid #e3e3e5;vertical-align:middle} .n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums} .c{text-align:center} .r{text-align:right;font-weight:700;color:#5c5c5c}
+ td small{font-size:8px;color:#8e8e8e;font-weight:400}
  td.min{font-weight:700;color:#1f7a3d} td.esc{background:#e3f1f2;font-weight:700;color:#0b5d65}
  tr.tot td{font-weight:700;font-size:11px;background:#f6f6f7} tr.tot td.best{background:#e3f1f2;color:#0b5d65}
  tr.cond td{background:#fafafa}
  .bx{display:flex;gap:10px;margin-top:9px}
- .bx div{flex:1;border:1px solid #e3e3e5;border-radius:6px;padding:6px 9px} .bx span{display:block;font-size:8px;color:#8e8e8e;text-transform:uppercase;letter-spacing:.05em;font-weight:700} .bx b{font-size:13px}
+ .bx div{flex:1;border:1px solid #e3e3e5;border-radius:6px;padding:6px 9px;font-size:9.5px;color:#5c5c5c} .bx span{display:block;font-size:8px;color:#8e8e8e;text-transform:uppercase;letter-spacing:.05em;font-weight:700} .bx b{font-size:13px;color:#232323}
  .bx .v{border-color:#0f7c86;background:#e3f1f2} .bx .v b{color:#0b5d65}
  .just{margin-top:8px;border:1px solid #e3e3e5;border-radius:6px;padding:6px 9px;min-height:28px} .just span{display:block;font-size:8px;color:#8e8e8e;text-transform:uppercase;font-weight:700}
  .ped{margin-top:6px;font-size:10px} .ped b{font-weight:700}
@@ -1462,31 +2061,30 @@
 <table><thead><tr><th rowspan="2" style="width:22px">#</th><th rowspan="2" style="text-align:left">Item / descrição</th><th rowspan="2">Un</th><th rowspan="2">Qtd</th>
  ${fs.map(f => '<th colspan="2" class="f">' + h(f.nome) + '</th>').join('')}</tr>
  <tr>${fs.map(() => '<th>Unitário</th><th>Total</th>').join('')}</tr></thead><tbody>
- ${R.itens.map((i, k) => '<tr><td class="c">' + (k + 1) + '</td><td>' + h(i.desc) + notaOp(i) + '</td><td class="c">' + h(i.un || '') + '</td><td class="n">' + fq(i.q) + '</td>'
-   + fs.map(f => { const p = num(f.p[i.id]), r = R.it[i.id], min = ok(p) && r.n > 1 && r.melhores.includes(f.id), e = R.esc[i.id] === f.id && fs.length > 1;
-     const cl = (min ? 'min ' : '') + (e ? 'esc' : '');
-     return ok(p) ? '<td class="n ' + cl + '">' + f2(p) + '</td><td class="n ' + cl + '">' + f2(p * r.q) + '</td>' : '<td class="c" colspan="2" style="color:#aaa">não cotou</td>'; }).join('') + '</tr>').join('')}
- ${linhaCond('Subtotal', f => R$(R.f[f.id].sub))}
+ ${linhasItens}
+ ${['desconto', 'frete', 'impostos', 'outros'].some(tem) ? linhaCond('Subtotal', f => R.f[f.id].n ? R$(R.f[f.id].sub) : '—') : ''}
  ${fs.some(f => num(f.desc) > 0) ? linhaCond('Desconto', f => num(f.desc) > 0 ? pct(num(f.desc)) + ' (− ' + R$(R.f[f.id].dv) + ')' : '—') : ''}
- ${linhaCond('Frete', f => (f.tf || '') + (R.f[f.id].fr ? ' · ' + R$(R.f[f.id].fr) : ''))}
- <tr class="tot"><td colspan="4" class="r">Total da proposta</td>${fs.map(f => '<td colspan="2" class="c' + (R.f[f.id].completo && Math.abs(R.f[f.id].tot - melhorTot) < 0.005 && fs.length > 1 ? ' best' : '') + '">' + (R.f[f.id].n ? R$(R.f[f.id].tot) : '—') + '</td>').join('')}</tr>
- ${linhaCond('Itens cotados', f => R.f[f.id].n + ' de ' + R.itens.length)}
- ${linhaCond('Prazo de entrega', f => h(f.prazo || '—'))}
- ${linhaCond('Pagamento', f => h(f.pag || '—'))}
- ${linhaCond('Validade', f => f.val ? dataBR(f.val) : '—')}
- ${fs.some(f => f.obs) ? linhaCond('Observação', f => h(f.obs || '')) : ''}
+ ${tem('frete') ? linhaCond('Frete', f => (f.tf || '') + (R.f[f.id].fr ? ' · ' + R$(R.f[f.id].fr) : '')) : ''}
+ ${tem('impostos') ? linhaCond('Impostos (ICMS / IPI)', f => R.f[f.id].imp ? R$(R.f[f.id].imp) : '—') : ''}
+ ${tem('outros') ? linhaCond(h(c.outNome || 'Outro valor'), f => R.f[f.id].out ? R$(R.f[f.id].out) : '—') : ''}
+ <tr class="tot"><td colspan="4" class="r">Total da proposta</td>${fs.map(f => '<td colspan="2" class="c' + (R.unico && R.unico.f.id === f.id && fs.length > 1 ? ' best' : '') + '">' + (R.f[f.id].n ? R$(R.f[f.id].tot) : '—') + '</td>').join('')}</tr>
+ ${linhaCond('Itens cotados', f => R.f[f.id].n + ' de ' + R.N.length)}
+ ${tem('entrega') ? linhaCond('Prazo de entrega', f => h(f.prazo || '—')) : ''}
+ ${tem('pagamento') ? linhaCond('Pagamento', f => h(f.pag || '—')) : ''}
+ ${tem('validade') ? linhaCond('Validade', f => f.val ? dataBR(f.val) : '—') : ''}
+ ${tem('obs') ? linhaCond('Observação', f => h(f.obs || '')) : ''}
 </tbody></table>
+${naoC.length ? '<div class="leg" style="color:#5c5c5c">Não serão comprados: ' + naoC.map(nd => h((nd.orig || {}).desc || '')).join('; ') + '.</div>' : ''}
 <div class="bx">
- <div class="v"><span>Compra escolhida</span><b>${R$(R.final.tot)}</b><br>${R.final.usados.map(nf).map(h).join(' + ') || '—'}</div>
- <div><span>Menor preço por item</span><b>${R$(R.porItem.tot)}</b></div>
- <div><span>Tudo num fornecedor só</span><b>${R.unico ? R$(R.unico.tot) : '—'}</b>${R.unico ? '<br>' + h(R.unico.f.nome) : ''}</div>
- <div><span>Economia sobre a média das propostas</span><b>${R$(R.ecoMed)}</b> (${pct(R.ecoPct)})</div>
+ <div class="v"><span>Compra escolhida · ${h(pre ? pre.t : R.manual ? 'escolha do comprador' : 'recomendação automática')}</span><b>${R.pend ? 'Escolha pendente' : R$(E.tot)}</b><br>${E.usados.map(nf).map(h).join(' + ') || '—'}</div>
+ ${R.manual && R.rec ? '<div><span>Recomendação automática</span><b>' + R$(R.rec.E.tot) + '</b><br>' + R.rec.E.usados.map(nf).map(h).join(' + ') + '</div>' : ''}
+ ${comps}
 </div>
-<div class="ped">${R.final.usados.map(fid => { const f = fs.find(x => x.id === fid), its = R.itens.filter(i => R.esc[i.id] === fid);
-  return '<b>' + h(f.nome) + ':</b> itens ' + its.map(i => R.itens.indexOf(i) + 1).join(', ') + ' — ' + R$(its.reduce((s, i) => s + R.ef(f, i) * R.it[i.id].q, 0) + R.f[fid].fr); }).join(' &nbsp;·&nbsp; ')}</div>
+<div class="ped">${E.usados.map(fid => { const x = R.f[fid], its = E.us[fid];
+  return '<b>' + h(nf(fid)) + ':</b> itens ' + its.map(y => R.N.findIndex(nd => E.asg[nd.id] === y) + 1).join(', ') + ' — ' + R$(its.reduce((s, y) => s + y.custo, 0) + x.fr + x.out + (E.integral ? E.imp : 0)); }).join(' &nbsp;·&nbsp; ')}</div>
 <div class="just"><span>Justificativa da escolha</span>${h(c.just || '').replace(/\n/g, '<br>') || '&nbsp;'}</div>
 <div class="ass"><div>Comprador<small>${h(c.u || '')}</small></div><div>Solicitante<small>${h(c.sol || '')}</small></div><div>Aprovação${c.apr ? '<small>' + h(c.apr) + ' · ' + dataBR(c.aprd) + '</small>' : '<small>&nbsp;</small>'}</div></div>
-<div class="leg">Verde = menor preço do item (já com desconto). Fundo verde-petróleo = proposta escolhida. Totais incluem desconto e frete. Gerado pelo Gestão 360º BKP em ${dataBR(hoje())}.</div>
+<div class="leg">Verde = menor preço do item (já com desconto). Fundo verde-petróleo = proposta escolhida. Totais incluem desconto, frete e outros valores. Gerado pelo Gestão 360º BKP em ${dataBR(hoje())}.</div>
 </body></html>`;
     const fr = document.createElement('iframe');
     fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
