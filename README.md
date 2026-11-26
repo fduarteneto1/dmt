@@ -96,6 +96,14 @@ Resumo das usinadas de microrrevestimento por obra, para mandar no grupo no fim 
 - **Enviar no grupo:** **Enviar no WhatsApp** (texto pronto, formatado para o WhatsApp), **Imagem do relatório** (PNG para mandar no grupo), **Imprimir / PDF** (com os gráficos e a lista de usinadas) e **Copiar texto**.
 - **Dados:** vêm da aba **Registros** da planilha, pela ação `dados` que a aba Emulsão já usa. Não precisa atualizar o Apps Script. Usinadas guardadas no aparelho sem internet só aparecem depois de enviadas.
 
+### Cotações
+Quantas cotações foram criadas, aprovadas e canceladas num período. O código está em `rel-cotacoes.js` e usa as mesmas cotações da aba Cotações (nada muda no Apps Script).
+- **Período:** Hoje, 7 dias, 30 dias, Este mês, Mês passado, Este ano ou Período (de/até), e filtro por obra.
+- **Como conta:** **Criadas** = abertas no período (qualquer situação hoje). **Aprovadas** = aprovadas no período, inclusive as que já viraram pedido. **Canceladas** = canceladas no período. Cotação reaberta depois de aprovada deixa de contar como aprovada.
+- **Resumo:** quadros com cada número, valor aprovado (compra escolhida, com desconto e frete) e economia. Clique num quadro para ver a lista; clique numa cotação para abrir o mapa.
+- **Gráfico:** por dia (até 31 dias), por semana (até 120) ou por mês. **Por obra:** criadas, aprovadas, canceladas e valor aprovado.
+- **Exportar:** Imprimir / PDF, Enviar no WhatsApp, Copiar texto e Baixar planilha (CSV).
+
 ## Pedágios (mapa e Rota até a obra)
 As praças de pedágio de MT aparecem no mapa (losango laranja; roxo = free flow, sem cabine). O botão **$ Pedágios**, abaixo do zoom, mostra ou esconde as praças. O código está em `pedagios.js`, carregado pelo `index.html` depois do `rotas.js`, sem nada secreto.
 - **Na caixa Rota até a obra:** lista as praças por onde a rota passa e calcula o pedágio da viagem: ida carregada + volta vazia, valor por eixo × número de eixos. Mostra também quanto isso dá por tonelada (pedágio da viagem ÷ carga) e por t·km. Em **Veículo e carga** se escolhe o caminhão (toco a rodotrem), a carga por viagem, se conta a volta e quantos eixos vão suspensos na volta vazia (eixo suspenso não paga, Lei 13.103/2015). Fica salvo neste navegador.

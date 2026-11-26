@@ -1174,10 +1174,13 @@
     return r;
   }
 
+  // avisa quem mostra cotações fora da aba (ex.: Relatórios › Cotações)
+  const avisarMudanca = () => { try{ document.dispatchEvent(new Event('g360-cotacoes')); }catch(e){} };
   function salvar(semRender){
     localStorage.setItem(KEY, JSON.stringify(D));
     localStorage.setItem(PEND, '1');
     if(!semRender) render();
+    avisarMudanca();
     clearTimeout(timer); timer = setTimeout(enviar, 1500);
   }
 
@@ -1187,7 +1190,7 @@
     clearTimeout(timer);
     try{
       const j = await txApi({acao: 'lerCotacoes'});
-      if(j.dados && Array.isArray(j.dados.cot)){ D = juntar(D, j.dados); localStorage.setItem(KEY, JSON.stringify(D)); }
+      if(j.dados && Array.isArray(j.dados.cot)){ D = juntar(D, j.dados); localStorage.setItem(KEY, JSON.stringify(D)); avisarMudanca(); }
       // resumo de cada cotação, só para as abas de consulta da planilha
       const env = Object.assign({}, D, {cot: D.cot.map(c => { if(c.del) return c; const R = calc(c);
         return Object.assign({}, c, {res: {tot: Math.round(R.final.tot * 100) / 100, forn: R.final.usados.map(id => (c.fs.find(f => f.id === id) || {}).nome), esc: R.esc}}); })});
@@ -1212,7 +1215,7 @@
       if(JSON.stringify(novo) !== JSON.stringify(D)){
         D = novo; localStorage.setItem(KEY, JSON.stringify(D));
         if(aberta){ const c = achaCot(aberta); if(c && !c.del && !(M && M.contains(document.activeElement))) montarMapa(c); }
-        render();
+        render(); avisarMudanca();
       }
       aviso('Sincronizado com a planilha.');
     }catch(e){ aviso(msgErro(e), true); }
@@ -1230,5 +1233,5 @@
 
   receber();
   try{ if(ls.get('aba') === 'cot') trocarAba('cot'); }catch(e){}
-  window.G360Cotacoes = {render, receber, enviar, abrir: abrirMapa, calc, dados: () => D};
+  window.G360Cotacoes = {render, receber, enviar, abrir: abrirMapa, calc, dados: () => D, numCot, nomeLocal, SIT};
 })();
