@@ -59,6 +59,13 @@
   const vivos = l => (l || []).filter(x => !x.del);
   const achaCot = id => D.cot.find(c => c.id === id);
   const achaForn = id => D.forn.find(f => f.id === id);
+  // Opções alternativas de um item (ex.: pneu 1000x20 borrachudo × liso): a linha alternativa tem i.alt = id do
+  // item principal e fica logo abaixo dele, com a mesma unidade e quantidade. O principal guarda em i.sel qual
+  // opção vale no cálculo (vazio = ele mesmo). As outras opções continuam no mapa, com os preços, mas fora da conta.
+  const raiz = (c, i) => (i.alt && c.itens.find(x => x.id === i.alt)) || i;
+  const opcoes = (c, i) => { const r = raiz(c, i); return r.alt ? [r] : [r].concat(c.itens.filter(x => x.alt === r.id)); };
+  const ativo = (c, i) => { const op = opcoes(c, i); if(op.length < 2) return true; const r = op[0]; return (op.find(x => x.id === r.sel) || r) === i; };
+  const letraOp = (c, i) => String.fromCharCode(65 + Math.max(0, opcoes(c, i).indexOf(i)));
   const numCot = c => 'COT-' + (c.ano || String(c.d || '').slice(0, 4)) + '-' + String(c.n || 0).padStart(3, '0');
 
   function locais(){
@@ -80,7 +87,9 @@
       itens: [], fs: [], venc: {}, modo: 'auto', glob: '', just: '', obs: '', hist: [{q: agoraTxt(), u: usuario(), a: 'Criada'}], upd: agora()};
     if(base){
       c.tit = base.tit ? base.tit + ' (cópia)' : ''; c.o = base.o; c.sol = base.sol;
-      c.itens = base.itens.map(i => ({id: uid(), desc: i.desc, un: i.un, q: i.q, obs: i.obs}));
+      const mp = {}; base.itens.forEach(i => mp[i.id] = uid());
+      c.itens = base.itens.map(i => { const n = {id: mp[i.id], desc: i.desc, un: i.un, q: i.q, obs: i.obs};
+        if(i.alt && mp[i.alt]) n.alt = mp[i.alt]; if(i.sel && mp[i.sel]) n.sel = mp[i.sel]; return n; });
       c.fs = base.fs.map(f => ({id: f.id, nome: f.nome, frete: 0, tf: f.tf || 'CIF', desc: 0, prazo: '', pag: f.pag || '', val: '', obs: '', p: {}}));
       c.hist[0].a = 'Criada a partir de ' + numCot(base);
     }
@@ -91,18 +100,19 @@
 
   // ---------- cálculo do mapa ----------
   function calc(c){
-    const itens = c.itens.filter(i => String(i.desc || '').trim() || ok(num(i.q)));
+    const todos = c.itens.filter(i => String(i.desc || '').trim() || ok(num(i.q)));
+    const itens = todos.filter(i => ativo(c, i)); // só a opção escolhida de cada item entra na conta
     const fs = c.fs;
     const ef = (f, i) => { const p = num(f.p && f.p[i.id]); return ok(p) ? p * (1 - (num(f.desc) || 0) / 100) : null; };
-    const R = {itens, fs, it: {}, f: {}, semPreco: 0};
-    itens.forEach(i => {
+    const R = {itens, todos, fs, it: {}, f: {}, semPreco: 0};
+    todos.forEach(i => {
       const q = num(i.q) || 0, vs = fs.map(f => ({f, v: ef(f, i)})).filter(x => x.v != null);
       const r = {q, n: vs.length, min: null, max: null, med: null, melhores: []};
       if(vs.length){
         r.min = Math.min(...vs.map(x => x.v)); r.max = Math.max(...vs.map(x => x.v));
         r.med = vs.reduce((s, x) => s + x.v, 0) / vs.length;
         r.melhores = vs.filter(x => x.v - r.min < 0.000001).map(x => x.f.id);
-      } else R.semPreco++;
+      } else if(itens.includes(i)) R.semPreco++;
       R.it[i.id] = r;
     });
     fs.forEach(f => {
@@ -285,6 +295,18 @@
   #cot-mapa .cv-t tfoot input,#cot-mapa .cv-t tfoot select{text-align:right}
   #cot-mapa .cv-t tfoot tr.cd input{text-align:left}
   #cot-mapa .cv-dica{margin-top:10px}
+  #cot-mapa .cv-t .opc{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 3px;padding:0 3px;font-size:10.5px;color:var(--ink3,#8e8e8e);white-space:nowrap}
+  #cot-mapa .cv-t .opc label{display:inline-flex;align-items:center;gap:5px;margin:0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--cv);cursor:pointer}
+  #cot-mapa .cv-t td .opc input{width:auto;margin:0;padding:0;accent-color:var(--cv);cursor:pointer}
+  #cot-mapa .cv-t .opc .opm.bar{color:#1f7a3d;font-weight:600}
+  #cot-mapa .cv-t tr.grp td.it{box-shadow:inset 3px 0 0 var(--line,#d9d9dc)}
+  #cot-mapa .cv-t tr.grp.on td.it{box-shadow:inset 3px 0 0 var(--cv)}
+  #cot-mapa .cv-t tr.grp.alt td{border-top:1px dashed var(--line,#e8e8ea)}
+  #cot-mapa .cv-t tr.off td.it textarea,#cot-mapa .cv-t tr.off td.u,#cot-mapa .cv-t tr.off td.q,#cot-mapa .cv-t tr.off td.pc{opacity:.55}
+  #cot-mapa .cv-t tr.off .opc label{color:var(--ink3,#8e8e8e)}
+  #cot-mapa .cv-t td.ac{white-space:nowrap;width:58px}
+  #cot-mapa .cv-t td.ac .ao{background:none;border:0;color:var(--cv);padding:0 3px;font-size:13px;font-weight:700;cursor:pointer;opacity:0}
+  #cot-mapa .cv-t tr:hover td.ac .ao{opacity:.85}
   #cot-mapa .cv-folha.foto th.add,#cot-mapa .cv-folha.foto td.ac,#cot-mapa .cv-folha.foto .cv-dica,#cot-mapa .cv-folha.foto tbody.nv,#cot-mapa .cv-folha.foto .trava{display:none}
   #cot-mapa .cv-folha.foto .wrap{overflow:visible}
   #cot-mapa .linhab{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
@@ -439,7 +461,7 @@
     $('cot-lista').innerHTML = l.map(c => {
       const r = resumo(c), si = SIT[c.st] || SIT.aberta, venc = c.prazo && c.st === 'aberta' && c.prazo < hoje();
       return '<li class="li" data-id="' + c.id + '"><span class="nm"><b>' + numCot(c) + ' · ' + h(c.tit || 'Sem título') + '</b><small>'
-        + h(c.o ? nomeLocal(c.o) : 'Sem obra') + ' · ' + dataBR(c.d) + ' · ' + c.itens.length + ' ite' + (c.itens.length === 1 ? 'm' : 'ns') + ' · ' + c.fs.length + ' fornecedor' + (c.fs.length === 1 ? '' : 'es')
+        + h(c.o ? nomeLocal(c.o) : 'Sem obra') + ' · ' + dataBR(c.d) + ' · ' + c.itens.filter(i => !i.alt).length + ' ite' + (c.itens.filter(i => !i.alt).length === 1 ? 'm' : 'ns') + ' · ' + c.fs.length + ' fornecedor' + (c.fs.length === 1 ? '' : 'es')
         + (venc ? ' · <span style="color:#b42318">prazo vencido</span>' : '') + '</small>'
         + '<small><span class="cv-pill"><i style="background:' + si.c + '"></i>' + si.n + '</span>' + (r.forn.length ? ' ' + h(r.forn.join(', ')) : '') + '</small></span>'
         + '<span class="vl">' + (r.tot > 0 ? R$(r.tot) : '—') + (r.eco > 0.005 ? '<small>economia ' + R$(r.eco) + '</small>' : '') + '</span></li>';
@@ -451,11 +473,12 @@
   $('cot-tela').onclick = () => abrirLista();
 
   $('cot-csv').onclick = () => {
-    const lin = [['Nº', 'Data', 'Título', 'Obra', 'Solicitante', 'Comprador', 'Situação', 'Item', 'Un', 'Qtd', 'Fornecedor', 'Preço unit.', 'Total', 'Menor preço', 'Escolhido']];
+    const lin = [['Nº', 'Data', 'Título', 'Obra', 'Solicitante', 'Comprador', 'Situação', 'Item', 'Un', 'Qtd', 'Fornecedor', 'Preço unit.', 'Total', 'Menor preço', 'Escolhido', 'Opção']];
     vivos(D.cot).forEach(c => { const R = calc(c);
-      R.itens.forEach(i => c.fs.forEach(f => { const p = num(f.p[i.id]); if(!ok(p)) return;
+      R.todos.forEach(i => c.fs.forEach(f => { const p = num(f.p[i.id]); if(!ok(p)) return;
         lin.push([numCot(c), dataBR(c.d), c.tit, c.o, c.sol, c.u, (SIT[c.st] || {}).n, i.desc, i.un, fq(i.q), f.nome, f2(p), f2(p * (num(i.q) || 0)),
-          R.it[i.id].melhores.includes(f.id) ? 'sim' : '', R.esc[i.id] === f.id ? 'sim' : '']); })); });
+          R.it[i.id].melhores.includes(f.id) ? 'sim' : '', R.esc[i.id] === f.id ? 'sim' : '',
+          opcoes(c, i).length > 1 ? letraOp(c, i) + (ativo(c, i) ? ' (considerada)' : ' (não considerada)') : '']); })); });
     const csv = '\ufeff' + lin.map(r => r.map(x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"').join(';')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv;charset=utf-8'}));
     a.download = 'cotacoes-' + hoje() + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -734,7 +757,7 @@
     const pal = b.split(/\s+/);
     const l = [];
     vivos(D.cot).filter(c => c.st !== 'cancelada').forEach(c => { const R = calc(c);
-      R.itens.filter(i => pal.every(p => String(i.desc).toLowerCase().includes(p))).forEach(i => c.fs.forEach(f => {
+      R.todos.filter(i => pal.every(p => String(i.desc).toLowerCase().includes(p))).forEach(i => c.fs.forEach(f => {
         const p = num(f.p[i.id]); if(ok(p)) l.push({c, i, f, p, esc: R.esc[i.id] === f.id && c.st !== 'aberta', min: R.it[i.id].melhores.includes(f.id)}); })); });
     l.sort((a, b2) => String(b2.c.d).localeCompare(String(a.c.d)) || a.p - b2.p);
     const esc = l.filter(x => x.esc);
@@ -975,7 +998,7 @@
           ${tr ? '' : '<tbody class="nv"><tr><td class="fix" colspan="3"><a data-a="item">+ novo item</a><a data-a="colar">📋 colar do Excel</a></td>' + '<td colspan="' + (fs.length + (fs.length > 1 ? 1 : 0) + 1) + '"></td></tr></tbody>'}
           <tfoot id="cm-f"></tfoot>
         </table></div>
-        ${tr ? '' : '<div class="hint cv-dica">Clique no valor para lançar o preço unitário; em branco = o fornecedor não cotou. Enter desce para o próximo item. Verde = menor preço do item (já com desconto) · vermelho = o mais caro · fundo verde-petróleo = compra escolhida.</div>'}
+        ${tr ? '' : '<div class="hint cv-dica">Clique no valor para lançar o preço unitário; em branco = o fornecedor não cotou. Enter desce para o próximo item. Verde = menor preço do item (já com desconto) · vermelho = o mais caro · fundo verde-petróleo = compra escolhida. ⎇ (no fim da linha) cria uma opção alternativa do item — ex.: pneu 1000x20 borrachudo × liso — e você marca qual opção entra no cálculo.</div>'}
       </div>
 
       <div class="cv-folha"><h2>Resultado</h2><div id="cm-res"></div></div>
@@ -1033,16 +1056,21 @@
     const dis = tr ? ' disabled' : '';
     const ult = ultimoPreco(i.desc, c.id);
     const edita = !tr && MOS === 'u';
-    return '<tr data-i="' + i.id + '">'
-      + '<td class="it fix"><textarea data-ik="desc" rows="1" placeholder="descrição do item"' + dis + '>' + h(i.desc) + '</textarea>'
+    const op = opcoes(c, i), grp = op.length > 1, at = ativo(c, i), filho = grp && op[0] !== i;
+    const disQ = filho ? ' disabled title="Mesma unidade e quantidade da opção A"' : dis;
+    return '<tr data-i="' + i.id + '"' + (grp ? ' class="grp' + (filho ? ' alt' : '') + (at ? ' on' : ' off') + '"' : '') + '>'
+      + '<td class="it fix">'
+      + (grp ? '<div class="opc"><label title="Marque a opção que entra no cálculo da cotação"><input type="radio" name="op-' + op[0].id + '" data-op' + (at ? ' checked' : '') + dis + '>Opção ' + letraOp(c, i)
+        + (at ? ' · no cálculo' : '') + '</label><span class="opm"></span></div>' : '')
+      + '<textarea data-ik="desc" rows="1" placeholder="' + (filho ? 'descrição da alternativa (ex.: mesma medida, outra especificação)' : 'descrição do item') + '"' + dis + '>' + h(i.desc) + '</textarea>'
       + (ult ? '<span class="ult">último preço: ' + R$(ult.p) + ' · ' + h(ult.f) + ' · ' + dataBR(ult.d) + '</span>' : '') + '</td>'
-      + '<td class="c u"><input data-ik="un" value="' + h(i.un) + '" list="cot-un" style="text-align:center"' + dis + '></td>'
-      + '<td class="n q"><input data-ik="q" value="' + h(i.q == null ? '' : fqIn(i.q)) + '" inputmode="decimal" style="text-align:right"' + dis + '></td>'
+      + '<td class="c u"><input data-ik="un" value="' + h(i.un) + '" list="cot-un" style="text-align:center"' + disQ + '></td>'
+      + '<td class="n q"><input data-ik="q" value="' + h(i.q == null ? '' : fqIn(i.q)) + '" inputmode="decimal" style="text-align:right"' + disQ + '></td>'
       + c.fs.map(f => '<td class="pc" data-c="' + f.id + '">'
         + (edita ? '<div class="pw"><span class="rs">R$</span><input class="pr" data-p="' + f.id + '" inputmode="decimal" value="' + h(prIn(f.p[i.id])) + '" placeholder="–"></div>' : '<span class="tv"></span>')
         + '<span class="mk"></span></td>').join('')
-      + (c.fs.length > 1 ? '<td class="cd"><select data-v' + dis + '></select></td>' : '')
-      + (tr ? '' : '<td class="ac"><button class="x" data-ri title="Excluir item">×</button></td>') + '</tr>';
+      + (c.fs.length > 1 ? '<td class="cd">' + (at ? '<select data-v' + dis + '></select>' : '<span class="hint">fora do cálculo</span>') + '</td>' : '')
+      + (tr ? '' : '<td class="ac"><button class="ao" data-ao title="Criar opção alternativa deste item (mesma medida, outra especificação — ex.: pneu borrachudo × liso)">⎇</button><button class="x" data-ri title="Excluir ' + (filho ? 'esta opção' : 'item') + '">×</button></td>') + '</tr>';
   }
   const prIn = v => ok(num(v)) ? f2(num(v)) : '';
   const fqIn = v => ok(num(v)) ? fq(num(v)) : String(v || '');
@@ -1057,7 +1085,10 @@
     tb.querySelectorAll('tr[data-i]').forEach(tr => {
       const i = c.itens.find(x => x.id === tr.dataset.i); if(!i) return;
       tr.querySelectorAll('[data-ik]').forEach(el => {
-        el.addEventListener('input', () => { i[el.dataset.ik] = el.value; mexeu(c); });
+        el.addEventListener('input', () => { const k = el.dataset.ik; i[k] = el.value;
+          // unidade e quantidade valem para todas as opções do item
+          if(k === 'un' || k === 'q') c.itens.filter(x => x.alt === i.id).forEach(x => { x[k] = el.value; const o = tb.querySelector('tr[data-i="' + x.id + '"] [data-ik=' + k + ']'); if(o) o.value = el.value; });
+          mexeu(c); });
         if(el.dataset.ik === 'q') el.addEventListener('blur', () => { el.value = fqIn(i.q); });
       });
       tr.querySelectorAll('input[data-p]').forEach(el => {
@@ -1075,10 +1106,27 @@
         if(c.modo !== 'manual'){ const R = calc(c); c.itens.forEach(x => c.venc[x.id] = R.esc[x.id] || ''); c.modo = 'manual'; }
         c.venc[i.id] = sv.value; mexeu(c);
       };
+      const redesenhar = foco => { const y = M.querySelector('.corpo').scrollTop; montarMapa(c); M.querySelector('.corpo').scrollTop = y;
+        if(foco){ const t = M.querySelector('#cm-b tr[data-i="' + foco + '"] [data-ik=desc]'); if(t){ t.focus(); t.setSelectionRange(t.value.length, t.value.length); } } };
+      // qual opção do item entra no cálculo
+      const ro = tr.querySelector('input[data-op]');
+      if(ro) ro.onchange = () => { const r = raiz(c, i); r.sel = r === i ? '' : i.id;
+        registrar(c, 'Opção ' + letraOp(c, i) + ' considerada: ' + (i.desc || 'sem descrição')); mexeu(c, true); redesenhar(); };
+      // nova opção alternativa, logo abaixo das opções que o item já tem
+      const ao = tr.querySelector('[data-ao]');
+      if(ao) ao.onclick = () => {
+        const r = raiz(c, i), op = opcoes(c, r), n = {id: uid(), desc: r.desc || '', un: r.un, q: r.q, obs: '', alt: r.id};
+        c.itens.splice(c.itens.indexOf(op[op.length - 1]) + 1, 0, n);
+        registrar(c, 'Opção alternativa criada para: ' + (r.desc || 'item sem descrição')); mexeu(c, true); redesenhar(n.id);
+      };
       const ri = tr.querySelector('[data-ri]');
       if(ri) ri.onclick = () => {
-        if((i.desc || c.fs.some(f => ok(num(f.p[i.id])))) && !confirm('Excluir o item "' + (i.desc || 'sem descrição') + '"?')) return;
-        c.itens = c.itens.filter(x => x !== i); c.fs.forEach(f => delete f.p[i.id]); mexeu(c, true); montarMapa(c);
+        const op = opcoes(c, i), grp = op.length > 1;
+        if((i.desc || c.fs.some(f => ok(num(f.p[i.id])))) && !confirm('Excluir ' + (grp ? 'a opção ' + letraOp(c, i) : 'o item') + ' "' + (i.desc || 'sem descrição') + '"?')) return;
+        if(grp && op[0] === i){ // saiu a opção A: a B passa a ser a principal
+          const nv = op[1]; delete nv.alt; op.slice(2).forEach(x => x.alt = nv.id); nv.sel = i.sel && i.sel !== nv.id ? i.sel : '';
+        } else if(grp && op[0].sel === i.id) op[0].sel = '';
+        c.itens = c.itens.filter(x => x !== i); c.fs.forEach(f => delete f.p[i.id]); mexeu(c, true); redesenhar();
       };
     });
     // Enter desce na mesma coluna; na última linha cria um item novo (coluna descrição)
@@ -1112,6 +1160,14 @@
         if(mk) mk.textContent = !ok(p) ? '' : MOS === 't' ? 'unit. ' + R$(p) : (q ? '= ' + R$(p * q) : '');
         td.title = r && v != null && r.min != null && v > r.min ? '+' + pct((v / r.min - 1) * 100) + ' sobre o menor' : (min ? 'Menor preço do item' : '');
       });
+      const om = row.querySelector('.opm');
+      if(om){ // menor total de cada opção, para ajudar a escolher
+        const tot = x => { const y = R.it[x.id]; return y && y.min != null ? y.min * y.q : null; };
+        const ts = opcoes(c, i).map(tot).filter(v => v != null), t = tot(i);
+        const bar = t != null && ts.length > 1 && t - Math.min(...ts) < 0.005;
+        om.textContent = t == null ? 'sem preço' : 'melhor: ' + R$(t) + (bar ? ' · mais barata' : '');
+        om.classList.toggle('bar', bar);
+      }
       const sv = row.querySelector('select[data-v]');
       if(sv){
         const opts = '<option value="">— sem preço —</option>' + c.fs.filter(f => R.ef(f, i) != null).map(f => '<option value="' + f.id + '">' + h(f.nome) + '</option>').join('');
@@ -1343,12 +1399,13 @@
     const o = c.o ? nomeLocal(c.o) : '';
     const texto = nome => 'Olá' + (nome ? ', ' + nome : '') + '! Aqui é da *BKP Construtora*' + (c.u ? ' (' + c.u + ')' : '') + '.\n'
       + 'Poderia nos passar orçamento dos itens abaixo?' + (o ? '\nEntrega: ' + o : '') + '\n\n'
-      + its.map((i, k) => (k + 1) + '. ' + i.desc + ' — ' + fq(i.q) + ' ' + (i.un || '')).join('\n')
+      + (() => { let k = 0; return its.map(i => (i.alt && its.some(x => x.id === i.alt) ? '    ou: ' : (++k) + '. ') + i.desc + ' — ' + fq(i.q) + ' ' + (i.un || '')).join('\n'); })()
+      + (its.some(i => i.alt) ? '\n\nNos itens com "ou", favor cotar todas as opções.' : '')
       + '\n\nFavor informar: preço unitário, frete (CIF ou FOB), prazo de entrega, condição de pagamento e validade da proposta.'
       + (c.prazo ? '\nPrazo para resposta: ' + dataBR(c.prazo) + '.' : '') + '\nRef.: ' + numCot(c) + '\n\nObrigado!';
     const fsl = c.fs.map(f => ({f, cad: achaForn(f.id) || {}}));
     const m = modal('Pedir cotação aos fornecedores',
-      '<div class="hint" style="margin-bottom:6px">Texto pronto com os ' + its.length + ' itens. Envie para cada fornecedor pelo WhatsApp ou e-mail.</div>'
+      '<div class="hint" style="margin-bottom:6px">Texto pronto com os ' + its.filter(i => !i.alt).length + ' itens. Envie para cada fornecedor pelo WhatsApp ou e-mail.</div>'
       + '<textarea name="t" style="min-height:220px">' + h(texto('')) + '</textarea>'
       + (fsl.length ? '<label>Enviar para</label>' + fsl.map(x => '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--line2,#f2f2f3)"><span style="flex:1">' + h(x.f.nome) + '<br><small class="hint">' + h([x.cad.contato, x.cad.tel, x.cad.email].filter(Boolean).join(' · ') || 'sem contato no cadastro') + '</small></span>'
         + '<button type="button" class="sec mini" data-z="' + x.f.id + '">WhatsApp</button>' + (x.cad.email ? '<button type="button" class="sec mini" data-e="' + x.f.id + '">E-mail</button>' : '') + '</div>').join('')
@@ -1369,6 +1426,9 @@
     const larg = fs.length > 4 ? 'font-size:8.5px' : fs.length > 3 ? 'font-size:9.5px' : '';
     const linhaCond = (rot, fn) => '<tr class="cond"><td colspan="4" class="r">' + rot + '</td>' + fs.map(f => '<td colspan="2" class="c">' + fn(f) + '</td>').join('') + '</tr>';
     const melhorTot = Math.min(...fs.filter(f => R.f[f.id].completo).map(f => R.f[f.id].tot), Infinity);
+    // item com opções: mostra a escolhida na tabela e lista as outras embaixo da descrição
+    const notaOp = i => { const op = opcoes(c, i).filter(x => x !== i && R.it[x.id]); if(!op.length) return '';
+      return '<br><small style="color:#8e8e8e">Opção ' + letraOp(c, i) + ' escolhida · outra(s): ' + op.map(x => letraOp(c, x) + ') ' + h(x.desc) + (R.it[x.id].min != null ? ' – melhor ' + R$(R.it[x.id].min * R.it[x.id].q) : ' – sem preço')).join('; ') + '</small>'; };
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Mapa de cotação ${numCot(c)}</title>
 <style>
  @page{size:A4 landscape;margin:10mm}
@@ -1402,7 +1462,7 @@
 <table><thead><tr><th rowspan="2" style="width:22px">#</th><th rowspan="2" style="text-align:left">Item / descrição</th><th rowspan="2">Un</th><th rowspan="2">Qtd</th>
  ${fs.map(f => '<th colspan="2" class="f">' + h(f.nome) + '</th>').join('')}</tr>
  <tr>${fs.map(() => '<th>Unitário</th><th>Total</th>').join('')}</tr></thead><tbody>
- ${R.itens.map((i, k) => '<tr><td class="c">' + (k + 1) + '</td><td>' + h(i.desc) + '</td><td class="c">' + h(i.un || '') + '</td><td class="n">' + fq(i.q) + '</td>'
+ ${R.itens.map((i, k) => '<tr><td class="c">' + (k + 1) + '</td><td>' + h(i.desc) + notaOp(i) + '</td><td class="c">' + h(i.un || '') + '</td><td class="n">' + fq(i.q) + '</td>'
    + fs.map(f => { const p = num(f.p[i.id]), r = R.it[i.id], min = ok(p) && r.n > 1 && r.melhores.includes(f.id), e = R.esc[i.id] === f.id && fs.length > 1;
      const cl = (min ? 'min ' : '') + (e ? 'esc' : '');
      return ok(p) ? '<td class="n ' + cl + '">' + f2(p) + '</td><td class="n ' + cl + '">' + f2(p * r.q) + '</td>' : '<td class="c" colspan="2" style="color:#aaa">não cotou</td>'; }).join('') + '</tr>').join('')}
