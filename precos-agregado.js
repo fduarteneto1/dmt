@@ -4,6 +4,8 @@
 //   o preço (R$/t) de cada agregado. Cada preço guarda a data em que foi lançado e quem lançou.
 // - Embaixo do nome aparece o resumo dos preços e a data.
 // - Passando o mouse na pedreira (ponto azul) do mapa, aparecem só os agregados com preço preenchido.
+// - Campo de busca acima da lista: filtra pelo nome/cidade (sem acento), opção "Só pedreiras"; Enter com
+//   uma pedreira só abre os preços dela e, ao salvar, o cursor volta para a busca.
 // - Botão "R$ Agregados" no mapa liga/desliga etiquetas fixas com o nome e os preços embaixo de cada pedreira.
 // - No Simulador de aquisição, ao escolher agregado e fornecedor, o campo Aquisição (R$/t) vem
 //   preenchido com o preço cadastrado (troca sempre que o agregado ou o fornecedor mudar; dá para
@@ -240,6 +242,92 @@
   new Botao().addTo(map);
   if(ligado) camadaEt.addTo(map);
 
+  // ---------- busca na lista "Pedreiras e distribuidoras" ----------
+  // Digite parte do nome (ou da cidade): a lista mostra só o que bate. Sem acento e sem maiúscula.
+  // Enter com uma só pedreira na lista abre o quadro de preços dela; depois de salvar, o cursor volta
+  // para a busca com o texto selecionado, pronto para digitar a próxima. Esc limpa a busca.
+  const KSO = 'dmtbkp_buscaPtsSoPed';
+  let termo = '', soPed = false;
+  try{ soPed = localStorage.getItem(KSO) === '1'; }catch(e){}
+  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  css.textContent +=
+    '.pa-busca{display:flex;gap:6px;align-items:center;margin:0 0 8px;flex-wrap:wrap}' +
+    '.pa-busca .pa-bx{position:relative;flex:1 1 150px;min-width:0}' +
+    '.pa-busca input[type=search]{width:100%;padding:6px 26px 6px 28px;font-size:13px;box-sizing:border-box}' +
+    '.pa-busca .pa-lupa{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--ink3,#6b7078);pointer-events:none;display:flex}' +
+    '.pa-busca .pa-limpa{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:none;cursor:pointer;color:var(--ink3,#6b7078);font-size:15px;line-height:1;padding:2px 5px;display:none}' +
+    '.pa-busca.tem .pa-limpa{display:block}' +
+    '.pa-busca label{display:flex;align-items:center;gap:4px;font-size:12px;margin:0;font-weight:600;text-transform:none;letter-spacing:0;white-space:nowrap;cursor:pointer}' +
+    '.pa-busca label input{margin:0}' +
+    '.pa-busca .pa-cont{flex:1 0 100%;font-size:11px;color:var(--ink3,#6b7078);margin-top:-2px}' +
+    '#lista-pts li.pa-oc{display:none!important}' +
+    '#lista-pts li.pa-nada{display:block;font-size:12px;color:var(--ink3,#6b7078);font-style:italic;border:0;padding:6px 2px}' +
+    '@media print{.pa-busca{display:none}#lista-pts li.pa-oc{display:flex!important}#lista-pts li.pa-nada{display:none}}';
+
+  function montarBusca(){
+    const ul = $('lista-pts'); if(!ul || $('pa-busca')) return;
+    const d = document.createElement('div'); d.className = 'pa-busca'; d.id = 'pa-busca';
+    d.innerHTML = '<div class="pa-bx"><span class="pa-lupa" aria-hidden="true"><svg width="13" height="13" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m11 11 3.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>'
+      + '<input type="search" id="pa-q" placeholder="Buscar pedreira ou distribuidora…" autocomplete="off" spellcheck="false" aria-label="Buscar na lista de pedreiras e distribuidoras">'
+      + '<button type="button" class="pa-limpa" id="pa-limpa" title="Limpar busca (Esc)" aria-label="Limpar busca">×</button></div>'
+      + '<label title="Mostrar só as pedreiras (onde se lançam os preços)"><input type="checkbox" id="pa-so"' + (soPed ? ' checked' : '') + '> Só pedreiras</label>'
+      + '<div class="pa-cont" id="pa-cont"></div>';
+    ul.before(d);
+    const q = $('pa-q');
+    q.value = termo;
+    q.addEventListener('input', () => { termo = q.value; filtrar(); });
+    q.addEventListener('keydown', ev => {
+      if(ev.key === 'Escape'){ ev.preventDefault(); ev.stopPropagation(); termo = ''; q.value = ''; filtrar(); }
+      else if(ev.key === 'Enter'){
+        ev.preventDefault();
+        const vis = visiveis().filter(p => p.tipo === 'pedreira');
+        if(vis.length === 1){ editando = vis[0].id; quadro(); filtrar(); }
+        else if(vis.length > 1) $('pa-cont').textContent = vis.length + ' pedreiras encontradas — continue digitando ou clique em "R$" na que quiser.';
+      }
+    });
+    $('pa-limpa').onclick = () => { termo = ''; q.value = ''; filtrar(); q.focus(); };
+    $('pa-so').onchange = ev => { soPed = ev.target.checked; try{ localStorage.setItem(KSO, soPed ? '1' : '0'); }catch(e){} filtrar(); };
+  }
+  function bate(p){
+    if(soPed && p.tipo !== 'pedreira') return false;
+    const t = norm(termo); if(!t) return true;
+    const alvo = norm([p.nome, p.cidade, p.municipio, p.end, p.endereco, p.obs].filter(Boolean).join(' '));
+    return t.split(' ').every(pal => alvo.includes(pal));
+  }
+  function visiveis(){ return st.pontos.filter(bate); }
+  function filtrar(){
+    const ul = $('lista-pts'); if(!ul) return;
+    montarBusca();
+    const caixa = $('pa-busca'); if(caixa) caixa.classList.toggle('tem', !!termo);
+    ul.querySelectorAll('li.pa-nada').forEach(x => x.remove());
+    const lis = [...ul.children].filter(li => !li.classList.contains('pa-ed'));
+    let n = 0;
+    st.pontos.forEach((p, i) => {
+      const li = lis[i]; if(!li) return;
+      // pela linha da lista (o nome pode estar só nela, ou no title com endereço)
+      const nm = li.querySelector('.nm');
+      const extra = nm ? (nm.getAttribute('title') || '') : '';
+      const ok = bate(p) || (!!termo && (!soPed || p.tipo === 'pedreira') && norm(termo).split(' ').every(pal => norm(extra).includes(pal)));
+      li.classList.toggle('pa-oc', !ok);
+      if(ok) n++;
+    });
+    const ed = ul.querySelector('li.pa-ed');
+    if(ed){ const prev = ed.previousElementSibling; ed.classList.toggle('pa-oc', !!prev && prev.classList.contains('pa-oc')); }
+    const filtro = !!termo || soPed;
+    if(filtro && !n){ const v = document.createElement('li'); v.className = 'pa-nada'; v.textContent = 'Nada encontrado para "' + termo + '".'; ul.appendChild(v); }
+    const c = $('pa-cont');
+    if(c) c.textContent = filtro ? n + ' de ' + st.pontos.length + ' na lista' + (termo && visiveis().filter(p => p.tipo === 'pedreira').length === 1 ? ' · Enter abre os preços' : '') : '';
+  }
+
+  // depois de salvar ou cancelar os preços, volta para a busca se ela estava em uso
+  const quadroOrig = quadro;
+  quadro = function(){
+    const estava = !!document.querySelector('#lista-pts li.pa-ed');
+    quadroOrig();
+    filtrar();
+    if(estava && !editando && termo){ const q = $('pa-q'); if(q){ q.focus(); q.select(); } }
+  };
+
   function redesenhar(){ try{ dicasMapa(); decorarLista(); etiquetas(); }catch(e){} preencherSim(); }
 
   // o app redesenha a lista e os marcadores em desenharPontos(): completa depois de cada vez
@@ -247,8 +335,10 @@
   window.desenharPontos = function(){
     const r = orig.apply(this, arguments);
     try{ dicasMapa(); decorarLista(); etiquetas(); }catch(e){}
+    try{ filtrar(); }catch(e){}
     return r;
   };
+  try{ filtrar(); }catch(e){}
 
   // ---------- Simulador de aquisição: preenche Aquisição (R$/t) com o preço cadastrado ----------
   // aviso embaixo do campo Aquisição: de onde veio o preço
