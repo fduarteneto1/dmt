@@ -608,6 +608,7 @@
     const ok = liberado();
     btn.style.display = ok ? '' : 'none';
     if(!ok && aba.style.display !== 'none') trocarAba('dmt');
+    try{ document.dispatchEvent(new CustomEvent('g360-rh-acesso')); }catch(e){}
   }
 
   // ---------- estilos ----------
@@ -1985,7 +1986,7 @@
     clearTimeout(tt); tt = setTimeout(() => e.style.display = 'none', err ? 7000 : 4500);
   }
 
-  function renderTudo(){ renderAba(); renderTela(); }
+  function renderTudo(){ renderAba(); renderTela(); try{ document.dispatchEvent(new CustomEvent('g360-rh')); }catch(e){} }
 
   // ---------- troca de aba ----------
   const trocarOrig = window.trocarAba;
@@ -2000,5 +2001,9 @@
   acesso();
   receber();
   try{ if(ls.get('aba') === 'rh' && liberado()) trocarAba('rh'); }catch(e){}
-  window.G360RH = {dados: () => D, abrir: abrirTela, semear, _turnover: turnover, _periodos: periodos, receber, enviar, _lerProgramacao: lerProgramacao, _aplicar: aplicarProgramacao, _salarios: aplicarSalarios, _sugerir: sugerir, _validar: validar, _fila: fila, ocorrencia: janelaOcorrencia, _cartas: cartas};
+  window.G360RH = {dados: () => D, abrir: abrirTela, semear, _turnover: turnover, _periodos: periodos, receber, enviar, _lerProgramacao: lerProgramacao, _aplicar: aplicarProgramacao, _salarios: aplicarSalarios, _sugerir: sugerir, _validar: validar, _fila: fila, ocorrencia: janelaOcorrencia, _cartas: cartas,
+    ficha: janelaFicha, liberado,
+    // usado pelo relatório de RH (rel-rh.js): mesmas regras e cálculos do módulo
+    api: {pessoa, vivos, desligado, saida, entrada, iniciativa, TIPOS, FAIXAS, faixa, casaDias, obraDe, funcaoDe, nomeLocal, locais, quadro,
+      periodos, calcPer, fila, gozosDe, situacao, fimG, SIT, NIV, custoGozo, avisoStatus, ocs, advDe, motivo, ART482, GRAU, titulo, SITP, cfg: () => D.cfg}};
 })();

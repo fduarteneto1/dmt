@@ -106,6 +106,17 @@ Quantas cotações foram criadas, aprovadas e canceladas num período. O código
 - **Gráfico:** por dia (até 31 dias), por semana (até 120) ou por mês. **Por obra:** criadas, aprovadas, canceladas e valor aprovado.
 - **Exportar:** Imprimir / PDF, Enviar no WhatsApp, Copiar texto e Baixar planilha (CSV).
 
+### RH
+Relatórios de pessoal num período e numa obra. O código está em `rel-rh.js`, carregado logo depois de `rh.js` e só para quem tem o módulo RH (quem não está na lista de acesso do RH não vê o relatório). Usa os mesmos dados e cálculos do módulo RH (`G360RH.api`); nada muda no Apps Script.
+- **Período:** Este mês, Mês passado, 30 dias, Este ano, Ano passado, Próximos 60 dias ou Período (de/até), e filtro por obra (inclui "Sem alocação").
+- **Movimentação:** admissões, desligamentos, saldo e turnover do período (média de admissões e desligamentos ÷ quadro médio, mesma conta do painel do RH). Gráfico mês a mês, desligamentos por tipo e por iniciativa, tempo de casa de quem saiu, por obra (com saídas na experiência) e por função. Avisa desligamentos sem tipo ou sem data.
+- **Ocorrências:** advertências escritas e registros, cartas a assinar, **reincidentes** (2 ou mais advertências no período, com o total na casa e o maior grau), por motivo (art. 482), por grau e por obra.
+- **Férias:** quem está de férias no período, dias, custo estimado (salário ÷ 30 × dias × 4/3), avisos a emitir, férias vencidas e limites que vencem no período.
+- **Quadro:** retrato do efetivo no último dia do período: por obra (experiência, afastados, tempo médio, folha base), por função e por tempo de casa. A obra é a alocação atual do cadastro (não há histórico de transferências).
+- **Experiência:** contratos de 45 e 90 dias que vencem no período e o resultado (prorrogado, efetivado, saiu ou a decidir), com as advertências da pessoa. Taxa de efetivação = quem passou dos 90 dias ÷ quem chegou ao 90º dia no período.
+- **Ficha:** busca qualquer colaborador (inclusive ex-colaboradores); **Abrir** mostra a ficha do RH e **Imprimir** gera a ficha com cadastro, desligamento, ocorrências, férias e períodos aquisitivos.
+- **Exportar:** Imprimir / PDF (visão atual), PDF completo (todas as visões), Enviar no WhatsApp, Copiar texto e Baixar planilha (CSV). O texto do WhatsApp leva só números, sem nomes nem salários; PDF e CSV levam o detalhe e são de uso restrito do RH.
+
 ## Pedágios (mapa e Rota até a obra)
 As praças de pedágio de MT aparecem no mapa (losango laranja; roxo = free flow, sem cabine). O botão **$ Pedágios**, abaixo do zoom, mostra ou esconde as praças. O código está em `pedagios.js`, carregado pelo `index.html` depois do `rotas.js`, sem nada secreto.
 - **Na caixa Rota até a obra:** lista as praças por onde a rota passa e calcula o pedágio da viagem: ida carregada + volta vazia, valor por eixo × número de eixos. Mostra também quanto isso dá por tonelada (pedágio da viagem ÷ carga) e por t·km. Em **Veículo e carga** se escolhe o caminhão (toco a rodotrem), a carga por viagem, se conta a volta e quantos eixos vão suspensos na volta vazia (eixo suspenso não paga, Lei 13.103/2015). Fica salvo neste navegador.
