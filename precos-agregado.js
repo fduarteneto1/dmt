@@ -6,7 +6,8 @@
 // - Passando o mouse na pedreira (ponto azul) do mapa, aparecem só os agregados com preço preenchido.
 // - Botão "R$ Agregados" no mapa liga/desliga etiquetas fixas com os preços embaixo de cada pedreira.
 // - No Simulador de aquisição, ao escolher agregado e fornecedor, o campo Aquisição (R$/t) vem
-//   preenchido com o preço cadastrado, se estiver vazio.
+//   preenchido com o preço cadastrado (troca sempre que o agregado ou o fornecedor mudar; dá para
+//   digitar outro valor). Embaixo do campo aparece a data do preço ou o atalho "usar".
 // - Os preços vão para a planilha Google (mesma ligação da aba Emulsão, txApi) e valem para toda a
 //   equipe. Sem a planilha, ficam neste navegador e são enviados quando ela aceitar.
 (function(){
@@ -250,7 +251,26 @@
   };
 
   // ---------- Simulador de aquisição: preenche Aquisição (R$/t) com o preço cadastrado ----------
-  function preencherSim(){
+  // aviso embaixo do campo Aquisição: de onde veio o preço
+  function avisoSim(aq, x){
+    let n = aq.nextElementSibling;
+    if(!n || !n.classList || !n.classList.contains('pa-sim')){
+      n = document.createElement('small'); n.className = 'pa-sim';
+      n.style.cssText = 'display:block;font-size:11px;line-height:1.3;margin-top:2px';
+      aq.insertAdjacentElement('afterend', n);
+    }
+    if(!x){ n.textContent = ''; n.style.display = 'none'; return; }
+    n.style.display = 'block';
+    if(aq.value !== '' && aq.dataset.paAuto === aq.value){
+      n.style.color = '#15803d'; n.textContent = '✓ Preço cadastrado em ' + dataBR(x.d);
+    } else {
+      n.style.color = '#92400e';
+      n.innerHTML = 'Cadastrado: ' + h(rs(x.v)) + ' (' + h(dataCurta(x.d)) + ') · <a href="#" data-pa-usar="1" style="color:inherit">usar</a>';
+    }
+  }
+
+  // forcar: linha em que o agregado ou o fornecedor acabou de mudar (o preço digitado era do fornecedor anterior)
+  function preencherSim(forcar){
     const box = $('sim-linhas'); if(!box) return;
     box.querySelectorAll('[data-k=forn]').forEach(sf => {
       const lin = sf.closest('#sim-linhas > *') || sf.parentElement;
@@ -258,29 +278,52 @@
       if(!sa || !aq) return;
       const p = st.pontos.find(x => x.tipo === 'pedreira' && x.nome === sf.value);
       const x = p && (P[p.id] || {})[sa.value];
+      const mudou = forcar === lin;
       if(x && x.v != null){
         aq.placeholder = x.v.toLocaleString('pt-BR', {minimumFractionDigits: 2});
         aq.title = 'Preço cadastrado em ' + dataBR(x.d) + ': ' + rs(x.v) + '/t';
-        if(aq.value.trim() === '' || aq.dataset.paAuto === aq.value){
+        // valor restaurado pelo simulador (ex.: depois de recarregar) igual ao cadastrado: conta como automático
+        if(!aq.dataset.paAuto && aq.value !== '' && Math.abs(+aq.value - x.v) < 0.005) aq.dataset.paAuto = aq.value;
+        if(mudou || aq.value.trim() === '' || aq.dataset.paAuto === aq.value){
           // o campo do simulador é numérico: valor com ponto decimal (o navegador mostra no formato local)
           const v = aq.type === 'number' ? String(x.v) : x.v.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false});
           if(aq.value !== v){
             aq.value = v; aq.dataset.paAuto = v;
             aq.dispatchEvent(new Event('input', {bubbles: true})); aq.dispatchEvent(new Event('change', {bubbles: true}));
           }
+          aq.dataset.paAuto = v;
         }
+        avisoSim(aq, x);
       } else {
         aq.placeholder = ''; aq.title = '';
-        if(aq.dataset.paAuto && aq.dataset.paAuto === aq.value){
-          aq.value = ''; delete aq.dataset.paAuto;
+        if((aq.dataset.paAuto && aq.dataset.paAuto === aq.value) || (mudou && aq.dataset.paAuto)){
+          aq.value = '';
           aq.dispatchEvent(new Event('input', {bubbles: true})); aq.dispatchEvent(new Event('change', {bubbles: true}));
         }
+        delete aq.dataset.paAuto;
+        avisoSim(aq, null);
       }
     });
   }
   document.addEventListener('change', ev => {
     const t = ev.target;
-    if(t && t.matches && t.matches('#sim-linhas select[data-k=ag], #sim-linhas select[data-k=forn]')) setTimeout(preencherSim, 0);
+    if(t && t.matches && t.matches('#sim-linhas select[data-k=ag], #sim-linhas select[data-k=forn]')){
+      const lin = t.closest('#sim-linhas > *') || t.parentElement;
+      setTimeout(() => preencherSim(lin), 0);
+    }
+  });
+  // digitou outro preço na mão: o aviso passa a mostrar o cadastrado com o atalho "usar"
+  document.addEventListener('input', ev => {
+    const t = ev.target;
+    if(t && t.matches && t.matches('#sim-linhas input[data-k=aq]') && ev.isTrusted) setTimeout(() => preencherSim(), 0);
+  });
+  document.addEventListener('click', ev => {
+    const a = ev.target && ev.target.closest && ev.target.closest('#sim-linhas [data-pa-usar]');
+    if(!a) return;
+    ev.preventDefault();
+    const lin = a.closest('#sim-linhas > *');
+    const aq = lin && lin.querySelector('input[data-k=aq]');
+    if(aq){ aq.value = ''; delete aq.dataset.paAuto; preencherSim(lin); }
   });
   const caixaSim = $('sim-linhas');
   if(caixaSim){ let tm = null; new MutationObserver(() => { clearTimeout(tm); tm = setTimeout(preencherSim, 50); }).observe(caixaSim, {childList: true}); }
