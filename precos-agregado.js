@@ -4,7 +4,7 @@
 //   o preço (R$/t) de cada agregado. Cada preço guarda a data em que foi lançado e quem lançou.
 // - Embaixo do nome aparece o resumo dos preços e a data.
 // - Passando o mouse na pedreira (ponto azul) do mapa, aparecem só os agregados com preço preenchido.
-// - Botão "R$ Agregados" no mapa liga/desliga etiquetas fixas com os preços embaixo de cada pedreira.
+// - Botão "R$ Agregados" no mapa liga/desliga etiquetas fixas com o nome e os preços embaixo de cada pedreira.
 // - No Simulador de aquisição, ao escolher agregado e fornecedor, o campo Aquisição (R$/t) vem
 //   preenchido com o preço cadastrado (troca sempre que o agregado ou o fornecedor mudar; dá para
 //   digitar outro valor). Embaixo do campo aparece a data do preço ou o atalho "usar".
@@ -108,7 +108,7 @@
     '.pa-tip td+td{padding-left:10px;text-align:right;font-weight:600}.pa-tip td+td+td{font-weight:400;color:#6b7078;font-size:11px}' +
     '.pa-et-wrap{background:none;border:0}' +
     '.pa-et{position:absolute;left:0;top:0;transform:translateX(-50%);background:rgba(255,255,255,.95);color:#232323;border:1px solid #2563eb;border-radius:6px;padding:2px 6px;font:500 11px/1.3 sans-serif;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25);pointer-events:none}' +
-    '.pa-et span{display:block}.pa-et b{font-weight:700}.pa-et em{display:block;font-style:normal;font-size:10px;color:#6b7078}' +
+    '.pa-et span{display:block}.pa-et b{font-weight:700}.pa-et strong{display:block;font-weight:700;color:#1e40af;border-bottom:1px solid #dbeafe;margin-bottom:1px;padding-bottom:1px}.pa-et em{display:block;font-style:normal;font-size:10px;color:#6b7078}' +
     '@media print{#lista-pts .pa-res,#lista-pts .pa-bt,#lista-pts li.pa-ed{display:none}}';
   document.head.appendChild(css);
 
@@ -217,7 +217,7 @@
     st.pontos.forEach(p => {
       if(p.tipo !== 'pedreira' || p.lat == null || p.lng == null) return;
       const l = precos(p.id); if(!l.length) return;
-      const html = '<div class="pa-et">' + l.map(o => '<span>' + AB[o.k] + ' <b>' + rs(o.x.v).replace('R$ ', '') + '</b></span>').join('')
+      const html = '<div class="pa-et"><strong>' + h(p.nome) + '</strong>' + l.map(o => '<span>' + AB[o.k] + ' <b>' + rs(o.x.v).replace('R$ ', '') + '</b></span>').join('')
         + '<em>' + dataCurta(ultimaData(p.id)) + '</em></div>';
       camadaEt.addLayer(L.marker([p.lat, p.lng], {interactive: false, keyboard: false, zIndexOffset: 500,
         icon: L.divIcon({className: 'pa-et-wrap', iconSize: [0, 0], iconAnchor: [0, -10], html})}));
