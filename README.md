@@ -202,3 +202,13 @@ Os fornecedores cadastrados em **Cotações › Fornecedores** aparecem no mapa 
 - **Liga/desliga:** botão **Fornecedores** abaixo do zoom (fica salvo em cada navegador). Desligue quando quiser o mapa mais limpo.
 - **Posição:** a que veio do Google ao cadastrar. Sem ela, a ferramenta procura o endereço ou a cidade no OpenStreetMap e mostra a borda tracejada ("posição aproximada").
 - **Clique no fornecedor:** categoria, contato, quantas cotações e quantas vezes foi escolhido; **Abrir cadastro** e **📍 Ajustar posição** (arraste e solte; a posição vai para o cadastro e sincroniza pela planilha).
+
+## Preços de agregado por pedreira (Pedreiras e distribuidoras)
+
+- Em **Pedreiras e distribuidoras**, cada pedreira tem o botão **R$**: lance ou atualize o preço (R$/t) de **Pó de pedra**, **Pedrisco** e, se quiser, **Brita 1**. Enter salva, Esc cancela; deixe em branco para apagar.
+- Cada preço guarda a data em que foi lançado e quem lançou. Ao atualizar, só muda a data do agregado alterado; o valor anterior aparece no quadro.
+- Embaixo do nome da pedreira aparece o resumo (ex.: `Pó 85,50 · Pedrisco 92,00 · 27/11/26`).
+- **No mapa:** passando o mouse na pedreira (ponto azul) aparecem só os agregados com preço preenchido, com a data.
+- **Simulador de aquisição:** ao escolher agregado e fornecedor, o campo **Aquisição (R$/t)** vem preenchido com o preço cadastrado, se estiver vazio.
+- Os preços ficam na aba oculta **Gestao360** da planilha, linha 4 (`A4 = precosAg`), e valem para toda a equipe. Em cada pedreira × agregado vale o lançamento mais recente. O Apps Script precisa das ações `lerPrecosAg` e `gravarPrecosAg` (já estão em `tools/planilha-emulsao.gs`); publique em **Implantar → Gerenciar implantações → editar → Nova versão**. Até lá, os preços ficam no navegador e são enviados assim que a planilha aceitar.
+- Arquivo: `precos-agregado.js` (não guarda nada secreto).

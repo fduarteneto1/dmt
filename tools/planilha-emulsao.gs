@@ -25,6 +25,7 @@ function tratar(p) {
     if (p.acao === 'lerClima') return lerClima(ss);
     if (p.acao === 'lerCotacoes') return lerCotacoes(ss);
     if (p.acao === 'lerRH') return lerRH(ss);
+    if (p.acao === 'lerPrecosAg') return lerPrecosAg(ss);
     lock.waitLock(20000);
     if (p.acao === 'registro') return registro(ss, p.r || {});
     if (p.acao === 'usina') return usina(ss, p.u || {});
@@ -35,6 +36,7 @@ function tratar(p) {
     if (p.acao === 'gravarClima') return gravarClima(ss, p.cfg, p.usuario);
     if (p.acao === 'gravarCotacoes') return gravarCotacoes(ss, p.dados);
     if (p.acao === 'gravarRH') return gravarRH(ss, p.dados);
+    if (p.acao === 'gravarPrecosAg') return gravarPrecosAg(ss, p.precos, p.usuario);
     return { ok: false, erro: 'Ação desconhecida.' };
   } catch (err) {
     return { ok: false, erro: String(err && err.message || err) };
@@ -174,6 +176,38 @@ function gravarClima(ss, c, usuario) {
   var sh = abaG360(ss);
   sh.getRange(3, 1, 1, 4).setValues([['clima', JSON.stringify(limpo), new Date(), String(usuario || '').slice(0, 60)]]);
   return { ok: true };
+}
+
+// ---------- Preços de agregado por pedreira (Pó de pedra, Pedrisco, Brita 1) ----------
+// Mesma aba oculta "Gestao360": A4 = 'precosAg', B4 = {idPedreira: {po|pedrisco|brita1: {v, d, u, h}}},
+// C4 = quando foi gravado, D4 = quem gravou. Em cada pedreira × agregado vale o lançamento mais recente (d),
+// para que dois computadores lançando ao mesmo tempo não apaguem o preço um do outro.
+function lerPrecosAg(ss) {
+  var sh = abaG360(ss), txt = String(sh.getRange(4, 2).getValue() || '');
+  var d = null;
+  try { d = txt ? JSON.parse(txt) : null; } catch (x) {}
+  return { ok: true, precos: d && typeof d === 'object' ? d : {}, quando: iso(sh.getRange(4, 3).getValue()), usuario: String(sh.getRange(4, 4).getValue() || '') };
+}
+function gravarPrecosAg(ss, novos, usuario) {
+  if (!novos || typeof novos !== 'object') return { ok: false, erro: 'Preços inválidos.' };
+  var atual = lerPrecosAg(ss).precos, ITENS = { po: 1, pedrisco: 1, brita1: 1 };
+  Object.keys(novos).forEach(function (id) {
+    if (!/^[\w.-]{1,60}$/.test(id) || !novos[id] || typeof novos[id] !== 'object') return;
+    Object.keys(novos[id]).forEach(function (k) {
+      var x = novos[id][k];
+      if (!ITENS[k] || !x || !x.d) return;
+      var v = x.v == null ? null : n(x.v);
+      if (v != null && !(v >= 0)) return;
+      var hist = (Array.isArray(x.h) ? x.h : []).slice(0, 10).map(function (a) { return { v: a && a.v != null ? n(a.v) : null, d: String(a && a.d || '').slice(0, 19), u: String(a && a.u || '').slice(0, 60) }; });
+      var limpo = { v: v, d: String(x.d).slice(0, 19), u: String(x.u || '').slice(0, 60), h: hist };
+      atual[id] = atual[id] || {};
+      if (!atual[id][k] || limpo.d > String(atual[id][k].d || '')) atual[id][k] = limpo;
+    });
+  });
+  var txt = JSON.stringify(atual);
+  if (txt.length > 49000) return { ok: false, erro: 'Preços grandes demais para a planilha.' };
+  abaG360(ss).getRange(4, 1, 1, 4).setValues([['precosAg', txt, new Date(), String(usuario || '').slice(0, 60)]]);
+  return { ok: true, precos: atual };
 }
 
 // ---------- Diárias do Gestão 360º (lançamentos, fechamentos, diaristas, PIX, feriados) ----------
