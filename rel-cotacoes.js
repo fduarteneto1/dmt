@@ -209,7 +209,7 @@
     $('rc-tit').textContent = 'Resumo · ' + perTxt(a, b) + (SEL.obra ? ' · ' + nomeObra(SEL.obra) : '');
     const vApr = L.apr.reduce((s, x) => s + x.tot, 0), eco = L.apr.reduce((s, x) => s + x.eco, 0);
     const ped = L.apr.filter(x => x.c.st === 'pedido').length;
-    const and = L.cri.filter(x => x.c.st === 'aberta' || x.c.st === 'aprovacao').length;
+    const and = L.cri.filter(x => x.c.st === 'aberta' || x.c.st === 'aprovacao' || x.c.st === 'reprovada').length;
     const taxa = L.cri.length ? Math.round(L.cri.filter(x => x.c.st === 'aprovada' || x.c.st === 'pedido').length / L.cri.length * 100) : null;
     $('rc-kpi').innerHTML =
       `<button data-v="cri" class="${SEL.ver === 'cri' ? 'on' : ''}" style="border-top-color:${COR.cri}"><span>Criadas</span><b>${L.cri.length}</b><small>${and} em andamento</small></button>` +
@@ -318,7 +318,7 @@
       l.forEach(x => lin.push('• ' + C.numCot(x.c) + ' · ' + (x.c.tit || 'Sem título') + (x.c.o ? ' (' + x.c.o + ')' : '') + extra(x))); lin.push(''); };
     bloco('Aprovadas', L.apr, x => ' · ' + R$(x.tot) + (x.forn.length ? ' · ' + x.forn.join(', ') : ''));
     bloco('Canceladas', L.can, () => '');
-    const and = L.cri.filter(x => x.c.st === 'aberta' || x.c.st === 'aprovacao');
+    const and = L.cri.filter(x => x.c.st === 'aberta' || x.c.st === 'aprovacao' || x.c.st === 'reprovada');
     bloco('Criadas ainda em andamento', and, x => ' · ' + sit(x.c).n);
     lin.push('_Gestão 360º BKP_');
     return lin.join('\n');
@@ -375,7 +375,7 @@
 </style></head><body>
 <div class="cab"><img src="${base}logo-bkp.png" alt=""><div><h1>Relatório de cotações · ${h(perTxt(a, b))}</h1><span>BKP Construtora${SEL.obra ? ' · ' + h(nomeObra(SEL.obra)) : ''}</span></div></div>
 <div class="kpi">
- <div style="border-top-color:${COR.cri}"><span>Criadas</span><b>${L.cri.length}</b><small>${L.cri.filter(x => x.c.st === 'aberta' || x.c.st === 'aprovacao').length} em andamento</small></div>
+ <div style="border-top-color:${COR.cri}"><span>Criadas</span><b>${L.cri.length}</b><small>${L.cri.filter(x => x.c.st === 'aberta' || x.c.st === 'aprovacao' || x.c.st === 'reprovada').length} em andamento</small></div>
  <div style="border-top-color:${COR.apr}"><span>Aprovadas</span><b>${L.apr.length}</b><small>${L.apr.filter(x => x.c.st === 'pedido').length} com pedido emitido</small></div>
  <div style="border-top-color:${COR.can}"><span>Canceladas</span><b>${L.can.length}</b><small>&nbsp;</small></div>
  <div style="border-top-color:${COR.apr}"><span>Valor aprovado</span><b>${R$(vApr)}</b><small>${eco > 0.5 ? 'economia ' + R$(eco) : '&nbsp;'}</small></div>

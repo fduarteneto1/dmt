@@ -9,7 +9,9 @@
 //  - A ferramenta destaca o menor preço de cada item, compara "menor preço por item" com
 //    "tudo num fornecedor só" (o frete pode inverter a conta) e calcula a economia.
 //  - Fluxo: Em cotação → Aguardando aprovação → Aprovada → Pedido emitido (ou Cancelada).
-//    Aprovada em diante, o mapa fica travado (dá para reabrir).
+//    O comprador só envia para aprovação; aprovar ou reprovar é feito no módulo Aprovações
+//    (aprovacoes.js), que abre o mapa em "modo aprovação" (só leitura, com Aprovar / Reprovar).
+//    Reprovada volta para o comprador ajustar e reenviar. Aprovada em diante, o mapa fica travado (dá para reabrir).
 (function(){
   if(typeof txApi !== 'function' || typeof st === 'undefined' || typeof trocarAba !== 'function') return;
 
@@ -43,11 +45,15 @@
   const SIT = {
     aberta:    {n: 'Em cotação', c: '#0f7c86'},
     aprovacao: {n: 'Aguardando aprovação', c: '#e08a00'},
+    reprovada: {n: 'Reprovada', c: '#b42318'},
     aprovada:  {n: 'Aprovada', c: '#6aa84f'},
     pedido:    {n: 'Pedido emitido', c: '#175cd3'},
     cancelada: {n: 'Cancelada', c: '#8e8e8e'}
   };
-  const travada = c => c.st === 'aprovada' || c.st === 'pedido' || c.st === 'cancelada';
+  const travadaReal = c => c.st === 'aprovada' || c.st === 'pedido' || c.st === 'cancelada';
+  // MODO 'aprov' = mapa aberto pelo módulo Aprovações: só leitura, com Aprovar / Reprovar
+  let MODO = '', cbAprov = null;
+  const travada = c => travadaReal(c) || MODO === 'aprov';
   const PAG = ['À vista', 'Antecipado (PIX)', '7 dias', '14 dias', '21 dias', '28 dias', '30 dias', '30/60 dias', '30/60/90 dias', 'Boleto 28 dias', 'Cartão'];
 
   // ---------- dados ----------
@@ -509,6 +515,8 @@
   @media (max-width:900px){ #cot-mapa .resg{grid-template-columns:1fr} }
   #cot-mapa .hist{font-size:11.5px;color:var(--ink2,#5c5c5c);max-height:160px;overflow:auto}
   #cot-mapa .trava{padding:8px 12px;border-radius:8px;background:#eef4ff;color:#1d3d7a;font-size:12.5px;margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #cot-mapa .trava.apr{background:#fff4e0;color:#7a4a00}
+  #cot-mapa .trava.rep{background:#fdecea;color:#8a1c12}
   #cot-mapa .cv-lis{padding:22px 24px 26px}
   #cot-mapa .cv-kp{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}
   #cot-mapa .cv-kp div{border:1px solid var(--line,#e8e8ea);border-radius:8px;padding:9px 12px}
@@ -726,7 +734,7 @@
         o.cnpj = fmtCnpj(o.cnpj); o.tel = fmtTel(o.tel);
         o.upd = agora();
         // o nome também muda nas cotações em aberto
-        vivos(D.cot).forEach(c => { if(travada(c)) return; c.fs.forEach(x => { if(x.id === o.id && x.nome !== o.nome){ x.nome = o.nome; c.upd = agora(); } }); });
+        vivos(D.cot).forEach(c => { if(travadaReal(c)) return; c.fs.forEach(x => { if(x.id === o.id && x.nome !== o.nome){ x.nome = o.nome; c.upd = agora(); } }); });
         salvar(); if(depois) depois(o);
       },
       f ? ['Excluir', () => { if(!confirm('Excluir "' + f.nome + '" do cadastro? As cotações em que ele aparece não mudam.')) return false; f.del = true; f.upd = agora(); salvar(); }] : null);
@@ -955,7 +963,7 @@
   function ultimoPreco(desc, menosId){
     const d = String(desc || '').trim().toLowerCase(); if(d.length < 3) return null;
     let m = null;
-    vivos(D.cot).forEach(c => { if(c.id === menosId || c.st === 'aberta' || c.st === 'cancelada' || c.st === 'aprovacao') return; const R = calcC(c);
+    vivos(D.cot).forEach(c => { if(c.id === menosId || c.st === 'aberta' || c.st === 'cancelada' || c.st === 'aprovacao' || c.st === 'reprovada') return; const R = calcC(c);
       R.itens.forEach(i => { if(String(i.desc).trim().toLowerCase() !== d) return; const fid = R.esc[i.id], f = c.fs.find(x => x.id === fid); if(!f) return;
         const p = precoN(f, i, R.escK[i.id] || 0); if(isFinite(p) && (!m || c.d > m.d)) m = {p, d: c.d, f: f.nome}; }); });
     return m;
@@ -1035,7 +1043,10 @@
     const c = D.cot.find(x => x.id === id && !x.del && !String(x.tit || '').trim() && !x.itens.length && !x.fs.length && x.hist && x.hist.length === 1);
     if(c){ c.del = true; c.upd = agora(); }
   }
-  function voltarLista(){ const id = aberta; aberta = null; limparEmBranco(id); salvar(true); abrirLista(); }
+  function voltarLista(){
+    if(MODO === 'aprov'){ const cb = cbAprov; MODO = ''; cbAprov = null; aberta = null; fecharTela(); if(cb) try{ cb(); }catch(e){} return; }
+    const id = aberta; aberta = null; limparEmBranco(id); salvar(true); abrirLista();
+  }
   function fecharMapa(){ const id = aberta; aberta = null; limparEmBranco(id); salvar(true); fecharTela(); } // usado por quem abre só o mapa
 
   // indicador "● Salvo na planilha" no topo da tela cheia
@@ -1125,8 +1136,9 @@
   // alternativas por item, rodapé com as linhas que o comprador escolher, recomendação automática (com frete)
   // ou escolha à mão pelo lápis, predefinições, itens desaprovados e comparativos no resultado.
   let ESC = false, NAO = false;   // lápis (escolher a célula que fecha) e "Desaprovar" (itens que não serão comprados)
-  function abrirMapa(id, novo){
+  function abrirMapa(id, novo, modo, cb){
     const c = achaCot(id); if(!c) return;
+    MODO = modo === 'aprov' ? 'aprov' : ''; cbAprov = MODO ? (cb || null) : null;
     mostrarM(); tela = 'mapa'; aberta = id; ESC = NAO = false;
     montarMapa(c);
     M.querySelector('.corpo').scrollTop = 0;
@@ -1142,9 +1154,12 @@
   // situações para onde a cotação pode ir agora: [situação, texto, principal, perigo]
   function transicoes(c){
     const bts = [];
+    // no módulo Aprovações: só aprovar ou reprovar
+    if(MODO === 'aprov') return c.st === 'aprovacao' ? [['aprovada', '✓ Aprovar compra', 1], ['reprovada', '✗ Reprovar', 0, 1]] : [];
+    // comprador: envia para aprovação (quem aprova é o módulo Aprovações)
     if(c.st === 'aberta') bts.push(['aprovacao', 'Enviar para aprovação', 1]);
-    if(c.st === 'aberta' || c.st === 'aprovacao') bts.push(['aprovada', '✓ Aprovar compra', c.st === 'aprovacao' ? 1 : 0]);
-    if(c.st === 'aprovacao') bts.push(['aberta', 'Voltar para cotação', 0]);
+    if(c.st === 'reprovada') bts.push(['aprovacao', 'Reenviar para aprovação', 1]);
+    if(c.st === 'aprovacao') bts.push(['aberta', 'Retirar da aprovação', 0]);
     if(c.st === 'aprovada') bts.push(['pedido', 'Marcar pedido emitido', 1]);
     if(c.st !== 'cancelada' && c.st !== 'pedido') bts.push(['cancelada', 'Cancelar cotação', 0, 1]);
     if(c.st === 'cancelada') bts.push(['aberta', 'Reativar cotação', 0]);
@@ -1194,22 +1209,26 @@
     const fs = c.fs, fc = id => achaForn(id) || {};
     M.innerHTML = `
     <div class="cv-top">
-      <button class="cv-bk" data-a="fechar" title="Voltar para a lista (Esc)">← Mapas</button>
+      <button class="cv-bk" data-a="fechar" title="${MODO === 'aprov' ? 'Voltar para Aprovações' : 'Voltar para a lista'} (Esc)">${MODO === 'aprov' ? '← Aprovações' : '← Mapas'}</button>
       <span class="cv-est" id="cv-salvo"></span>
       <span class="esp"></span>
       ${tr ? '' : '<span class="cv-edg"><span class="cv-em"><button data-em="cel">Editar</button><button data-em="nao">Desaprovar</button></span>'
         + '<button class="ic" data-a="lapis" id="cv-lapis" title="Editar a escolha: marcar à mão a célula que fecha em cada item">' + ICO.lap + '</button></span>'}
       <div class="cv-stw"><button class="cv-st" data-a="st" title="Mudar a situação">${si.n} <i style="background:${si.c}"></i></button><div class="cv-menu" hidden></div></div>
-      <button class="ic" data-a="pedir" title="Pedir cotação aos fornecedores (WhatsApp / e-mail)">${ICO.env}</button>
+      ${MODO === 'aprov' ? '' : '<button class="ic" data-a="pedir" title="Pedir cotação aos fornecedores (WhatsApp / e-mail)">' + ICO.env + '</button>'}
       <button class="ic" data-a="foto" title="Imagem para pedir orçamento (WhatsApp) e imagem do mapa">${ICO.cam}</button>
       <button class="ic" data-a="imp" title="Imprimir / salvar PDF">${ICO.imp}</button>
-      <button class="ic" data-a="dup" title="Duplicar: nova cotação com os mesmos itens, marcas e fornecedores, sem preços">${ICO.dup}</button>
-      <button class="ic dg" data-a="del" title="Excluir cotação">${ICO.del}</button>
+      ${MODO === 'aprov' ? '' : '<button class="ic" data-a="dup" title="Duplicar: nova cotação com os mesmos itens, marcas e fornecedores, sem preços">' + ICO.dup + '</button>'
+        + '<button class="ic dg" data-a="del" title="Excluir cotação">' + ICO.del + '</button>'}
       <div class="cv-mos"><span>Mostrar</span><button data-mo="u"${MOS === 'u' ? ' class="on"' : ''}>Unitário</button><button data-mo="t"${MOS === 't' ? ' class="on"' : ''}>Total</button></div>
     </div>
     <div class="corpo">
       <div class="cv-folha" id="cv-folha">
-        ${tr ? '<div class="trava">🔒 ' + (c.st === 'cancelada' ? 'Cotação cancelada.' : 'Cotação ' + si.n.toLowerCase() + (c.apr ? ' por ' + h(c.apr) + ' em ' + dataBR(c.aprd) : '') + '. O mapa está travado para edição.')
+        ${MODO === 'aprov' ? (c.st === 'aprovacao'
+            ? '<div class="trava apr">🔎 <span><b>Modo aprovação.</b> Revise o mapa' + (c.u ? ' de ' + h(c.u) : '') + ' e decida.</span><span style="margin-left:auto;display:flex;gap:6px"><button class="mini" data-a="aprovar">✓ Aprovar compra</button><button class="sec mini" data-a="reprovar" style="color:#b42318">✗ Reprovar</button></span></div>'
+            : '<div class="trava">Esta cotação não está mais aguardando aprovação (' + h(si.n.toLowerCase()) + ').</div>')
+        : c.st === 'reprovada' && c.rep ? '<div class="trava rep">✗ <span><b>Reprovada</b> por ' + h(c.rep.u || '—') + ' em ' + dataBR(c.rep.d) + (c.rep.mot ? ': ' + h(c.rep.mot) : '') + '. Ajuste o mapa e reenvie para aprovação.</span></div>'
+        : tr ? '<div class="trava">🔒 ' + (c.st === 'cancelada' ? 'Cotação cancelada.' : 'Cotação ' + si.n.toLowerCase() + (c.apr ? ' por ' + h(c.apr) + ' em ' + dataBR(c.aprd) : '') + '. O mapa está travado para edição.')
           + ' <button class="sec mini" data-a="reabrir">Reabrir para edição</button></div>' : ''}
         <div class="cv-doc">
           <div class="cv-marca"><img src="logo-bkp.png" alt="BKP"><div><b>Mapa de Cotação</b><span>BKP CONSTRUTORA</span></div></div>
@@ -1818,35 +1837,72 @@
     fl.querySelectorAll('[data-st]').forEach(b => b.onclick = () => mudarSit(c, b.dataset.st));
   }
 
-  function mudarSit(c, s){
+  // pontos de atenção antes de enviar ou aprovar
+  function problemas(c, R){
+    R = R || calc(c);
+    const prob = [];
+    if(R.pend) prob.push('falta escolher ' + R.pend + ' item(ns) pelo lápis');
+    if(R.E.falta.length) prob.push(R.E.falta.length + ' item(ns) sem fornecedor escolhido');
+    if(c.fs.length < 3) prob.push('só ' + c.fs.length + ' fornecedor(es) cotado(s) (o usual são 3)');
+    if(R.manual && R.rec && R.E.tot > R.rec.E.tot + 0.005 && !String(c.just || '').trim()) prob.push('a escolha fica ' + R$(R.E.tot - R.rec.E.tot) + ' mais cara que a recomendação automática e não há justificativa');
+    return prob;
+  }
+
+  // grava a mudança de situação (sem perguntas)
+  function aplicarSit(c, s, mot){
     const R = calc(c);
-    if(s === 'aprovacao' || s === 'aprovada'){
-      if(!R.N.length) return alert('Lance os itens antes.');
-      const prob = [];
-      if(R.pend) prob.push('falta escolher ' + R.pend + ' item(ns) pelo lápis');
-      if(R.E.falta.length) prob.push(R.E.falta.length + ' item(ns) sem fornecedor escolhido');
-      if(c.fs.length < 3) prob.push('só ' + c.fs.length + ' fornecedor(es) cotado(s) (o usual são 3)');
-      if(R.manual && R.rec && R.E.tot > R.rec.E.tot + 0.005 && !String(c.just || '').trim()) prob.push('a escolha fica ' + R$(R.E.tot - R.rec.E.tot) + ' mais cara que a recomendação automática e não há justificativa');
-      if(prob.length && !confirm('Atenção:\n• ' + prob.join('\n• ') + '\n\nContinuar mesmo assim?')) return;
-    }
-    if(s === 'cancelada' && !confirm('Cancelar a ' + numCot(c) + '?')) return;
-    if(s === 'aprovada'){ c.apr = usuario(); c.aprd = hoje(); }
+    if(s === 'aprovada'){ c.apr = usuario(); c.aprd = hoje(); c.rep = null; }
+    if(s === 'reprovada'){ c.rep = {u: usuario(), d: hoje(), mot: String(mot || '').trim()}; c.apr = ''; c.aprd = ''; }
+    if(s === 'aprovacao') c.env = {u: usuario(), q: agoraTxt()};
     if(s === 'aberta'){ c.apr = ''; c.aprd = ''; }
     if(s === 'pedido') c.pedd = hoje();
     // congela a escolha ao aprovar, para o resultado não mudar se alguém reabrir e mexer
     if(s === 'aprovada' && !R.manual){ const e = garantirEsc(c); R.N.forEach(nd => { const x = R.E.asg[nd.id]; if(x) e[nd.id] = {i: x.i.id, f: x.fid, k: x.k}; }); c.preset = 'rec'; }
-    c.st = s; ESC = NAO = false; registrar(c, (SIT[s] || {}).n + (s === 'aprovada' ? ' · ' + R$(R.E.tot) : ''));
-    mexeu(c, true); montarMapa(c);
+    c.st = s; ESC = NAO = false;
+    registrar(c, (SIT[s] || {}).n + (s === 'aprovada' ? ' · ' + R$(R.E.tot) : s === 'reprovada' && c.rep.mot ? ': ' + c.rep.mot : ''));
+    c.upd = agora(); salvar(tela === 'mapa');
+  }
+
+  // aprovar / reprovar: só pelo módulo Aprovações (modo aprovação ou botões da lista de pendentes)
+  function aprovar(c, depois){
+    if(!c || c.st !== 'aprovacao') return;
+    const prob = problemas(c);
+    if(!confirm('Aprovar a ' + numCot(c) + (c.tit ? ' – ' + c.tit : '') + '?' + (prob.length ? '\n\nAtenção:\n• ' + prob.join('\n• ') : ''))) return;
+    aplicarSit(c, 'aprovada'); if(depois) depois();
+  }
+  function reprovar(c, depois){
+    if(!c || c.st !== 'aprovacao') return;
+    modal('Reprovar ' + numCot(c), '<div class="hint" style="margin-bottom:6px">A cotação volta para o comprador' + (c.u ? ' (' + h(c.u) + ')' : '') + ' ajustar e reenviar. Diga o que precisa mudar.</div>'
+      + '<label>Motivo da reprovação</label><textarea name="mot" required placeholder="Ex.: cotar mais um fornecedor; conferir o frete do fornecedor B; quantidade de óleo acima do necessário"></textarea>',
+      d => { if(!String(d.mot || '').trim()) return false; aplicarSit(c, 'reprovada', d.mot); if(depois) depois(); }, null, 'Reprovar');
+  }
+
+  function mudarSit(c, s){
+    if(s === 'aprovada' || s === 'reprovada'){
+      if(MODO !== 'aprov') return; // o comprador só envia; aprovação é no módulo Aprovações
+      return (s === 'aprovada' ? aprovar : reprovar)(c, () => voltarLista());
+    }
+    const R = calc(c);
+    if(s === 'aprovacao'){
+      if(!R.N.length) return alert('Lance os itens antes.');
+      const prob = problemas(c, R);
+      if(prob.length && !confirm('Atenção:\n• ' + prob.join('\n• ') + '\n\nEnviar para aprovação mesmo assim?')) return;
+    }
+    if(s === 'cancelada' && !confirm('Cancelar a ' + numCot(c) + '?')) return;
+    aplicarSit(c, s);
+    montarMapa(c);
   }
 
   function acao(c, a, el){
     if(a === 'fechar') return voltarLista();
+    if(a === 'aprovar') return mudarSit(c, 'aprovada');
+    if(a === 'reprovar') return mudarSit(c, 'reprovada');
     if(a === 'st'){
       const mn = el.parentElement.querySelector('.cv-menu');
       if(!mn.hidden){ mn.hidden = true; return; }
       const bts = transicoes(c);
       mn.innerHTML = (bts.length ? bts.map(b => '<button data-st="' + b[0] + '"' + (b[3] ? ' style="color:#b42318"' : '') + '>' + b[1] + '</button>').join('') : '<div class="hint">Sem mudança possível.</div>')
-        + (travada(c) && c.st !== 'cancelada' ? '<button data-re>Reabrir para edição</button>' : '');
+        + (MODO !== 'aprov' && travadaReal(c) && c.st !== 'cancelada' ? '<button data-re>Reabrir para edição</button>' : '');
       mn.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { mn.hidden = true; mudarSit(c, b.dataset.st); });
       const re = mn.querySelector('[data-re]'); if(re) re.onclick = () => { mn.hidden = true; acao(c, 'reabrir'); };
       mn.hidden = false; return;
@@ -2228,5 +2284,8 @@ ${naoC.length ? '<div class="leg" style="color:#5c5c5c">Não serão comprados: '
   try{ if(ls.get('aba') === 'cot') trocarAba('cot'); }catch(e){}
   // posição do fornecedor no mapa (arrastada em fornecedores-mapa.js)
   const posForn = (id, lat, lng) => { const f = achaForn(id); if(!f) return; f.geo = (+lat).toFixed(6) + ',' + (+lng).toFixed(6); f.upd = agora(); salvar(); };
-  window.G360Cotacoes = {render, receber, enviar, abrir: abrirMapa, lista: abrirLista, calc, dados: () => D, numCot, nomeLocal, SIT, editarForn, posForn};
+  window.G360Cotacoes = {render, receber, enviar, abrir: abrirMapa, lista: abrirLista, calc, dados: () => D, numCot, nomeLocal, SIT, editarForn, posForn,
+    // módulo Aprovações
+    abrirAprov: (id, cb) => abrirMapa(id, false, 'aprov', cb),
+    aprovar: (id, cb) => aprovar(achaCot(id), cb), reprovar: (id, cb) => reprovar(achaCot(id), cb), problemas: id => problemas(achaCot(id))};
 })();

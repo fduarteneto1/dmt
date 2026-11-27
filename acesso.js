@@ -10,16 +10,23 @@
      Mudou uma chave: a mensagem "Baixe o usuarios.json para valer" aciona o usuarios-pend.js,
      que baixa o arquivo e avisa até ele ser publicado no GitHub.
    Carregado por index.html depois do usuarios-pend.js. Não guarda nada secreto.
+   - Módulos "liberar para usar" (OPTIN, ex.: Aprovações): ficam desligados para todo mundo, menos o
+     master, até a chavinha ser ligada. Na lista do usuário em "bloq" eles aparecem como "+apr"
+     (= liberado). Quem não tem a liberação nem carrega o aprovacoes.js (ver index.html).
    Atenção: é uma restrição da interface. Todos os usuários abrem a ferramenta com a mesma chave. */
 (function () {
   'use strict';
   var MASTER = 'bkp';
+  var OPTIN = ['apr']; // módulos que precisam ser liberados (padrão: desligado)
+  var liberado = function (lista, a) { return OPTIN.indexOf(a) >= 0 ? lista.indexOf('+' + a) >= 0 : lista.indexOf(a) < 0; };
   var $ = function (id) { return document.getElementById(id); };
   var abas = $('abas');
   if (!abas || typeof DMTC !== 'object') return;
   var SES = window.DMT_SESSAO || {};
   var eu = DMTC.norm(SES.u), master = eu === MASTER;
-  var bloq = master ? [] : (Array.isArray(SES.b) ? SES.b : []);
+  var lst = master ? [] : (Array.isArray(SES.b) ? SES.b : []);
+  var bloq = lst.filter(function (a) { return a.charAt(0) !== '+'; });
+  if (!master) OPTIN.forEach(function (a) { if (lst.indexOf('+' + a) < 0) bloq.push(a); });
   var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
   var cssId = function (s) { return String(s).replace(/[^a-z0-9_-]/gi, ''); };
 
@@ -77,11 +84,11 @@
   // ---------- 2. chavinhas na janela Usuários (só o master) ----------
   var abertos = {}, tAviso = null, mudados = {};
   var modulos = function () {
-    return botoes().map(function (b) { return { a: b.dataset.aba, nome: b.textContent.trim() }; });
+    return botoes().map(function (b) { return { a: b.dataset.aba, nome: b.dataset.nome || b.textContent.trim() }; });
   };
 
   function resumo(lista, mods) {
-    var fora = mods.filter(function (m) { return lista.indexOf(m.a) >= 0; });
+    var fora = mods.filter(function (m) { return !liberado(lista, m.a); });
     if (!fora.length) return 'todos os módulos';
     if (fora.length === mods.length) return '<b>nenhum módulo</b>';
     return 'sem <b>' + fora.map(function (m) { return esc(m.nome); }).join(', ') + '</b>';
@@ -121,7 +128,7 @@
       box.className = 'g360-ac' + (abertos[id] ? ' aberto' : '');
       box.innerHTML = '<div class="g360-ac-res" role="button" tabindex="0"><span class="sv">▶</span>Acesso: <span class="txt">' + resumo(lista, mods) + '</span></div>' +
         '<div class="g360-ac-grid">' + mods.map(function (m) {
-          var on = lista.indexOf(m.a) < 0;
+          var on = liberado(lista, m.a);
           return '<label class="g360-sw' + (on ? '' : ' off') + '"><input type="checkbox" role="switch" data-mod="' + esc(m.a) + '"' + (on ? ' checked' : '') + '><i></i><span>' + esc(m.nome) + '</span></label>';
         }).join('') + '</div>';
       var res = box.querySelector('.g360-ac-res');
@@ -132,8 +139,9 @@
         inp.onchange = function () {
           var a = inp.dataset.mod;
           d.bloq = d.bloq || {};
-          var l = (d.bloq[id] || []).filter(function (x) { return x !== a; });
-          if (!inp.checked) l.push(a);
+          var op = OPTIN.indexOf(a) >= 0;
+          var l = (d.bloq[id] || []).filter(function (x) { return x !== a && x !== '+' + a; });
+          if (op ? inp.checked : !inp.checked) l.push(op ? '+' + a : a);
           l.sort();
           if (l.length) d.bloq[id] = l; else delete d.bloq[id];
           if (!Object.keys(d.bloq).length) delete d.bloq;

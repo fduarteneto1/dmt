@@ -267,7 +267,7 @@ function gravarCotacoes(ss, d) {
   return { ok: true };
 }
 function tabelasCotacoes(ss, d) {
-  var SIT = { aberta: 'Em cotação', aprovacao: 'Aguardando aprovação', aprovada: 'Aprovada', pedido: 'Pedido emitido', cancelada: 'Cancelada' };
+  var SIT = { aberta: 'Em cotação', aprovacao: 'Aguardando aprovação', reprovada: 'Reprovada', aprovada: 'Aprovada', pedido: 'Pedido emitido', cancelada: 'Cancelada' };
   var dt = function (s) { s = String(s || ''); if (s.length < 10) return ''; var p = s.slice(0, 10).split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); };
   var nr = function (c) { return 'COT-' + c.ano + '-' + ('00' + c.n).slice(-3); };
   var lin = [['Nº', 'Data', 'Título', 'Obra', 'Solicitante', 'Comprador', 'Situação', 'Itens', 'Fornecedores', 'Fornecedor(es) escolhido(s)', 'Total escolhido', 'Aprovado por', 'Aprovado em']];
