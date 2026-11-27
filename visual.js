@@ -48,8 +48,8 @@
     'html.tema-escuro button.mini,html.tema-escuro .sessao-b{background:var(--card);border-color:var(--line)}' +
     'html.tema-escuro table,html.tema-escuro th,html.tema-escuro td{border-color:var(--line)}' +
     'html.tema-escuro th{background:var(--head)}' +
-    /* logo tem letras pretas: ganha um fundo claro no modo escuro */
-    'html.tema-escuro img.logo-bkp{background:#f3f3f1;border-radius:6px;padding:3px 5px}' +
+    /* no modo escuro as logos da tela trocam para a versão de letras brancas (logo-bkp-escuro.png) */
+    '@media print{img[data-logo-orig]{content:url(logo-bkp.png)}}' +
     /* mapa: escurece os blocos do OpenStreetMap sem mexer nos marcadores */
     'html.tema-escuro .leaflet-container{background:#1b1f25}' +
     'html.tema-escuro .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.92) contrast(.9)}' +
@@ -133,9 +133,28 @@
     document.head.appendChild(el);
   }
 
+  /* Troca a logo pela versão de letras brancas no modo escuro (e volta no claro) */
+  var LOGO_CLARO = /(^|\/)logo-bkp\.png(\?.*)?$/;
+  function trocarLogos(escuro) {
+    var imgs = document.querySelectorAll('img');
+    for (var i = 0; i < imgs.length; i++) {
+      var im = imgs[i];
+      if (escuro) {
+        var src = im.getAttribute('src') || '';
+        if (im.dataset.logoOrig === undefined && LOGO_CLARO.test(src)) {
+          im.dataset.logoOrig = src;
+          im.setAttribute('src', src.replace(/logo-bkp\.png/, 'logo-bkp-escuro.png'));
+        }
+      } else if (im.dataset.logoOrig !== undefined) {
+        im.setAttribute('src', im.dataset.logoOrig); delete im.dataset.logoOrig;
+      }
+    }
+  }
+
   /* Corrige elementos com fundo branco fixo no código (style="background:#fff") */
   function ajustarFundosFixos() {
     var escuro = document.documentElement.classList.contains('tema-escuro');
+    trocarLogos(escuro);
     if (escuro) gerarCssEscuro();
     var els = document.querySelectorAll('[style]');
     for (var i = 0; i < els.length; i++) {
@@ -265,6 +284,7 @@
 
   function iniciar() {
     injetarCss();
+    trocarLogos(document.documentElement.classList.contains('tema-escuro'));
     if (montar()) return;
     /* A barra só aparece depois do login: observa até ela surgir */
     var obs = new MutationObserver(function () { if (montar()) obs.disconnect(); });
