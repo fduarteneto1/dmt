@@ -153,7 +153,7 @@ No mapa de cotação, "+ Adicionar fornecedor" virou uma caixa de busca: digite 
 **Chave do Google:** Fornecedores › ⚙ Busca no Google. A chave fica na planilha (aba G360Cotacoes) e vale para todos. No Google Cloud: ative **Places API (New)**, crie a chave e restrinja a `https://fduarteneto1.github.io/*` e à Places API (New). Sem chave, funcionam só os cadastrados e o CNPJ.
 
 ## RH (aba RH)
-Recursos humanos da BKP: cadastro de colaboradores e ex-colaboradores, turnover e férias. O código está em `rh.js`, carregado pelo `index.html` como os outros módulos, sem nada secreto (os dados ficam na planilha).
+Recursos humanos da BKP: cadastro de colaboradores e ex-colaboradores, turnover, férias e ocorrências (cartas de advertência). O código está em `rh.js`, carregado pelo `index.html` como os outros módulos, sem nada secreto (os dados ficam na planilha).
 - **Painel lateral:** no quadro hoje, turnover do ano, férias vencidas e quem está de férias; **Próximas ações** (férias vencidas, fim do 1º período e da experiência de 45 + 45 dias, avisos de férias, férias a lançar) e **Próximas saídas**. **▦ Abrir RH** abre a tela cheia (Esc ou **← Gestão 360º** volta).
 - **Visão geral (turnover):** as mesmas fórmulas do painel "visão geral" da planilha de RH: no quadro hoje, admissões e desligamentos no ano, turnover acumulado e médio mensal, taxa de desligamento, retenção no ano e dos admitidos, desligados na experiência, pedidos de demissão, tempo médio de casa e até o desligamento; gráficos de movimentação e turnover por mês, tabela mês a mês, desligamentos por tipo, tempo de casa, ativos por alocação, iniciativa e setor. Escolha no topo o ano analisado e, se quiser, um mês: com um mês escolhido, os indicadores e os quadros de desligamentos mostram só aquele mês, e os gráficos e a tabela do ano destacam o mês.
 - **Colaboradores:** ativos, ex-colaboradores, admitidos e desligados no ano, pendências. **+ Admitir colaborador**, **Desligar** (data, tipo, observação; cancela férias futuras) e **Readmitir**. A ficha mostra o cadastro e as férias de cada período. Quem está na experiência aparece como "dia X de 90".
@@ -163,11 +163,20 @@ Recursos humanos da BKP: cadastro de colaboradores e ex-colaboradores, turnover 
 - **Regras conferidas ao lançar:** mínimo de 5 dias, até 3 períodos com um de 14 ou mais (art. 134 §1º), não começar nos 2 dias antes de feriado ou domingo (art. 134 §3º; feriados nacionais e os da aba Diárias), abono até 1/3 (art. 143), fim dentro do concessivo (art. 137), aviso de 30 dias (art. 135), afastamento acima de 6 meses (art. 133). Mostra fim, retorno, prazo do aviso, pagamento (art. 145) e custo (salário ÷ 30 × dias + 1/3).
 - **Ajustes:** prazos dos níveis, aviso, % máximo da equipe fora, quem vê o módulo (restrição de tela) e, opcional, conferir com o PDF da contabilidade ou atualizar salários por planilha.
 
+### Ocorrências (cartas de advertência)
+Aba **Ocorrências** na tela cheia do RH, **+ Ocorrência** no painel lateral e na ficha do colaborador.
+- **Nova ocorrência:** marque um ou mais colaboradores (busca por nome/função e filtro por obra; a obra vem da alocação de cada um), escolha a data, o enquadramento do art. 482 da CLT (uma ou mais alíneas) e descreva o ocorrido. A descrição completa a frase padrão do modelo ("O colaborador acima citado … ocupando o cargo de {cargo} … no entanto o mesmo …").
+- **Cartas:** uma página A4 por colaborador, igual à 1ª página do modelo da BKP (cabeçalho, 1ª/2ª/3ª advertência, descrição, local e data, assinatura do empregador, "Ciente" e o art. 482 transcrito). Abre a janela de impressão (imprimir ou salvar em PDF).
+- **Sequência:** a advertência (1ª, 2ª, 3ª) é sugerida pelo histórico de cada colaborador e pode ser trocada; cargo e local da carta também (o local padrão é a cidade da obra, ou Cuiabá-MT para a sede).
+- **Assinatura:** ao editar a ocorrência, marque "assinada" quando a via voltar assinada. **Só registrar** guarda o fato sem gerar carta e sem contar na sequência.
+- **Tela:** indicadores do ano, histórico com busca/filtro, reincidentes dos últimos 12 meses e advertências por obra e por motivo; **CSV** exporta uma linha por colaborador.
+- Os dados vão junto com o RH na aba **G360RH** (lista `oc`), sem mudança no Apps Script.
+
 ### Onde ficam os dados
 - Na aba oculta **G360RH** da planilha (JSON em pedaços, como as diárias). A cada gravação são refeitas, só para consulta, as abas **RH – Colaboradores**, **Férias – Períodos** e **Férias – Programação** (sem salários). Se dois computadores mexerem ao mesmo tempo, vale a alteração mais recente de cada pessoa e de cada férias.
 - O Apps Script precisa das ações `lerRH` e `gravarRH` (em `tools/planilha-emulsao.gs`); publique em **Implantar → Gerenciar implantações → editar → Nova versão**.
 - **Carga inicial:** o cadastro (planilha de RH "Nova.xlsx": quadro com ativos e desligados, salários) e as férias da contabilidade foram carregados direto na planilha Google, nunca no GitHub. `G360RH.semear(dados)` só carrega quando ainda não há dados.
-- **Para voltar à versão sem o RH:** apague `<script src="rh.js?v=2"><\/script>` do `index.html`.
+- **Para voltar à versão sem o RH:** apague `<script src="rh.js?v=4"><\/script>` do `index.html`.
 
 ## Fornecedores no mapa
 Os fornecedores cadastrados em **Cotações › Fornecedores** aparecem no mapa como um quadrado verde-petróleo com "F". O código está em `fornecedores-mapa.js`, carregado pelo `index.html` depois do `pedagios.js`, sem nada secreto.

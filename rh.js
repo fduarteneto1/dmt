@@ -1,4 +1,4 @@
-// Módulo RH do Gestão 360º BKP — Gestão de Férias.
+// Módulo RH do Gestão 360º BKP — colaboradores, turnover, férias e ocorrências (cartas de advertência).
 // Carregado por index.html depois do app (como diarias.js). Não guarda nada secreto: os dados
 // ficam na aba oculta "G360RH" da planilha Google (e nas abas legíveis "Férias – Períodos" e
 // "Férias – Programação"), lidos e gravados pela mesma ligação da aba Emulsão (txApi).
@@ -57,7 +57,7 @@
 
   // ---------- dados ----------
   const CFG0 = () => ({crit: 60, alto: 120, medio: 240, aviso: 30, maxAus: 30, acesso: [], upd: 0});
-  const VAZIO = () => ({v: 2, cfg: CFG0(), pes: [], gozos: [], imp: null, semeado: null});
+  const VAZIO = () => ({v: 2, cfg: CFG0(), pes: [], gozos: [], oc: [], imp: null, semeado: null});
   let D = VAZIO();
   try{ const v = JSON.parse(lsGet(KEY) || 'null'); if(v && Array.isArray(v.pes)) D = Object.assign(VAZIO(), v, {cfg: Object.assign(CFG0(), v.cfg)}); }catch(e){}
   let timer = null, ultimaLeitura = 0, estado = {t: '', err: false};
@@ -563,7 +563,7 @@
   function juntar(a, b){
     const r = VAZIO();
     r.cfg = Object.assign(CFG0(), (b.cfg && (b.cfg.upd || 0) > ((a.cfg && a.cfg.upd) || 0)) ? b.cfg : (a.cfg || {}));
-    r.pes = lista(a.pes, b.pes); r.gozos = lista(a.gozos, b.gozos);
+    r.pes = lista(a.pes, b.pes); r.gozos = lista(a.gozos, b.gozos); r.oc = lista(a.oc, b.oc);
     r.imp = [a.imp, b.imp].filter(Boolean).sort((x, y) => (y.quando || 0) - (x.quando || 0))[0] || null;
     r.semeado = a.semeado || b.semeado || null;
     return r;
@@ -868,7 +868,7 @@
         <button class="rh-kp" data-go="painel"><small><i style="background:${NIV.venc.c}"></i>Férias vencidas</small><b>${k.venc.length}</b><span>${k.crit.length} crítica(s) · ${k.avisos.length} aviso(s) a emitir</span></button>
         <button class="rh-kp" data-go="cronograma"><small>De férias hoje</small><b>${k.fora.length}</b><span>${proxS.filter(g => g.ini > ref).length} saída(s) nos próximos 60 dias</span></button>
       </div>
-      <div class="rh-bts"><button id="rh-a-abr">▦ Abrir RH</button><button class="sec" id="rh-a-prog">+ Lançar férias</button><button class="sec" id="rh-a-adm">+ Admitir</button></div>
+      <div class="rh-bts"><button id="rh-a-abr">▦ Abrir RH</button><button class="sec" id="rh-a-prog">+ Lançar férias</button><button class="sec" id="rh-a-adm">+ Admitir</button><button class="sec" id="rh-a-oc">+ Ocorrência</button></div>
       <div style="margin-top:10px"><span class="rh-est"></span></div>
     </div>
     <div class="card"><h2>Próximas ações</h2>
@@ -886,6 +886,7 @@
     $('rh-a-abr').onclick = () => abrirTela();
     $('rh-a-prog').onclick = () => janelaProgramar({});
     $('rh-a-adm').onclick = () => janelaCadastro(null);
+    $('rh-a-oc').onclick = () => janelaOcorrencia(null);
     aba.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { if(b.dataset.lista) filtro.lista = b.dataset.lista; abrirTela(b.dataset.go); });
     aba.querySelectorAll('li[data-pid]').forEach(li => li.onclick = () => janelaFicha(li.dataset.pid));
     aviso(estado.t || 'Sincronizando…', estado.err);
@@ -893,7 +894,7 @@
 
   // ---------- tela cheia ----------
   let tela = null, sub = lsGet(SUBK) || 'geral', filtro = {obra: '', busca: '', niv: '', sit: 'ativas', lista: 'ativos'};
-  const VIEWS = [['geral', 'Visão geral'], ['colaboradores', 'Colaboradores'], ['painel', 'Férias'], ['cronograma', 'Cronograma de férias'], ['programacao', 'Lançamentos de férias'], ['ajustes', 'Ajustes']];
+  const VIEWS = [['geral', 'Visão geral'], ['colaboradores', 'Colaboradores'], ['painel', 'Férias'], ['cronograma', 'Cronograma de férias'], ['programacao', 'Lançamentos de férias'], ['ocorrencias', 'Ocorrências'], ['ajustes', 'Ajustes']];
   function abrirTela(v){
     if(v) sub = v;
     lsSet(SUBK, sub);
@@ -926,7 +927,7 @@
     const sc = tela.querySelector('.rt-corpo').scrollTop;
     if(!VIEWS.some(v => v[0] === sub)) sub = 'geral';
     if(!vivos(D.pes).length && sub !== 'ajustes') sub = 'ajustes';
-    ({geral: vGeral, painel: vPainel, colaboradores: vColab, cronograma: vCrono, programacao: vProg, ajustes: vAjustes})[sub](el, ref);
+    ({geral: vGeral, painel: vPainel, colaboradores: vColab, cronograma: vCrono, programacao: vProg, ocorrencias: vOcorr, ajustes: vAjustes})[sub](el, ref);
     tela.querySelector('.rt-corpo').scrollTop = sc;
     aviso(estado.t || '', estado.err);
   }
@@ -1461,7 +1462,8 @@
       ${pend.length ? `<ul class="rh-msg">${pend.map(t => `<li class="alerta">${h(t)}</li>`).join('')}</ul>` : ''}
       <div class="rs" style="grid-template-columns:repeat(4,1fr)"><div><small>Setor</small><b>${h(p.setor ? (p.setor === 'SEDE' ? 'Sede' : 'Obra') : '—')}</b></div><div><small>Registrado</small><b>${h(p.reg || '—')}</b></div><div><small>Salário</small><b>${p.sal ? R$(p.sal) : '—'}</b></div><div><small>${des ? 'Desligamento' : 'Ligado à aba Colaboradores'}</small><b>${des ? br(p.dem) : c ? h(titulo(c.nome).split(' ')[0]) + ' · ' + h(cod(c.obra)) : 'não'}</b></div></div>
       ${des ? `<div class="rs" style="grid-template-columns:2fr 1fr 1fr"><div><small>Tipo</small><b>${h(titulo(p.tipoDem || 'não informado'))}</b></div><div><small>Iniciativa</small><b>${h(titulo(iniciativa(p.tipoDem)))}</b></div><div><small>Tempo até sair</small><b>${p.adm && p.dem ? dif(p.adm, p.dem) + ' dias' : '—'}</b></div></div>${p.obsDem || p.obs ? `<div class="hint" style="margin-top:6px">${h(p.obsDem || p.obs)}</div>` : ''}` : ''}
-      <div class="mf" style="justify-content:flex-start;margin-top:12px"><button class="sec" id="fi-ed">Editar cadastro</button>${des ? '<button class="sec" id="fi-re">Readmitir</button>' : `<button class="sec" id="fi-de">Desligar</button><button id="fi-lf">+ Lançar férias</button>`}</div>
+      <div class="mf" style="justify-content:flex-start;margin-top:12px"><button class="sec" id="fi-ed">Editar cadastro</button>${des ? '<button class="sec" id="fi-re">Readmitir</button>' : `<button class="sec" id="fi-de">Desligar</button><button class="sec" id="fi-oc">+ Ocorrência</button><button id="fi-lf">+ Lançar férias</button>`}</div>
+      ${ocFicha(p)}
       ${des ? '' : `<h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3,#8e8e8e);margin:18px 0 0">Férias</h3>
       ${pers.length ? pers.map(x => `<div class="rh-per"><div class="ph"><b>Aquisitivo ${br(x.per.ini)} a ${br(x.per.fim)}</b>${badge(x.niv)}${x.perdeDireito ? '<span class="rh-bd" style="background:#1f1f1f;color:#fff">afastamento &gt; 6 meses</span>' : ''}<span class="mut" style="font-size:11px">${x.per.gerado ? 'calculado pela admissão' : 'contabilidade em ' + br(x.per.base)}</span><span class="esp" style="flex:1"></span>${x.saldo > 0 && !x.aberto ? `<button class="mini" data-prog="${h(p.id)}|${h(x.per.ini)}">Lançar férias</button>` : ''}</div>
         ${tlp(x)}
@@ -1477,6 +1479,9 @@
     if($('fi-de')) $('fi-de').onclick = () => janelaDesligar(p.id);
     if($('fi-re')) $('fi-re').onclick = () => reativar(p.id);
     if($('fi-lf')) $('fi-lf').onclick = () => janelaProgramar({pid: p.id});
+    if($('fi-oc')) $('fi-oc').onclick = () => janelaOcorrencia(null, {pid: p.id});
+    mw.querySelectorAll('[data-occ]').forEach(b => b.onclick = () => { const [oid, pid2] = b.dataset.occ.split('|'); const o = D.oc.find(x => x.id === oid); if(o) cartas(o, [pid2]); });
+    mw.querySelectorAll('[data-oce]').forEach(b => b.onclick = () => janelaOcorrencia(b.dataset.oce));
     mw.querySelectorAll('.fi-falt').forEach(i => i.onchange = () => { p.perAj = p.perAj || {}; p.perAj[i.dataset.ini] = Object.assign({}, p.perAj[i.dataset.ini], {faltas: Math.max(0, Math.round(num(i.value)))}); p.upd = agora(); salvar(); janelaFicha(p.id); });
     mw.querySelectorAll('[data-prog]').forEach(b => b.onclick = () => { const [a, per] = b.dataset.prog.split('|'); janelaProgramar({pid: a, per}); });
     mw.querySelectorAll('[data-gz]').forEach(b => b.onclick = () => { const g = D.gozos.find(x => x.id === b.dataset.gz); if(g) janelaProgramar(g); });
@@ -1664,6 +1669,288 @@
     if(g.st !== 'aviso'){ g.st = 'aviso'; g.avisoEm = hoje(); g.upd = agora(); g.u = usuario(); salvar(); }
   }
 
+  // ---------- ocorrências e advertências ----------
+  // Ocorrência: {id, data (do fato), emissao (data da carta), medida ('adv' = advertência escrita, 'reg' = só registro),
+  //   letras (alíneas do art. 482 da CLT), desc (o ocorrido), itens: [{pid, nome, cargo, obra, local, grau (1–3), ass}],
+  //   u, criado, upd, del}. Sincroniza com a planilha junto com o RH (lista "oc").
+  const ART482 = [
+    ['a', 'Ato de improbidade; (desonestidade, fraude, mau caráter)', 'Improbidade'],
+    ['b', 'Incontinência de conduta ou mau procedimento; (conduta incabível)', 'Mau procedimento'],
+    ['c', 'Negociação habitual por conta própria ou alheia sem permissão do empregador, quando constituir ato de concorrência á empresa para a qual trabalha o empregado, ou for prejudicial ao serviço;', 'Negociação habitual'],
+    ['d', 'Condenação criminal do empregado, passada em julgado, caso não tenha havido suspensão da execução da pena;', 'Condenação criminal'],
+    ['e', 'Desídia no desempenho das respectivas funções;', 'Desídia'],
+    ['f', 'Embriaguez habitual ou em serviço;', 'Embriaguez'],
+    ['g', 'Violação de segredo da empresa;', 'Violação de segredo'],
+    ['h', 'Ato de indisciplina ou de insubordinação;', 'Indisciplina ou insubordinação'],
+    ['i', 'Abandono de emprego;', 'Abandono de emprego'],
+    ['j', 'Ato lesivo da honra ou da boa fama praticado no serviço contra qualquer pessoa, ou ofensas físicas, nas mesmas condições, salvo em caso de legitima defesa, própria ou de outrem;', 'Ofensa a qualquer pessoa'],
+    ['k', 'Ato lesivo da honra ou da boa fama ou ofensas físicas praticadas contra o empregador e superiores hierárquicos, salvo em caso de legitima defesa, própria ou de outrem;', 'Ofensa a superiores'],
+    ['l', 'Prática constante de jogos de azar.', 'Jogos de azar']];
+  const ocs = () => vivos(D.oc);
+  const dataExt = s => { const d = P(s); return d.getDate() + ' de ' + MESL[d.getMonth()] + ' de ' + d.getFullYear(); };
+  const letrasTxt = l => { l = (l || []).slice().sort(); const q = l.map(x => '“' + x + '”'); return l.length > 1 ? 'das letras ' + q.slice(0, -1).join(', ') + ' e ' + q[q.length - 1] : 'da letra ' + (q[0] || '“e”'); };
+  const motivo = l => (l || []).slice().sort().map(x => (ART482.find(a => a[0] === x) || [x, '', x])[2]).join(' · ');
+  const GRAU = g => (+g || 1) + 'ª';
+  // texto fixo do modelo; o que a RH escreve completa a frase "no entanto o mesmo …"
+  const INTRO = cargo => 'O colaborador acima citado faz parte do quadro de funcionários desta empresa ocupando o cargo de ' + (cargo || '________') + ' e tem conhecimento da importância de sua função para o bom desempenho das atividades no entanto o mesmo';
+  const fimPonto = t => { t = String(t || '').trim().replace(/\s+/g, ' '); return t && !/[.!?]$/.test(t) ? t + '.' : t; };
+  function localDe(o){
+    if(!o || o === 'ADM') return EMPRESA.cidade;
+    try{ const x = (st.obras || []).find(y => cod(y.codigo) === o); if(x) return String(x.local || x.nome || o); }catch(e){}
+    return o;
+  }
+  // advertências escritas da pessoa (mais recente primeiro)
+  const advDe = (pid, exceto) => ocs().filter(o => o.medida !== 'reg' && o.id !== exceto).flatMap(o => o.itens.filter(i => i.pid === pid).map(i => ({o, i}))).sort((a, b) => b.o.data.localeCompare(a.o.data));
+  const ocDe = pid => ocs().filter(o => o.itens.some(i => i.pid === pid)).sort((a, b) => b.data.localeCompare(a.data));
+  const grauSug = (pid, data, exceto) => Math.min(3, advDe(pid, exceto).filter(x => x.o.data <= data).length + 1);
+  const assBadge = (i, o) => o.medida === 'reg' ? '<span class="rh-bd" style="background:#eee;color:#555">registro</span>' : i.ass ? '<span class="rh-bd" style="background:#e7f6ea;color:#14602a">assinada</span>' : '<span class="rh-bd" style="background:#fff5dc;color:#7a5200">a assinar</span>';
+  const grauBadge = g => `<span class="rh-bd" style="background:${['#fff5dc', '#fde4cf', '#fdecec'][(+g || 1) - 1]};color:${['#7a5200', '#8a3c0a', '#8f1c1c'][(+g || 1) - 1]}">${GRAU(g)} adv.</span>`;
+
+  const cssOc = document.createElement('style');
+  cssOc.textContent = `
+  #rh-modal .oc-g{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:16px;margin-top:10px}
+  @media (max-width:760px){#rh-modal .oc-g{grid-template-columns:1fr}}
+  #rh-modal .oc-h{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3,#8e8e8e);margin:0 0 6px}
+  #rh-modal .oc-f{display:flex;gap:6px;margin-bottom:6px} #rh-modal .oc-f input{flex:1} #rh-modal .oc-f select{width:auto;max-width:45%}
+  #rh-modal .oc-l{border:1px solid var(--line,#e8e8ea);border-radius:10px;max-height:300px;overflow:auto}
+  #rh-modal .oc-p{display:flex;align-items:center;gap:9px;padding:7px 10px;border-bottom:1px solid var(--line,#e8e8ea);cursor:pointer;font-weight:400;margin:0;text-transform:none;letter-spacing:0;color:var(--ink,#232323);font-size:12.5px}
+  #rh-modal .oc-p:last-child{border-bottom:0} #rh-modal .oc-p:hover{background:var(--head,#f6f6f7)} #rh-modal .oc-p.on{background:rgba(192,86,33,.07)}
+  #rh-modal .oc-p input{width:auto!important;margin:0} #rh-modal .oc-p .nm{flex:1;min-width:0} #rh-modal .oc-p b{display:block;font-weight:600;font-size:12.5px}
+  #rh-modal .oc-p small{display:block;color:var(--ink3,#8e8e8e);font-size:11px}
+  #rh-modal .oc-let{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+  #rh-modal .oc-let button{padding:4px 9px;font-size:11.5px;border-radius:14px;background:var(--card,#fff);color:var(--ink,#232323);border:1px solid var(--line,#e8e8ea);font-weight:400}
+  #rh-modal .oc-let button.on{background:#C05621;border-color:#C05621;color:#fff}
+  #rh-modal .oc-intro{font-size:12px;color:var(--ink2,#5c5c5c);background:var(--head,#f6f6f7);border-radius:8px 8px 0 0;padding:8px 11px;border:1px solid var(--line,#e8e8ea);border-bottom:0;margin-top:4px}
+  #rh-modal .oc-intro+textarea{border-radius:0 0 8px 8px;min-height:96px}
+  #rh-modal table.oc-t{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
+  #rh-modal table.oc-t th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3,#8e8e8e);text-align:left;padding:4px 5px;border-bottom:1px solid var(--line,#e8e8ea)}
+  #rh-modal table.oc-t td{padding:5px;border-bottom:1px solid var(--line,#e8e8ea);vertical-align:middle}
+  #rh-modal table.oc-t input,#rh-modal table.oc-t select{padding:4px 7px;font-size:12px}
+  #rh-modal .oc-prev{font-size:12px;line-height:1.5;border:1px dashed var(--line,#d0d0d0);border-radius:8px;padding:10px 12px;margin-top:10px;color:var(--ink,#232323)}
+  #rh-modal .oc-prev b{font-weight:700}
+  #rh-tela .oc-ds{max-width:340px;font-size:11.5px;color:var(--ink2,#5c5c5c);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  #rh-tela .oc-ps{display:flex;flex-direction:column;gap:3px}
+  #rh-tela .oc-ps div{display:flex;gap:6px;align-items:center;flex-wrap:wrap}`;
+  document.head.appendChild(cssOc);
+
+  function janelaOcorrencia(id, pre){
+    const o0 = id ? D.oc.find(x => x.id === id) : null;
+    const S = o0 ? JSON.parse(JSON.stringify(o0)) : {id: '', data: hoje(), emissao: hoje(), medida: 'adv', letras: ['e'], desc: '', itens: []};
+    const novoItem = pid => { const p = pessoa(pid), ob = obraDe(p); return {pid, nome: p.nome, cargo: funcaoDe(p), obra: ob, local: localDe(ob), grau: grauSug(pid, S.data, S.id), ass: false}; };
+    if(!o0 && pre && pre.pid && pessoa(pre.pid)) S.itens.push(novoItem(pre.pid));
+    let fq = '', fo = '';
+    modal(`<div class="mh"><div><h2>${o0 ? 'Editar ocorrência' : 'Nova ocorrência'}</h2><small>Selecione um ou mais colaboradores, descreva o ocorrido e gere a carta de advertência de cada um.</small></div><div class="esp"></div><button class="x" data-x>×</button></div>
+      <div class="oc-g">
+        <div><p class="oc-h">1 · Colaboradores</p>
+          <div class="oc-f"><input type="search" id="oc-q" placeholder="Buscar nome ou função"><select id="oc-o"><option value="">Todas as obras</option>${locais().map(l => `<option value="${h(l.cod)}">${h(l.cod === 'ADM' ? 'Sede (ADM)' : l.cod)}</option>`).join('')}<option value="-">Sem alocação</option></select></div>
+          <div class="oc-l" id="oc-l"></div>
+          <div class="oc-f" style="margin-top:6px;align-items:center"><button class="sec mini" id="oc-tds">Marcar todos da lista</button><button class="sec mini" id="oc-lp">Limpar</button><span class="mut" id="oc-n" style="margin-left:auto;font-size:11.5px"></span></div>
+        </div>
+        <div><p class="oc-h">2 · O ocorrido</p>
+          <div class="f3" style="grid-template-columns:1fr 1fr 1.3fr"><label>Data do ocorrido<input type="date" id="oc-d" value="${h(S.data)}"></label><label>Data da carta<input type="date" id="oc-e" value="${h(S.emissao)}"></label>
+            <label>Medida<select id="oc-m"><option value="adv"${S.medida !== 'reg' ? ' selected' : ''}>Advertência escrita</option><option value="reg"${S.medida === 'reg' ? ' selected' : ''}>Só registrar (sem carta)</option></select></label></div>
+          <label style="margin-top:8px">Enquadramento (art. 482 da CLT)</label>
+          <div class="oc-let" id="oc-let">${ART482.map(a => `<button type="button" data-l="${a[0]}" title="${h(a[1])}">${a[0]}) ${h(a[2])}</button>`).join('')}</div>
+          <label style="margin-top:10px">Descrição do ocorrido</label>
+          <div class="oc-intro">${h(INTRO('[cargo do colaborador]'))} …</div>
+          <textarea id="oc-ds" placeholder="ex.: faltou na data de hoje 29/05/2026 ao trabalho pela segunda vez consecutiva sem dar nenhuma justificativa para o fato, configurando assim desídia e insubordinação.">${h(S.desc)}</textarea>
+        </div>
+      </div>
+      <p class="oc-h" style="margin-top:16px">3 · Cartas</p>
+      <div id="oc-sel"></div>
+      <div class="oc-prev" id="oc-prev"></div>
+      <div class="mf">${o0 ? '<button class="sec" id="oc-del" style="color:#b42318">Excluir</button><span class="esp"></span>' : ''}<button class="sec" data-x>Cancelar</button><button class="sec" id="oc-sv">Salvar</button><button id="oc-ger">Salvar e gerar cartas</button></div>`, true);
+    const mw = $('rh-modal');
+    const sel = pid => S.itens.some(i => i.pid === pid);
+    const visiveis = () => {
+      const q = norm(fq), ids = new Set(pesAtivas().map(p => p.id).concat(S.itens.map(i => i.pid)));
+      return Array.from(ids).map(pessoa).filter(Boolean)
+        .filter(p => !fo || (fo === '-' ? !obraDe(p) : obraDe(p) === fo))
+        .filter(p => !q || norm(p.nome).includes(q) || norm(funcaoDe(p)).includes(q))
+        .sort((a, b) => (sel(b.id) - sel(a.id)) || a.nome.localeCompare(b.nome));
+    };
+    function rLista(){
+      const l = visiveis();
+      $('oc-l').innerHTML = l.length ? l.map(p => { const n = advDe(p.id, S.id).length; return `<label class="oc-p${sel(p.id) ? ' on' : ''}"><input type="checkbox" data-pid="${h(p.id)}"${sel(p.id) ? ' checked' : ''}><div class="nm"><b>${h(titulo(p.nome))}</b><small>${h(funcaoDe(p).toLowerCase() || 'função não informada')} · ${h(obraDe(p) || 'sem obra')}${desligado(p) ? ' · desligado' : ''}</small></div>${n ? `<span class="rh-bd" style="background:#fdecec;color:#8f1c1c" title="Advertências anteriores">${n} adv.</span>` : ''}</label>`; }).join('') : '<div class="mut" style="padding:14px;text-align:center">Ninguém encontrado.</div>';
+      $('oc-n').textContent = S.itens.length ? S.itens.length + ' selecionado(s)' : '';
+      $('oc-l').querySelectorAll('input[data-pid]').forEach(c => c.onchange = () => {
+        if(c.checked){ if(!sel(c.dataset.pid)) S.itens.push(novoItem(c.dataset.pid)); } else S.itens = S.itens.filter(i => i.pid !== c.dataset.pid);
+        c.closest('.oc-p').classList.toggle('on', c.checked); $('oc-n').textContent = S.itens.length ? S.itens.length + ' selecionado(s)' : ''; rSel();
+      });
+    }
+    function rSel(){
+      const adv = S.medida !== 'reg';
+      $('oc-sel').innerHTML = S.itens.length ? `<div class="tw" style="overflow:auto"><table class="oc-t"><thead><tr><th>Colaborador</th><th>Obra</th><th>Cargo na carta</th>${adv ? '<th>Local na carta</th><th>Advertência</th>' + (o0 ? '<th>Assinada</th>' : '') : ''}<th></th></tr></thead><tbody>
+        ${S.itens.map((i, k) => { const ant = advDe(i.pid, S.id); return `<tr><td><b style="font-weight:600">${h(titulo(i.nome))}</b>${ant.length ? `<br><small class="mut" style="font-size:10.5px">já tem ${ant.length}: ${ant.slice(0, 3).map(x => GRAU(x.i.grau) + ' em ' + brc(x.o.data)).join(', ')}</small>` : ''}</td>
+          <td><span class="cod" style="font-size:10.5px;font-weight:700;border:1px solid var(--line,#e8e8ea);border-radius:5px;padding:0 6px">${h(i.obra || '—')}</span></td>
+          <td><input data-k="${k}" data-c="cargo" value="${h(i.cargo)}" style="min-width:120px"></td>
+          ${adv ? `<td><input data-k="${k}" data-c="local" value="${h(i.local)}" style="min-width:120px"></td><td><select data-k="${k}" data-c="grau">${[1, 2, 3].map(g => `<option value="${g}"${+i.grau === g ? ' selected' : ''}>${g}ª</option>`).join('')}</select></td>${o0 ? `<td style="text-align:center"><input type="checkbox" data-k="${k}" data-c="ass"${i.ass ? ' checked' : ''} style="width:auto"></td>` : ''}` : ''}
+          <td><button class="x" data-rm="${k}" title="Tirar da ocorrência" style="font-size:16px">×</button></td></tr>`; }).join('')}
+        </tbody></table></div>${adv && S.itens.some(i => +i.grau >= 3) ? '<div class="hint" style="margin-top:6px;color:#8f1c1c">Há colaborador na 3ª advertência: reincidência. Avalie com a coordenação a próxima medida.</div>' : ''}`
+        : '<div class="mut" style="font-size:12px">Marque ao menos um colaborador ao lado.</div>';
+      $('oc-sel').querySelectorAll('[data-c]').forEach(e => e.oninput = e.onchange = () => { const it = S.itens[+e.dataset.k]; if(!it) return; it[e.dataset.c] = e.dataset.c === 'grau' ? +e.value : e.dataset.c === 'ass' ? e.checked : e.dataset.c === 'cargo' ? e.value.toUpperCase() : e.value; if(e.dataset.c === 'cargo') rPrev(); });
+      $('oc-sel').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { S.itens.splice(+b.dataset.rm, 1); rLista(); rSel(); });
+      rPrev();
+    }
+    function rPrev(){
+      const i = S.itens[0], d = fimPonto(S.desc);
+      $('oc-prev').style.display = S.medida === 'reg' ? 'none' : '';
+      $('oc-prev').innerHTML = `<span class="mut" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Como fica na carta${i ? ' de ' + h(titulo(i.nome).split(' ')[0]) : ''}</span><br>
+        Tendo em vista V. Sa. ter cometido o(s) ato(s) de indisciplina e infringido o dispositivo legal ${h(letrasTxt(S.letras))} do Artigo 482 da CLT…<br>
+        <b>${h(INTRO(i ? i.cargo : ''))} ${d ? h(d) : '<span class="mut" style="font-weight:400">[descrição do ocorrido]</span>'}</b>`;
+    }
+    const rLet = () => mw.querySelectorAll('#oc-let button').forEach(b => b.classList.toggle('on', S.letras.includes(b.dataset.l)));
+    mw.querySelectorAll('#oc-let button').forEach(b => b.onclick = () => { const l = b.dataset.l; S.letras = S.letras.includes(l) ? S.letras.filter(x => x !== l) : S.letras.concat(l).sort(); rLet(); rPrev(); });
+    $('oc-q').oninput = e => { fq = e.target.value; rLista(); };
+    $('oc-o').onchange = e => { fo = e.target.value; rLista(); };
+    $('oc-tds').onclick = () => { visiveis().filter(p => !desligado(p)).forEach(p => { if(!sel(p.id)) S.itens.push(novoItem(p.id)); }); rLista(); rSel(); };
+    $('oc-lp').onclick = () => { S.itens = []; rLista(); rSel(); };
+    $('oc-d').onchange = e => { S.data = e.target.value; if(!o0) S.itens.forEach(i => i.grau = grauSug(i.pid, S.data, S.id)); rSel(); };
+    $('oc-e').onchange = e => { S.emissao = e.target.value; };
+    $('oc-m').onchange = e => { S.medida = e.target.value; $('oc-ger').style.display = S.medida === 'reg' ? 'none' : ''; rSel(); };
+    $('oc-ds').oninput = e => { S.desc = e.target.value; rPrev(); };
+    $('oc-ger').style.display = S.medida === 'reg' ? 'none' : '';
+    function gravar(gerar){
+      S.desc = $('oc-ds').value.trim();
+      if(!S.itens.length) return toast('Selecione ao menos um colaborador.', true);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(S.data || '')) return toast('Informe a data do ocorrido.', true);
+      if(!S.desc) return toast('Descreva o ocorrido.', true);
+      if(S.medida !== 'reg' && !S.letras.length) return toast('Escolha o enquadramento do art. 482.', true);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(S.emissao || '')) S.emissao = hoje();
+      S.itens.forEach(i => { i.cargo = String(i.cargo || '').trim().toUpperCase(); i.local = String(i.local || '').trim() || localDe(i.obra); });
+      S.upd = agora(); S.u = usuario();
+      if(o0){ Object.assign(o0, S); } else { S.id = uid(); S.criado = agora(); D.oc = D.oc || []; D.oc.push(S); }
+      const reg = o0 || S;
+      salvar(); fecharModal();
+      toast(S.medida === 'reg' ? 'Ocorrência registrada.' : 'Ocorrência salva' + (gerar ? ': gerando ' + plural(S.itens.length, 'carta') + '.' : '.'));
+      if(gerar) cartas(reg);
+    }
+    $('oc-sv').onclick = () => gravar(false);
+    $('oc-ger').onclick = () => gravar(true);
+    if($('oc-del')) $('oc-del').onclick = () => excluirOcorrencia(o0.id);
+    rLet(); rLista(); rSel();
+    if(!o0) setTimeout(() => $('oc-q').focus(), 30);
+  }
+
+  function excluirOcorrencia(id){
+    const o = D.oc.find(x => x.id === id); if(!o) return;
+    modal(`<div class="mh"><div><h2>Excluir ocorrência?</h2><small>${br(o.data)} · ${h(o.itens.map(i => titulo(i.nome)).join(', '))}</small></div><div class="esp"></div><button class="x" data-x>×</button></div>
+      <p style="font-size:12.5px">A ocorrência sai do histórico e deixa de contar na sequência de advertências desses colaboradores. Cartas já impressas e entregues não são afetadas.</p>
+      <div class="mf"><button class="sec" data-x>Cancelar</button><button id="oc-ok" style="background:#b42318;border-color:#b42318">Excluir</button></div>`);
+    $('oc-ok').onclick = () => { o.del = true; o.upd = agora(); o.u = usuario(); salvar(); fecharModal(); toast('Ocorrência excluída.'); };
+  }
+
+  // carta de advertência (1ª página do modelo da BKP), uma página por colaborador
+  function cartas(o, pids){
+    if(!o || o.medida === 'reg') return;
+    const its = o.itens.filter(i => !pids || pids.includes(i.pid));
+    if(!its.length) return;
+    const pg = i => `<section>
+      <div class="bx tt">CARTA DE ADVERTÊNCIA DISCIPLINAR<br>${EMPRESA.nome}</div>
+      <div class="bx corpo">
+        <p>Ilmo(a) Sr(a): ${h(String(i.nome).toUpperCase())}</p>
+        <p>Referente a: ${[1, 2, 3].map(g => `<b>( ${+i.grau === g ? 'X' : '&nbsp;&nbsp;'} ) ${g}ª ADVERTÊNCIA</b>`).join('&nbsp;&nbsp;&nbsp;')}</p>
+        <p class="j">Tendo em vista V. Sa. Ter cometido o(s) ato(s) de indisciplina e infringido o dispositivo legal ${letrasTxt(o.letras).replace(/(“[a-l]”)/g, '<b><u>$1</u></b>')} do Artigo 482 da CLT - Consolidação das Leis do Trabalho, resolvemos aplicar-lhe como medida disciplinar a presente <b>CARTA DE ADVERTENCIA</b>, com o intuito de evitar a reincidência ou o cometido de outra(s) falta(s) de qualquer natureza prevista em lei que nos obrigará a tomar outras medidas cabíveis de acordo com a legislação em vigor.</p>
+        <p style="margin-bottom:2px"><b>Descrição da Advertência:</b></p>
+        <p class="j ds"><b>${h(INTRO(i.cargo))} ${h(fimPonto(o.desc))}</b></p>
+        <p class="ld">Local e Data: ${h(i.local || localDe(i.obra))}, ${dataExt(o.emissao || o.data)}.</p>
+        <div class="as">___________________________________<br>Assinatura do Empregador</div>
+      </div>
+      <div class="bx ci"><b>Ciente :</b><br><br>Em: ____/_____/_____<div class="as2">_____________________________________<br>Assinatura do(a) Empregado(a)</div></div>
+      <div class="bx art"><h2>Para seu conhecimento, transcrevemos abaixo o Artigo 482 da CLT:</h2>
+        <p>Art. 482 – Constituem justa causa para rescisão do contrato de trabalho pelo empregador:</p>
+        <p>${ART482.map(a => a[0] + ') ' + h(a[1])).join('<br>')}</p>
+        <p><b>Parágrafo único-</b> Constitui igualmente justa causa para dispensa de emprego a pratica, devidamente comprovada em inquérito administrativo, de atos atentatórios contra a segurança nacional.</p></div>
+    </section>`;
+    const w = window.open('', '_blank');
+    if(!w) return toast('O navegador bloqueou a janela de impressão. Permita pop-ups para este site.', true);
+    w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Advertência – ${h(its.length === 1 ? titulo(its[0].nome) : its.length + ' colaboradores')} – ${br(o.data)}</title><style>
+      @page{size:A4;margin:14mm 16mm} body{font-family:Arial,Helvetica,sans-serif;color:#000;font-size:11pt;margin:0}
+      section{break-after:page;page-break-after:always} section:last-child{break-after:auto;page-break-after:auto}
+      .bx{border:1px solid #000;padding:9px 12px;margin-bottom:5mm}
+      .tt{text-align:center;font-weight:700;font-size:10.5pt;line-height:1.4}
+      .corpo{padding:12px 14px 14px;min-height:118mm} .corpo p{margin:0 0 9px;line-height:1.35} .j{text-align:justify}
+      .ds{line-height:1.75!important} .ld{text-align:center;margin-top:26px!important}
+      .as{text-align:center;margin-top:22px;line-height:1.3}
+      .ci{min-height:30mm;position:relative} .ci .as2{text-align:center;width:62mm;margin-left:auto;margin-top:6px;line-height:1.3}
+      .art{font-size:7.8pt;line-height:1.3} .art h2{font-size:10.5pt;margin:0 0 6px} .art p{margin:0 0 7px}
+    </style></head><body>${its.map(pg).join('')}<script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`);
+    w.document.close();
+  }
+
+  // bloco de ocorrências na ficha do colaborador
+  function ocFicha(p){
+    const l = ocDe(p.id);
+    if(!l.length) return '';
+    return `<h3 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3,#8e8e8e);margin:18px 0 6px">Ocorrências (${l.length})</h3>
+      ${l.map(o => { const i = o.itens.find(x => x.pid === p.id); return `<div style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line,#e8e8ea);border-radius:8px;padding:8px 10px;margin-bottom:6px">
+        <div style="flex:1;min-width:0"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b>${br(o.data)}</b>${o.medida === 'reg' ? '' : grauBadge(i.grau)}${assBadge(i, o)}<span class="mut" style="font-size:11px">${h(motivo(o.letras))}</span></div>
+          <div style="font-size:12px;color:var(--ink2,#5c5c5c);margin-top:3px">${h(o.desc)}</div></div>
+        <div style="display:flex;gap:4px">${o.medida === 'reg' ? '' : `<button class="mini" data-occ="${h(o.id)}|${h(p.id)}">Carta</button>`}<button class="mini sec" data-oce="${h(o.id)}">Abrir</button></div></div>`; }).join('')}`;
+  }
+
+  // ----- tela Ocorrências -----
+  let anoO = +hoje().slice(0, 4), buscaO = '';
+  function vOcorr(el, ref){
+    const anos = new Set([+ref.slice(0, 4)]); ocs().forEach(o => anos.add(+o.data.slice(0, 4)));
+    const q = norm(buscaO);
+    const doAno = ocs().filter(o => +o.data.slice(0, 4) === anoO);
+    const rows = doAno.filter(o => !filtro.obra || o.itens.some(i => filtro.obra === '-' ? !i.obra : i.obra === filtro.obra))
+      .filter(o => !q || o.itens.some(i => norm(i.nome).includes(q)) || norm(o.desc).includes(q) || norm(motivo(o.letras)).includes(q))
+      .sort((a, b) => b.data.localeCompare(a.data) || (b.criado || 0) - (a.criado || 0));
+    const advs = doAno.filter(o => o.medida !== 'reg').flatMap(o => o.itens.map(i => ({o, i})));
+    const aAssinar = ocs().filter(o => o.medida !== 'reg').flatMap(o => o.itens.filter(i => !i.ass).map(i => ({o, i})));
+    const ano12 = addD(ref, -365), reinc = new Map();
+    ocs().filter(o => o.medida !== 'reg' && o.data >= ano12).forEach(o => o.itens.forEach(i => { const r = reinc.get(i.pid) || {i, n: 0, ult: '', max: 0}; r.n++; if(o.data > r.ult) r.ult = o.data; r.max = Math.max(r.max, +i.grau || 1); reinc.set(i.pid, r); }));
+    const rein = Array.from(reinc.values()).filter(r => r.n >= 2 || r.max >= 2).sort((a, b) => b.max - a.max || b.n - a.n);
+    const porObra = {}; advs.forEach(x => { const k = x.i.obra || 'Sem obra'; porObra[k] = (porObra[k] || 0) + 1; });
+    const porMot = {}; doAno.forEach(o => (o.letras || []).forEach(l => { const k = motivo([l]); porMot[k] = (porMot[k] || 0) + o.itens.length; }));
+    const box = (t, v, s, cor) => `<div class="rh-kp" style="cursor:default"><small>${cor ? `<i style="background:${cor}"></i>` : ''}${h(t)}</small><b>${v}</b><span>${h(s)}</span></div>`;
+    el.innerHTML = `<div class="rt-fil"><label>Ano <select id="oc-ano">${Array.from(anos).sort((a, b) => b - a).map(a => `<option${a === anoO ? ' selected' : ''}>${a}</option>`).join('')}</select></label>
+      <input type="search" id="oc-bq" placeholder="Buscar colaborador, motivo ou texto" value="${h(buscaO)}">${selObra()}<div class="esp"></div>
+      <button id="oc-nova">+ Nova ocorrência</button><button class="sec" id="oc-csv">CSV</button></div>
+      <div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+        ${box('Ocorrências em ' + anoO, doAno.length, doAno.filter(o => o.medida === 'reg').length + ' só registro(s)', '')}
+        ${box('Advertências em ' + anoO, advs.length, new Set(advs.map(x => x.i.pid)).size + ' colaborador(es) advertido(s)', '#C05621')}
+        ${box('Reincidentes (12 meses)', rein.length, 'com 2 ou mais advertências', '#dc3c3d')}
+        ${box('Cartas a assinar', aAssinar.length, 'marque "assinada" ao receber a via', '#fbb315')}
+      </div>
+      <div class="cd"><div class="tw"><table><thead><tr><th>Data</th><th>Colaborador(es)</th><th>Motivo</th><th>Descrição</th><th>Assinatura</th><th></th></tr></thead><tbody>
+      ${rows.length ? rows.map(o => `<tr class="clk" data-oc="${h(o.id)}"><td class="n" style="text-align:left;white-space:nowrap"><b>${brc(o.data)}</b>${o.u ? `<br><small class="mut" style="font-size:10.5px">${h(o.u)}</small>` : ''}</td>
+          <td><div class="oc-ps">${o.itens.map(i => `<div><b style="font-weight:600">${h(titulo(i.nome))}</b><span class="cod">${h(i.obra || '—')}</span>${o.medida === 'reg' ? '' : grauBadge(i.grau)}</div>`).join('')}</div></td>
+          <td style="font-size:11.5px">${o.medida === 'reg' ? '<span class="rh-bd" style="background:#eee;color:#555">só registro</span><br>' : ''}${h(motivo(o.letras) || '—')}</td>
+          <td><div class="oc-ds" title="${h(o.desc)}">${h(o.desc)}</div></td>
+          <td>${o.medida === 'reg' ? '<span class="mut">—</span>' : `${o.itens.filter(i => i.ass).length}/${o.itens.length}`}</td>
+          <td><div class="acoes">${o.medida === 'reg' ? '' : `<button class="mini" data-car="${h(o.id)}">${o.itens.length > 1 ? 'Cartas (' + o.itens.length + ')' : 'Carta'}</button>`}<button class="mini sec" data-ed="${h(o.id)}">Editar</button></div></td></tr>`).join('')
+        : `<tr><td colspan="6" class="mut" style="padding:22px;text-align:center">${doAno.length ? 'Nada com esse filtro.' : 'Nenhuma ocorrência em ' + anoO + '. Clique em <b>+ Nova ocorrência</b> para registrar e gerar as cartas de advertência.'}</td></tr>`}
+      </tbody></table></div></div>
+      <div class="g2">
+        <div class="cd"><h3>Reincidência — últimos 12 meses</h3><p class="sub">Quem já recebeu 2ª advertência ou mais de uma carta.</p>
+          ${rein.length ? `<div class="tw"><table><thead><tr><th>Colaborador</th><th>Obra</th><th class="n">Advertências</th><th>Maior</th><th>Última</th></tr></thead><tbody>${rein.map(r => { const p = pessoa(r.i.pid); return `<tr class="clk" data-pid="${h(r.i.pid)}"><td><b style="font-weight:600">${h(titulo(r.i.nome))}</b>${p && desligado(p) ? ' <span class="mut">(desligado)</span>' : ''}</td><td><span class="cod">${h((p && obraDe(p)) || r.i.obra || '—')}</span></td><td class="n">${r.n}</td><td>${grauBadge(r.max)}</td><td>${brc(r.ult)}</td></tr>`; }).join('')}</tbody></table></div>` : '<div class="hint">Ninguém reincidente.</div>'}</div>
+        <div class="cd"><h3>Advertências por obra e motivo — ${anoO}</h3><p class="sub">Onde e por que as ocorrências acontecem.</p>
+          ${advs.length ? hbars(Object.entries(porObra).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({r: k === 'ADM' ? 'Sede (ADM)' : k, v: [v]})), [{nome: 'Advertências', cor: '#C05621'}], advs.length) + '<div style="height:10px"></div>' + hbars(Object.entries(porMot).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({r: k, v: [v]})), [{nome: 'Colaboradores', cor: '#2370cd'}]) : '<div class="hint">Sem advertências no ano.</div>'}</div>
+      </div>
+      <div class="cd"><h3>Como funciona</h3><div class="rh-ler">
+        <b>Nova ocorrência</b><span>Marque um ou mais colaboradores (a obra de cada um vem da alocação), escolha o enquadramento do art. 482 e descreva o ocorrido. A descrição completa a frase padrão da carta, com o cargo de cada um.</span>
+        <b>Cartas</b><span>Uma página por colaborador, no modelo da BKP (1ª, 2ª ou 3ª advertência). A sequência é sugerida pelo histórico de cada um e pode ser trocada antes de gerar.</span>
+        <b>Assinatura</b><span>Depois que o colaborador assinar o "Ciente", abra a ocorrência e marque "assinada". O que falta assinar aparece no quadro acima.</span>
+        <b>Só registrar</b><span>Para fatos que devem ficar anotados sem carta (orientação verbal, por exemplo). Aparecem na ficha e no histórico, mas não contam na sequência de advertências.</span></div></div>`;
+    $('oc-ano').onchange = e => { anoO = +e.target.value; renderTela(); };
+    const qi = $('oc-bq'); qi.oninput = () => { buscaO = qi.value; const pos = qi.selectionStart; renderTela(); const n = $('oc-bq'); n.focus(); n.setSelectionRange(pos, pos); };
+    $('oc-nova').onclick = () => janelaOcorrencia(null);
+    $('oc-csv').onclick = () => csvOcorr(rows);
+    el.querySelectorAll('[data-car]').forEach(b => b.onclick = ev => { ev.stopPropagation(); const o = D.oc.find(x => x.id === b.dataset.car); if(o) cartas(o); });
+    el.querySelectorAll('[data-ed]').forEach(b => b.onclick = ev => { ev.stopPropagation(); janelaOcorrencia(b.dataset.ed); });
+    el.querySelectorAll('tr[data-oc]').forEach(r => r.onclick = ev => { if(ev.target.closest('button')) return; janelaOcorrencia(r.dataset.oc); });
+    ligarFiltroObra();
+    el.querySelectorAll('tr[data-pid]').forEach(r => r.onclick = () => janelaFicha(r.dataset.pid));
+  }
+  function csvOcorr(rows){
+    const l = [['Data do ocorrido', 'Data da carta', 'Colaborador', 'Cargo', 'Obra', 'Local na carta', 'Medida', 'Advertência', 'Art. 482', 'Motivo', 'Descrição', 'Assinada', 'Lançado por']];
+    rows.forEach(o => o.itens.forEach(i => l.push([br(o.data), o.medida === 'reg' ? '' : br(o.emissao), i.nome, i.cargo, i.obra, i.local, o.medida === 'reg' ? 'Só registro' : 'Advertência escrita', o.medida === 'reg' ? '' : GRAU(i.grau), (o.letras || []).join(', '), motivo(o.letras), o.desc, o.medida === 'reg' ? '' : i.ass ? 'Sim' : 'Não', o.u || ''])));
+    baixar('ocorrencias-' + anoO + '.csv', '﻿' + l.map(csvL).join('\n'), 'text/csv');
+  }
+
   // ---------- CSV ----------
   function baixar(nome, txt, tipo){ const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], {type: tipo})); a.download = nome; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
   const csvL = r => r.map(v => { v = v == null ? '' : String(v); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(';');
@@ -1713,5 +2000,5 @@
   acesso();
   receber();
   try{ if(ls.get('aba') === 'rh' && liberado()) trocarAba('rh'); }catch(e){}
-  window.G360RH = {dados: () => D, abrir: abrirTela, semear, _turnover: turnover, _periodos: periodos, receber, enviar, _lerProgramacao: lerProgramacao, _aplicar: aplicarProgramacao, _salarios: aplicarSalarios, _sugerir: sugerir, _validar: validar, _fila: fila};
+  window.G360RH = {dados: () => D, abrir: abrirTela, semear, _turnover: turnover, _periodos: periodos, receber, enviar, _lerProgramacao: lerProgramacao, _aplicar: aplicarProgramacao, _salarios: aplicarSalarios, _sugerir: sugerir, _validar: validar, _fila: fila, ocorrencia: janelaOcorrencia, _cartas: cartas};
 })();
