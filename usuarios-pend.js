@@ -37,8 +37,11 @@
 
   var canon = function (u) {
     var o = (u && u.usuarios) || {};
-    return JSON.stringify(Object.keys(o).sort().map(function (k) { return [k, o[k].k, o[k].s]; }));
+    var b = (u && u.bloq) || {};
+    return JSON.stringify([Object.keys(o).sort().map(function (k) { return [k, o[k].k, o[k].s]; }),
+      Object.keys(b).sort().filter(function (k) { return (b[k] || []).length; }).map(function (k) { return [k, b[k].slice().sort()]; })]);
   };
+  var bl = function (u, id) { return JSON.stringify((((u && u.bloq) || {})[id] || []).slice().sort()); };
 
   function baixar(dados) {
     var blob = new Blob([JSON.stringify(dados, null, 1) + '\n'], { type: 'application/json' });
@@ -60,7 +63,9 @@
       novos.push({ id: id, nome: n, troca: !!g[id] });
     }
     for (var id2 in g) if (!p[id2]) removidos.push(nomes[id2] || (nomes[id2] = await nome(g[id2])));
-    return { novos: novos, removidos: removidos };
+    var acessos = [];
+    for (var id3 in p) if (g[id3] && bl(pend.dados, id3) !== bl(publicado, id3)) acessos.push(nomes[id3] || (nomes[id3] = await nome(p[id3])));
+    return { novos: novos, removidos: removidos, acessos: acessos };
   }
 
   async function verificar(forcar) {
@@ -81,6 +86,7 @@
     var tro = d.novos.filter(function (x) { return x.troca; }).map(function (x) { return x.nome; });
     if (cri.length) partes.push('criado' + (cri.length > 1 ? 's' : '') + ': <b>' + cri.join(', ') + '</b>');
     if (tro.length) partes.push('senha trocada: <b>' + tro.join(', ') + '</b>');
+    if (d.acessos.length) partes.push('acesso alterado: <b>' + d.acessos.join(', ') + '</b>');
     if (d.removidos.length) partes.push('removido' + (d.removidos.length > 1 ? 's' : '') + ': <b>' + d.removidos.join(', ') + '</b>');
     return partes.join(' · ');
   };
@@ -105,7 +111,7 @@
       return;
     }
     var d = await diferencas();
-    if (!d.novos.length && !d.removidos.length && publicado) { pend = null; guardar(); ok = true; return render(); }
+    if (!d.novos.length && !d.removidos.length && !d.acessos.length && publicado) { pend = null; guardar(); ok = true; return render(); }
     var resumo = txt(d) || 'lista de usuários alterada';
     if (btn) { btn.classList.add('g360-uspend'); btn.title = 'Há alteração de usuários ainda não publicada no GitHub'; }
 
